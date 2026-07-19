@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Arun Viswanathan — academic profile
+   Arun Viswanathan, academic profile
    Built on Bootstrap 5 utilities; this file supplies the academic theme,
    the minimal nav, and all hover/scroll animations.
    ========================================================================== */
@@ -216,7 +216,7 @@ a { color: var(--accent); }
 }
 .subheading:first-of-type { margin-top: 0; }
 
-/* Scroll-reveal — only hides content once JS (added via the `.js` class on
+/* Scroll-reveal: only hides content once JS (added via the `.js` class on
    <html>, set synchronously by main.js) confirms it will actually reveal it
    again. Without JS, or before it runs, everything stays visible. */
 .js .reveal {
