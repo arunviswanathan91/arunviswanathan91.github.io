@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BriefcaseBusiness, ChevronDown, CircleUserRound, FileText, FlaskConical, Home, LayoutDashboard, Menu, Plus, Search, Send, X } from "lucide-react";
+import type { Session } from "@supabase/supabase-js";
 import type { DocumentItem, Job, Publication, Status, Task, View } from "./types";
+import { supabase } from "./lib/supabase";
 
 const tasksSeed:Task[]=[
 {id:"t1",title:"Review sample analysis",status:"In progress",project:"Sample project",due:"Today",priority:"High"},
@@ -22,7 +24,7 @@ const jobSeed:Job[]=[
 const columns:Status[]=["Backlog","In progress","Review","Done"];
 const labels:Record<View,string>={home:"Command center",kanban:"Kanban board",publications:"Publications",documents:"Documents",jobs:"Job tracker"};
 
-export default function App(){
+function Workspace(){
  const [view,setView]=useState<View>("home"),[tasks,setTasks]=useState(tasksSeed),[query,setQuery]=useState(""),[sidebar,setSidebar]=useState(false),[composer,setComposer]=useState(false),[newTask,setNewTask]=useState("");
  const filtered=useMemo(()=>tasks.filter(t=>(t.title+" "+t.project).toLowerCase().includes(query.toLowerCase())),[tasks,query]);
  const nav=(v:View)=>{setView(v);setSidebar(false)},move=(id:string,status:Status)=>setTasks(v=>v.map(t=>t.id===id?{...t,status}:t));
@@ -34,7 +36,7 @@ export default function App(){
    <button className={view==="documents"?"active":""} onClick={()=>nav("documents")}><FileText/>Documents <span>{documentSeed.length}</span></button><p>Career</p>
    <button className={view==="jobs"?"active":""} onClick={()=>nav("jobs")}><BriefcaseBusiness/>Job tracker <span>{jobSeed.length}</span></button>
   </nav><div className="telegram"><Send size={18}/><div><strong>Telegram inbox</strong><small>Connect after Supabase setup</small></div></div></aside>
-  <main><header><button className="mobile-menu" onClick={()=>setSidebar(!sidebar)}><Menu/></button><div className="crumb">Workspace / <strong>{labels[view]}</strong></div><div className="header-actions"><label className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search workspace"/></label><button className="profile"><CircleUserRound/></button></div></header>
+  <main><header><button className="mobile-menu" onClick={()=>setSidebar(!sidebar)}><Menu/></button><div className="crumb">Workspace / <strong>{labels[view]}</strong></div><div className="header-actions"><label className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search workspace"/></label><button className="profile" onClick={()=>void supabase?.auth.signOut()} title="Sign out"><CircleUserRound/></button></div></header>
    <div className="page"><div className="title-row"><div><p className="kicker">{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</p><h1>{labels[view]}</h1><p className="subtitle">Tasks, research writing and career tracking in one private system.</p></div><button className="primary" onClick={()=>setComposer(true)}><Plus/>New task</button></div>
    {view==="home"&&<HomeView tasks={filtered} open={nav}/>}
    {view==="kanban"&&<Kanban tasks={filtered} move={move}/>}
@@ -49,3 +51,13 @@ function HomeView({tasks,open}:{tasks:Task[];open:(v:View)=>void}){const active=
 function Kanban({tasks,move}:{tasks:Task[];move:(id:string,s:Status)=>void}){return <div className="board">{columns.map(s=><section className="column" key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>move(e.dataTransfer.getData("task"),s)}><div className="column-head"><span>{s}</span><b>{tasks.filter(t=>t.status===s).length}</b></div>{tasks.filter(t=>t.status===s).map(t=><article draggable onDragStart={e=>e.dataTransfer.setData("task",t.id)} className="task-card" key={t.id}><span className={"priority "+t.priority.toLowerCase()}/><h3>{t.title}</h3><p>{t.project}</p><footer><small>{t.due||"No date"}</small><Badge text={t.priority}/></footer></article>)}</section>)}</div>}
 function DataTable({headers,rows}:{headers:string[];rows:React.ReactNode[][]}){return <div className="table-card"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i}>{r.map((c,j)=><td key={j}>{c}</td>)}</tr>)}</tbody></table></div>}
 function Badge({text}:{text:string}){return <span className={"badge "+text.toLowerCase().replaceAll(" ","-")}>{text}</span>}
+function AuthGate(){
+ const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(false),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[message,setMessage]=useState("");
+ useEffect(()=>{if(!supabase){setReady(true);return}void supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data}=supabase.auth.onAuthStateChange((_event,next)=>setSession(next));return()=>data.subscription.unsubscribe()},[]);
+ const signIn=async(e:React.FormEvent)=>{e.preventDefault();if(!supabase)return;setMessage("Signing in…");const {error}=await supabase.auth.signInWithPassword({email,password});setMessage(error?error.message:"")};
+ if(!ready)return <div className="auth-screen"><div className="auth-card"><span className="auth-mark">AV</span><h1>Checking access…</h1></div></div>;
+ if(!supabase)return <div className="auth-screen"><div className="auth-card"><span className="auth-mark">AV</span><p className="kicker">Private workspace</p><h1>Workspace locked</h1><p>Supabase authentication has not been configured. No dashboard content is available.</p><a href="../">Return to the public website</a></div></div>;
+ if(!session)return <div className="auth-screen"><form className="auth-card" onSubmit={signIn}><span className="auth-mark">AV</span><p className="kicker">Private workspace</p><h1>Sign in</h1><p>Only authorized accounts can open this workspace.</p><label>Email<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button className="primary" type="submit">Sign in securely</button><small className="auth-message" role="status">{message}</small></form></div>;
+ return <Workspace/>;
+}
+export default function App(){return <AuthGate/>}
