@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { BriefcaseBusiness, ChevronDown, CircleUserRound, FileText, FlaskConical, Home, LayoutDashboard, Menu, Plus, Search, Send, X } from "lucide-react";
-import type { Session } from "@supabase/supabase-js";\nimport type { DocumentItem, Job, Publication, Status, Task, View } from "./types";\nimport { supabase } from "./lib/supabase";
+import type { Session } from "@supabase/supabase-js";
+import type { DocumentItem, Job, Publication, Status, Task, View } from "./types";
+import { supabase } from "./lib/supabase";
 
 const tasksSeed:Task[]=[
 {id:"t1",title:"Review sample analysis",status:"In progress",project:"Sample project",due:"Today",priority:"High"},
