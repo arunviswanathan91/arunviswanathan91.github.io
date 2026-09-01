@@ -81,11 +81,14 @@ create table if not exists reads (
   url text not null, title text, notes text, created_at timestamptz not null default now()
 );
 
--- Holds a single pending "add this to Reads?" confirmation per Telegram chat between
--- webhook calls. Service-role only: RLS is enabled with no policies (default-deny for
--- anon/authenticated), so only the Edge Function's service-role key can touch it.
+-- Holds the bot's conversation state for a chat between webhook calls: a pending
+-- "add this to Reads?" link, the record currently being refined, a numbered list the
+-- user is picking from, or a pending "which tag?" question. Service-role only: RLS is
+-- enabled with no policies (default-deny for anon/authenticated), so only the Edge
+-- Function's service-role key can touch it.
 create table if not exists telegram_pending_confirmations (
-  chat_id bigint primary key, kind text not null default 'read_confirm' check (kind in ('read_confirm')),
+  chat_id bigint primary key, kind text not null default 'read_confirm'
+   check (kind in ('read_confirm','refine','ask_tag','pick')),
   payload jsonb not null, created_at timestamptz not null default now(), expires_at timestamptz not null
 );
 
@@ -103,6 +106,16 @@ alter table reads add column if not exists updated_at timestamptz not null defau
 alter table item_tags drop constraint if exists item_tags_entity_type_check;
 alter table item_tags add constraint item_tags_entity_type_check
   check (entity_type in ('job_application','reminder','read','task','publication','document'));
+
+-- The bot needs the user's zone to turn "due:friday" or "in 2h" into a correct absolute
+-- timestamp; the dashboard fills it in from the browser on first load.
+alter table profiles add column if not exists timezone text;
+
+-- Same story as item_tags: an existing database keeps the old single-value constraint,
+-- which would reject every conversational state the bot now stores.
+alter table telegram_pending_confirmations drop constraint if exists telegram_pending_confirmations_kind_check;
+alter table telegram_pending_confirmations add constraint telegram_pending_confirmations_kind_check
+  check (kind in ('read_confirm','refine','ask_tag','pick'));
 
 alter table profiles enable row level security;
 alter table projects enable row level security;

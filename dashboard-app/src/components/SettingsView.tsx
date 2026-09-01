@@ -17,17 +17,25 @@ export function SettingsView(){
  const [busy,setBusy]=useState(false);
  const [notice,setNotice]=useState("");
  const [displayName,setDisplayName]=useState("");
+ const [timezone,setTimezone]=useState("");
  const [names,setNames]=useState<Record<string,string>>({});
 
  useEffect(()=>{
   if(!supabase)return;
-  void supabase.from("profiles").select("display_name").eq("id",userId).maybeSingle()
-   .then(({data})=>setDisplayName((data?.display_name as string|null)??""));
+  void supabase.from("profiles").select("display_name,timezone").eq("id",userId).maybeSingle()
+   .then(({data})=>{
+    setDisplayName((data?.display_name as string|null)??"");
+    setTimezone((data?.timezone as string|null)??Intl.DateTimeFormat().resolvedOptions().timeZone??"UTC");
+   });
  },[userId]);
 
  const saveName=async()=>{
   if(!supabase)return;
   await supabase.from("profiles").update({display_name:displayName.trim()||null}).eq("id",userId);
+ };
+ const saveTimezone=async()=>{
+  if(!supabase)return;
+  await supabase.from("profiles").update({timezone:timezone.trim()||null}).eq("id",userId);
  };
 
  const generate=async()=>{
@@ -54,6 +62,12 @@ export function SettingsView(){
      <label className="field-label" htmlFor="display-name">Display name</label>
      <input id="display-name" className="input" value={displayName} placeholder="Your name"
       onChange={e=>setDisplayName(e.target.value)} onBlur={()=>void saveName()}/>
+    </div>
+    <div className="field">
+     <label className="field-label" htmlFor="timezone">Time zone</label>
+     <input id="timezone" className="input" value={timezone} placeholder="Asia/Kolkata"
+      onChange={e=>setTimezone(e.target.value)} onBlur={()=>void saveTimezone()}/>
+     <small className="muted-note">The bot reads dates like “due:friday” and “in 2h” in this zone.</small>
     </div>
    </section>
 

@@ -85,7 +85,16 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  },[userId]);
  useEffect(()=>{
   if(!supabase)return;
-  void(async()=>{await supabase!.from("profiles").upsert({id:userId},{onConflict:"id"});await refreshTelegram()})();
+  void(async()=>{
+   await supabase!.from("profiles").upsert({id:userId},{onConflict:"id"});
+   // The bot resolves "due:friday" and "in 2h" in this zone; without it dates land in UTC.
+   const {data}=await supabase!.from("profiles").select("timezone").eq("id",userId).maybeSingle();
+   if(!data?.timezone){
+    const zone=Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if(zone)await supabase!.from("profiles").update({timezone:zone}).eq("id",userId);
+   }
+   await refreshTelegram();
+  })();
  },[userId,refreshTelegram]);
 
  const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||projects.loading||tags.loading;

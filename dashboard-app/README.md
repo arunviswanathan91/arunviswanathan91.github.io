@@ -81,6 +81,28 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local environment. T
 
 The production dashboard build uses `/dashboard/` as its base path.
 
-## Telegram bot commands
+## Telegram bot
 
-`/link <code>` · `/add <task> [#Project]` · `/today` · `/done <number>` · `/job <organization> | <role> [#tag]` · `/remind <text> [#tag] [in <N>m|h|d]` · share any link to be asked whether to save it to Reads.
+The bot can reach every module and every field, using one token vocabulary everywhere:
+
+| Token | Meaning | Example |
+|---|---|---|
+| `#tag` | add a tag (created if new) | `#urgent` |
+| `@project` | assign a project (quote if spaced) | `@Thesis`, `@"Big Project"` |
+| `!high` | priority — high/medium/low | `!high` |
+| `due:<when>` | a date: `friday`, `tomorrow 9am`, `2026-03-03`, `3/5` | `due:friday` |
+| `in 2h` | relative time — m/h/d/w | `in 30m` |
+| `field:value` | any other column | `venue:Nature`, `doi:10.1/x`, `org:Acme`, `note:"call first"` |
+
+**Create** — everything after the command becomes the title:
+`/add`, `/pub`, `/doc`, `/job Org | Role`, `/remind`, `/read <url>` (or just send a link).
+
+**Work with existing records:** `/today` · `/list <module>` · `/find <text>` · `/done <n>` · `/set <field> <value>` · `/tag` · `/projects [new <name>]` · `/tags [new <name>]` · `/help`
+
+**It's conversational.** After you create something — or pick a number from `/today`, `/list` or
+`/find` — the bot stays on that record, so you can just send `#urgent @Thesis !high` to update it.
+Send `done` to stop. `/tag` on its own lists your tags and asks which one you mean. Plain text with
+no tokens is saved as a note rather than discarded.
+
+Dates resolve in the time zone on your profile (set automatically from the browser, editable in
+Settings) — without it, `due:friday` would land in UTC.
