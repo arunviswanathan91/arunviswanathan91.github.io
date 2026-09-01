@@ -4,18 +4,32 @@ A React + TypeScript personal workspace added alongside the academic GitHub Page
 
 ## Modules
 
-- Command center
-- Project-scoped Kanban task boards (plus an always-available Inbox for unassigned tasks)
-- Publication pipeline — Kanban by stage, with a global view and a per-project view
-- Job tracker — Kanban by stage, global/per-project, filterable by managed tags (e.g. postdoc, faculty, industry)
-- Document and Google Drive metadata tracker
-- Reminders, with optional Telegram push notifications when they come due
-- Reads — a Telegram-driven read-later list ("add this to Reads?" confirmation flow)
-- A managed tag list shared by Jobs, Reminders and Reads
-- A real Telegram bot: linking flow, `/add`, `/today`, `/done`, `/job`, `/remind`, link capture
-- Supabase schema with Row Level Security
+Tasks, Publications, Documents, Jobs, Reminders and Reads. Every module shares the same
+capabilities, because each one is declared as a config rather than hand-built:
+
+- **Board and Table views** — drag between stage columns, or switch to a dense sortable table
+  with inline editing. Every field is editable in a detail drawer opened by clicking any card or row.
+- **Toolbar** on every view — search, filter (project, tag, stage, priority, due-date buckets),
+  sort, and column visibility. Filters persist per view; the search box deliberately does not.
+- **Bulk actions** — multi-select, then change stage, reassign project, add/remove tags or delete.
+- **Keyboard** — `Ctrl/Cmd-K` command palette (jump, create, or find any record across every
+  module), `n` new, `/` search, `Esc` to close.
+- **Projects** with colours, full create/rename/archive/delete, driving a global project scope.
+- **Managed tags** with colours, shared across all six modules.
+- **Light and dark themes**, following the OS by default with a manual override.
+- **Telegram bot** — linking flow, `/add`, `/today`, `/done`, `/job`, `/remind`, and link capture
+  with an "add this to Reads?" confirmation, plus push notifications for due reminders.
+- Supabase schema with Row Level Security throughout.
 
 All visible records live in the authenticated Supabase project — nothing in this repo contains real data.
+
+## Architecture
+
+Each entity is described once in `src/entities/*.ts` (its columns, which fields appear on a card,
+in the table, in filters and sorts). Generic components under `src/components/entity/` render the
+board, table, toolbar, drawer, composer and bulk bar from that description, so adding a field is a
+one-line config change rather than a new component. `src/lib/store.tsx` holds the data and UI
+contexts; `src/lib/useTable.ts` is the shared Supabase table store.
 
 ## Local setup
 

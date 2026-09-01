@@ -1,0 +1,3 @@
+# Supabase CLI local state — machine-specific, never committed.
+.branches
+.temp

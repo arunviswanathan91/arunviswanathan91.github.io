@@ -65,7 +65,7 @@ create table if not exists tags (
 );
 create table if not exists item_tags (
   tag_id uuid not null references tags(id) on delete cascade,
-  entity_type text not null check (entity_type in ('job_application','reminder','read')),
+  entity_type text not null check (entity_type in ('job_application','reminder','read','task','publication','document')),
   entity_id uuid not null, created_at timestamptz not null default now(),
   primary key (tag_id, entity_type, entity_id)
 );
@@ -92,6 +92,17 @@ create table if not exists telegram_pending_confirmations (
 alter table publications add column if not exists project_id uuid references projects(id) on delete set null;
 alter table publications add column if not exists url text;
 alter table job_applications add column if not exists project_id uuid references projects(id) on delete set null;
+alter table tasks add column if not exists notes text;
+alter table projects add column if not exists color text;
+alter table reads add column if not exists read_at timestamptz;
+alter table reads add column if not exists updated_at timestamptz not null default now();
+
+-- The inline CHECK above only applies to a freshly created item_tags. Databases that
+-- already ran an earlier version of this file keep the old three-type constraint, so
+-- replace it explicitly to allow tagging tasks, publications and documents too.
+alter table item_tags drop constraint if exists item_tags_entity_type_check;
+alter table item_tags add constraint item_tags_entity_type_check
+  check (entity_type in ('job_application','reminder','read','task','publication','document'));
 
 alter table profiles enable row level security;
 alter table projects enable row level security;
@@ -141,6 +152,9 @@ create policy "own item tags" on item_tags for all
       (entity_type = 'job_application' and exists (select 1 from job_applications j where j.id = item_tags.entity_id and j.user_id = auth.uid()))
       or (entity_type = 'reminder' and exists (select 1 from reminders r where r.id = item_tags.entity_id and r.user_id = auth.uid()))
       or (entity_type = 'read' and exists (select 1 from reads rd where rd.id = item_tags.entity_id and rd.user_id = auth.uid()))
+      or (entity_type = 'task' and exists (select 1 from tasks tk where tk.id = item_tags.entity_id and tk.user_id = auth.uid()))
+      or (entity_type = 'publication' and exists (select 1 from publications p where p.id = item_tags.entity_id and p.user_id = auth.uid()))
+      or (entity_type = 'document' and exists (select 1 from documents d where d.id = item_tags.entity_id and d.user_id = auth.uid()))
     )
   );
 
@@ -162,6 +176,8 @@ drop trigger if exists jobs_set_updated_at on job_applications;
 create trigger jobs_set_updated_at before update on job_applications for each row execute function set_updated_at();
 drop trigger if exists reminders_set_updated_at on reminders;
 create trigger reminders_set_updated_at before update on reminders for each row execute function set_updated_at();
+drop trigger if exists reads_set_updated_at on reads;
+create trigger reads_set_updated_at before update on reads for each row execute function set_updated_at();
 
 -- item_tags.entity_id can't carry a real FK (it points at one of three different
 -- tables), so scrub orphaned tag links whenever a tagged row is deleted.
@@ -181,6 +197,15 @@ create trigger reminders_tag_cleanup after delete on reminders
 drop trigger if exists reads_tag_cleanup on reads;
 create trigger reads_tag_cleanup after delete on reads
   for each row execute function fn_cleanup_item_tags('read');
+drop trigger if exists tasks_tag_cleanup on tasks;
+create trigger tasks_tag_cleanup after delete on tasks
+  for each row execute function fn_cleanup_item_tags('task');
+drop trigger if exists publications_tag_cleanup on publications;
+create trigger publications_tag_cleanup after delete on publications
+  for each row execute function fn_cleanup_item_tags('publication');
+drop trigger if exists documents_tag_cleanup on documents;
+create trigger documents_tag_cleanup after delete on documents
+  for each row execute function fn_cleanup_item_tags('document');
 
 create index if not exists tasks_user_status_idx on tasks(user_id,status);
 create index if not exists tasks_user_project_idx on tasks(user_id,project_id);

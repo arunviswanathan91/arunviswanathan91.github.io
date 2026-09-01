@@ -1,13 +1,34 @@
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Modal } from "./ui/Modal";
+import { TAG_COLORS } from "../lib/tags";
 
-export function ProjectComposer({onClose,onAdd}:{onClose:()=>void;onAdd:(name:string)=>void}){
- const [name,setName]=useState("");
- const submit=()=>{const n=name.trim();if(!n)return;onAdd(n)};
- return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={e=>e.stopPropagation()}>
-  <button className="close" onClick={onClose}><X/></button>
-  <p className="kicker">New board</p><h2>Create a project</h2>
-  <input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Project name"/>
-  <div className="modal-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={submit}>Create</button></div>
- </section></div>
+export function ProjectComposer({onClose,onCreate}:{
+ onClose():void;onCreate(values:{name:string;description:string|null;color:string|null}):void;
+}){
+ const [name,setName]=useState(""),[description,setDescription]=useState(""),[color,setColor]=useState("slate");
+ const submit=()=>{const n=name.trim();if(!n)return;onCreate({name:n,description:description.trim()||null,color})};
+ return <Modal kicker="Projects" title="New project" onClose={onClose}
+  footer={<>
+   <button type="button" className="secondary" onClick={onClose}>Cancel</button>
+   <button type="button" className="primary" onClick={submit} disabled={!name.trim()}>Create</button>
+  </>}>
+  <div className="field-grid">
+   <div className="field field-wide">
+    <label className="field-label" htmlFor="p-name">Name<span className="req" aria-hidden="true">*</span></label>
+    <input id="p-name" className="input" autoFocus value={name} placeholder="Project name"
+     onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")submit()}}/>
+   </div>
+   <div className="field field-wide">
+    <label className="field-label" htmlFor="p-desc">Description</label>
+    <textarea id="p-desc" className="input" rows={3} value={description}
+     placeholder="What is this project for?" onChange={e=>setDescription(e.target.value)}/>
+   </div>
+   <div className="field">
+    <label className="field-label" htmlFor="p-color">Colour</label>
+    <select id="p-color" className="input" value={color} onChange={e=>setColor(e.target.value)}>
+     {TAG_COLORS.map(c=><option key={c} value={c}>{c}</option>)}
+    </select>
+   </div>
+  </div>
+ </Modal>;
 }
