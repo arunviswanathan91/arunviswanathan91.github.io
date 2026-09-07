@@ -71,11 +71,12 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  const jobs=useTable(ENTITIES.jobs.table,ENTITIES.jobs.select,ENTITIES.jobs.defaultSort);
  const reminders=useTable(ENTITIES.reminders.table,ENTITIES.reminders.select,ENTITIES.reminders.defaultSort);
  const reads=useTable(ENTITIES.reads.table,ENTITIES.reads.select,ENTITIES.reads.defaultSort);
+ const opportunities=useTable(ENTITIES.opportunities.table,ENTITIES.opportunities.select,ENTITIES.opportunities.defaultSort);
  const projects=useTable<Project>("projects",PROJECT_SELECT,{key:"name",dir:"asc"});
  const tags=useTags(userId);
 
- const tables=useMemo(()=>({tasks,publications,documents,jobs,reminders,reads}),
-  [tasks,publications,documents,jobs,reminders,reads]);
+ const tables=useMemo(()=>({tasks,publications,documents,jobs,reminders,reads,opportunities}),
+  [tasks,publications,documents,jobs,reminders,reads,opportunities]);
 
  const [chatId,setChatId]=useState<number|null>(null);
  const refreshTelegram=useCallback(async()=>{
@@ -97,7 +98,7 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   })();
  },[userId,refreshTelegram]);
 
- const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||projects.loading||tags.loading;
+ const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||opportunities.loading||projects.loading||tags.loading;
 
  const notices=useMemo(()=>{
   const all:NoticeItem[]=[];

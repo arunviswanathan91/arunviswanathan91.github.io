@@ -4,8 +4,10 @@ A React + TypeScript personal workspace added alongside the academic GitHub Page
 
 ## Modules
 
-Tasks, Publications, Documents, Jobs, Reminders and Reads. Every module shares the same
-capabilities, because each one is declared as a config rather than hand-built:
+Tasks, Publications, Documents, Jobs, Reminders, Reads, and **Opportunities** (postdocs and research
+roles found automatically overnight by the discovery pipeline in `../pipeline/` — see its README for
+setup). Every module shares the same capabilities, because each one is declared as a config rather
+than hand-built:
 
 - **Board and Table views** — drag between stage columns, or switch to a dense sortable table
   with inline editing. Every field is editable in a detail drawer opened by clicking any card or row.
@@ -106,3 +108,16 @@ no tokens is saved as a note rather than discarded.
 
 Dates resolve in the time zone on your profile (set automatically from the browser, editable in
 Settings) — without it, `due:friday` would land in UTC.
+
+## Opportunities (discovery pipeline)
+
+The **Opportunities** board is filled automatically, not by hand: a separate pipeline in
+`../pipeline/` crawls job feeds and APIs nightly (via GitHub Actions), scores each posting against
+your research profile, removes duplicates, and writes ranked results straight into the
+`opportunities` table this dashboard reads. See `../pipeline/README.md` for how to configure sources,
+run it locally, and wire up the nightly schedule and the Telegram `/discover` command. Nothing in
+this dashboard app talks to the pipeline directly — they only share the Supabase database.
+
+Dragging a card to **Tracked** on the Opportunities board automatically creates a matching row in
+Jobs (via a database trigger, `fn_opportunity_to_job` in `schema.sql`) — no extra step needed to
+start tracking an application you've decided to pursue.

@@ -292,6 +292,53 @@ Deno.serve(async(req)=>{
    return send(chatId,res.ok?(res.summary?`Updated — ${res.summary}`:"Nothing changed."):res.summary);
   }
 
+  if(command==="/discover"){
+   const {data:busy}=await db.from("discovery_runs").select("id")
+     .eq("user_id",userId).in("status",["queued","running"])
+     .gt("expires_at",new Date().toISOString()).maybeSingle();
+   if(busy)return send(chatId,"A search is already running — I'll message you here when it's done.");
+
+   const {data:prof}=await db.from("discovery_profiles").select("id")
+     .eq("user_id",userId).eq("active",true).limit(1).maybeSingle();
+   const token=crypto.randomUUID();
+   const {data:run,error:runErr}=await db.from("discovery_runs").insert({
+    user_id:userId,profile_id:prof?.id??null,trigger:"telegram",status:"queued",
+    query:rest||null,chat_id:chatId,claim_token:token,
+    expires_at:new Date(Date.now()+15*60*1000).toISOString(),
+   }).select("id").maybeSingle();
+   if(runErr||!run)return send(chatId,"I couldn't start a search right now.");
+
+   const discoveryUrl=Deno.env.get("DISCOVERY_URL");
+   const dispatchToken=Deno.env.get("GITHUB_DISPATCH_TOKEN");
+   const dispatchRepo=Deno.env.get("GITHUB_REPOSITORY_SLUG");   // "owner/repo"
+
+   if(discoveryUrl){
+    // Cloud Run path: replies in seconds. A single-use claim token means the
+    // request body carries nothing else user-controlled, so this endpoint is
+    // safe to leave unauthenticated on the Cloud Run side.
+    EdgeRuntime.waitUntil(fetch(discoveryUrl,{
+     method:"POST",
+     headers:{"content-type":"application/json","x-discovery-secret":Deno.env.get("DISCOVERY_SHARED_SECRET")??""},
+     body:JSON.stringify({run_id:run.id,claim_token:token}),
+    }).catch(()=>{}));
+   }else if(dispatchToken&&dispatchRepo){
+    // GitHub Actions path: 45-90s instead of seconds, but needs no Cloud Run
+    // deployment at all -- this is what makes /discover work from Phase 1.
+    EdgeRuntime.waitUntil(fetch(`https://api.github.com/repos/${dispatchRepo}/dispatches`,{
+     method:"POST",
+     headers:{
+      authorization:`Bearer ${dispatchToken}`,accept:"application/vnd.github+json",
+      "content-type":"application/json","user-agent":"telegram-webhook",
+     },
+     body:JSON.stringify({event_type:"discover",client_payload:{query:rest||null,chat_id:chatId,run_id:run.id,claim_token:token}}),
+    }).catch(()=>{}));
+   }else{
+    await db.from("discovery_runs").update({status:"failed",error:"no dispatch target configured"}).eq("id",run.id);
+    return send(chatId,"Discovery isn't wired up yet on this deployment — set GITHUB_DISPATCH_TOKEN (or DISCOVERY_URL once Cloud Run is deployed) as an Edge Function secret.");
+   }
+   return send(chatId,`Searching${rest?` for "${rest}"`:""} — I'll message you here in a few minutes.`);
+  }
+
   await clearState();
   return send(chatId,HELP);
  }

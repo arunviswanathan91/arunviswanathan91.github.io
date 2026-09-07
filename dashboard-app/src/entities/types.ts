@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 
 export type Row={id:string}&Record<string,any>;
-export type EntityKey="tasks"|"publications"|"documents"|"jobs"|"reminders"|"reads";
-export type TagEntity="task"|"publication"|"document"|"job_application"|"reminder"|"read";
+export type EntityKey="tasks"|"publications"|"documents"|"jobs"|"reminders"|"reads"|"opportunities";
+export type TagEntity="task"|"publication"|"document"|"job_application"|"reminder"|"read"|"opportunity";
 export type Layout="board"|"table";
 /** Where a field lands on a board card. */
 export type CardSlot="accent"|"title"|"subtitle"|"badge"|"meta"|"footer";

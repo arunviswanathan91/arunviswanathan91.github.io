@@ -1,0 +1,24 @@
+{
+  "name": "discovery-pipeline",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "check": "tsc -b && node dist/test/checks.js",
+    "start": "node dist/src/cli.js",
+    "dev": "tsc -b && node dist/src/cli.js",
+    "seed": "node dist/src/seed.js",
+    "server": "node dist/src/server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

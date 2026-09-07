@@ -65,7 +65,7 @@ create table if not exists tags (
 );
 create table if not exists item_tags (
   tag_id uuid not null references tags(id) on delete cascade,
-  entity_type text not null check (entity_type in ('job_application','reminder','read','task','publication','document')),
+  entity_type text not null check (entity_type in ('job_application','reminder','read','task','publication','document','opportunity')),
   entity_id uuid not null, created_at timestamptz not null default now(),
   primary key (tag_id, entity_type, entity_id)
 );
@@ -105,7 +105,7 @@ alter table reads add column if not exists updated_at timestamptz not null defau
 -- replace it explicitly to allow tagging tasks, publications and documents too.
 alter table item_tags drop constraint if exists item_tags_entity_type_check;
 alter table item_tags add constraint item_tags_entity_type_check
-  check (entity_type in ('job_application','reminder','read','task','publication','document'));
+  check (entity_type in ('job_application','reminder','read','task','publication','document','opportunity'));
 
 -- The bot needs the user's zone to turn "due:friday" or "in 2h" into a correct absolute
 -- timestamp; the dashboard fills it in from the browser on first load.
@@ -233,3 +233,462 @@ create index if not exists reminders_user_remind_idx on reminders(user_id,remind
 create index if not exists reminders_pending_notify_idx on reminders(remind_at) where done=false and notified_at is null;
 create index if not exists reads_user_created_idx on reads(user_id,created_at desc);
 create index if not exists telegram_pending_confirmations_expires_idx on telegram_pending_confirmations(expires_at);
+
+-- ==========================================================================
+--  Opportunity discovery pipeline
+--  Everything below is additive and idempotent, same as the rest of this file.
+-- ==========================================================================
+
+-- pgvector is only needed for Phase 4 embeddings. Guarded so an environment
+-- without it still applies the rest of this file cleanly.
+do $$ begin
+  create extension if not exists vector;
+exception when others then
+  raise notice 'pgvector unavailable - embedding column will be skipped';
+end $$;
+
+do $$ begin
+  create type opportunity_status as enum ('New','Shortlisted','Tracked','Dismissed','Expired');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type opportunity_kind as enum
+    ('Postdoc','Research scientist','Industry R&D','Fellowship','Staff scientist','Faculty','Other');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type discovery_run_status as enum ('queued','running','done','partial','failed');
+exception when duplicate_object then null; end $$;
+
+-- What we are looking for. One active row is enough; the table supports more.
+create table if not exists discovery_profiles (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default 'Default',
+  active boolean not null default true,
+  terms text[] not null default '{}',
+  types text[] not null default '{Postdoc,Research scientist,Fellowship}',
+  home_city text not null default 'Thiruvananthapuram',
+  india_cities text[] not null default '{Thiruvananthapuram,Kochi,Bengaluru,Hyderabad,Chennai,Pune,Mumbai,New Delhi}',
+  countries text[] not null default '{IN}',
+  remote_ok boolean not null default true,
+  faculty_ok boolean not null default false,
+  years_experience integer not null default 0,
+  salary_floor_inr integer,
+  reject_below_floor boolean not null default false,
+  blocked_orgs text[] not null default '{}',
+  max_llm_calls integer not null default 40,
+  max_crawl_pages integer not null default 120,
+  max_http_requests integer not null default 250,
+  ontology_overrides jsonb not null default '{}'::jsonb,
+  site_snapshot jsonb not null default '{}'::jsonb,
+  site_fetched_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Where we look. Adding a source is a row here, not code.
+create table if not exists discovery_sources (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  source_key text not null,
+  kind text not null default 'api',
+  enabled boolean not null default true,
+  quota_provider text not null default 'none',
+  precedence smallint not null default 50,
+  config jsonb not null default '{}'::jsonb,
+  cursor jsonb not null default '{}'::jsonb,
+  last_success_at timestamptz,
+  last_error text,
+  consecutive_failures integer not null default 0,
+  disabled_until timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, source_key)
+);
+
+create table if not exists discovery_runs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  profile_id uuid references discovery_profiles(id) on delete set null,
+  trigger text not null default 'schedule',
+  status discovery_run_status not null default 'queued',
+  query text,
+  chat_id bigint,
+  claim_token text,
+  expires_at timestamptz not null default now() + interval '15 minutes',
+  started_at timestamptz,
+  finished_at timestamptz,
+  stats jsonb not null default '{}'::jsonb,
+  cursor jsonb not null default '{}'::jsonb,
+  error text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists discovery_run_sources (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references discovery_runs(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  source_key text not null,
+  status text not null default 'ok',
+  items_fetched integer not null default 0,
+  items_new integer not null default 0,
+  pages integer not null default 0,
+  api_calls integer not null default 0,
+  duration_ms integer not null default 0,
+  error text,
+  created_at timestamptz not null default now(),
+  unique (run_id, source_key)
+);
+
+-- Raw landing zone: written BEFORE parsing so a crash never loses fetched data.
+-- The unique constraint is the whole incremental story - re-seeing identical
+-- content is an on-conflict-do-nothing no-op, costing no parsing and no LLM.
+create table if not exists discovery_raw_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  run_id uuid references discovery_runs(id) on delete set null,
+  source_key text not null,
+  external_id text not null,
+  url text not null,
+  url_canon text not null,
+  url_hash text not null,
+  content_hash text not null,
+  payload jsonb not null,
+  processed boolean not null default false,
+  opportunity_id uuid,
+  error text,
+  fetched_at timestamptz not null default now(),
+  unique (user_id, source_key, external_id, content_hash)
+);
+
+-- The dashboard entity. Deliberately bounded: useTable has no pagination, so
+-- discovery_prune() caps it and description_excerpt stays out of the select.
+create table if not exists opportunities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  profile_id uuid references discovery_profiles(id) on delete set null,
+  run_id uuid references discovery_runs(id) on delete set null,
+  status opportunity_status not null default 'New',
+  dismiss_reason text,
+  role text not null,
+  organization text,
+  organization_url text,
+  department text,
+  opportunity_type opportunity_kind not null default 'Other',
+  seniority text,
+  location text,
+  city text,
+  region text,
+  country text,
+  is_remote boolean not null default false,
+  posted_at timestamptz,
+  deadline timestamptz,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  last_changed_at timestamptz,
+  match_score integer not null default 0,
+  fit_reason text,
+  score_breakdown jsonb not null default '{}'::jsonb,
+  salary_min numeric,
+  salary_max numeric,
+  salary_currency text,
+  salary_period text,
+  salary_is_predicted boolean,
+  salary_annual_inr numeric,
+  salary_display text,
+  salary_source text,
+  url text not null,
+  apply_url text,
+  source_count integer not null default 1,
+  sources_summary text,
+  summary text,
+  description_excerpt text,
+  org_key text,
+  title_key text,
+  simhash bigint,
+  simhash_b0 int,
+  simhash_b1 int,
+  simhash_b2 int,
+  simhash_b3 int,
+  content_hash text,
+  reposted_of uuid references opportunities(id) on delete set null,
+  enrichment text not null default 'none',
+  job_application_id uuid references job_applications(id) on delete set null,
+  saved boolean generated always as (job_application_id is not null) stored,
+  next_action text,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists opportunity_sources (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  opportunity_id uuid not null references opportunities(id) on delete cascade,
+  source_key text not null,
+  external_id text not null,
+  url text not null,
+  url_canon text not null,
+  url_hash text not null,
+  ats_key text,
+  is_primary boolean not null default false,
+  match_signal text not null default 'url',
+  match_confidence real not null default 1.0,
+  content_hash text,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  unique (user_id, source_key, external_id)
+);
+
+create table if not exists opportunity_salaries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  opportunity_id uuid not null references opportunities(id) on delete cascade,
+  source_key text not null,
+  min_value numeric,
+  max_value numeric,
+  currency text,
+  period text,
+  is_predicted boolean not null default false,
+  extracted_from text not null default 'api',
+  confidence real not null default 0.5,
+  evidence text,
+  observed_at timestamptz not null default now()
+);
+
+create table if not exists opportunity_feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  opportunity_id uuid references opportunities(id) on delete set null,
+  action text not null,
+  reason text,
+  org_key text,
+  opportunity_type text,
+  region text,
+  concepts text[] not null default '{}',
+  match_score integer,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists discovery_quota (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  provider text not null,
+  window_kind text not null,
+  window_start date not null,
+  used integer not null default 0,
+  limit_value integer not null,
+  last_used_at timestamptz not null default now(),
+  unique (user_id, provider, window_kind, window_start)
+);
+
+create table if not exists discovery_llm_cache (
+  cache_key text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  task text not null,
+  model text not null,
+  response jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+-- Additive alters, so re-running against an older database stays safe.
+alter table opportunities add column if not exists reposted_of uuid references opportunities(id) on delete set null;
+alter table opportunities add column if not exists enrichment text not null default 'none';
+alter table discovery_sources add column if not exists precedence smallint not null default 50;
+alter table discovery_profiles add column if not exists site_snapshot jsonb not null default '{}'::jsonb;
+
+do $$ begin
+  if exists (select 1 from pg_type where typname='vector') then
+    execute 'alter table opportunities add column if not exists embedding vector(384)';
+  end if;
+end $$;
+
+-- ---- Row level security: one "for all" policy per table, as everywhere else --
+alter table discovery_profiles enable row level security;
+alter table discovery_sources enable row level security;
+alter table discovery_runs enable row level security;
+alter table discovery_run_sources enable row level security;
+alter table discovery_raw_items enable row level security;
+alter table opportunities enable row level security;
+alter table opportunity_sources enable row level security;
+alter table opportunity_salaries enable row level security;
+alter table opportunity_feedback enable row level security;
+alter table discovery_quota enable row level security;
+alter table discovery_llm_cache enable row level security;
+
+drop policy if exists "own discovery profiles" on discovery_profiles;
+create policy "own discovery profiles" on discovery_profiles for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own discovery sources" on discovery_sources;
+create policy "own discovery sources" on discovery_sources for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own discovery runs" on discovery_runs;
+create policy "own discovery runs" on discovery_runs for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own discovery run sources" on discovery_run_sources;
+create policy "own discovery run sources" on discovery_run_sources for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own discovery raw items" on discovery_raw_items;
+create policy "own discovery raw items" on discovery_raw_items for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own opportunities" on opportunities;
+create policy "own opportunities" on opportunities for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own opportunity sources" on opportunity_sources;
+create policy "own opportunity sources" on opportunity_sources for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own opportunity salaries" on opportunity_salaries;
+create policy "own opportunity salaries" on opportunity_salaries for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own opportunity feedback" on opportunity_feedback;
+create policy "own opportunity feedback" on opportunity_feedback for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own discovery quota" on discovery_quota;
+create policy "own discovery quota" on discovery_quota for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own discovery llm cache" on discovery_llm_cache;
+create policy "own discovery llm cache" on discovery_llm_cache for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+
+-- ---- Make opportunities taggable: RLS branch + cleanup trigger --------------
+-- (the entity_type CHECK is widened further up, alongside the original one)
+drop policy if exists "own item tags" on item_tags;
+create policy "own item tags" on item_tags for all
+  using (exists (select 1 from tags t where t.id = item_tags.tag_id and t.user_id = auth.uid()))
+  with check (
+    exists (select 1 from tags t where t.id = item_tags.tag_id and t.user_id = auth.uid())
+    and (
+      (entity_type = 'job_application' and exists (select 1 from job_applications j where j.id = item_tags.entity_id and j.user_id = auth.uid()))
+      or (entity_type = 'reminder' and exists (select 1 from reminders r where r.id = item_tags.entity_id and r.user_id = auth.uid()))
+      or (entity_type = 'read' and exists (select 1 from reads rd where rd.id = item_tags.entity_id and rd.user_id = auth.uid()))
+      or (entity_type = 'task' and exists (select 1 from tasks tk where tk.id = item_tags.entity_id and tk.user_id = auth.uid()))
+      or (entity_type = 'publication' and exists (select 1 from publications p where p.id = item_tags.entity_id and p.user_id = auth.uid()))
+      or (entity_type = 'document' and exists (select 1 from documents d where d.id = item_tags.entity_id and d.user_id = auth.uid()))
+      or (entity_type = 'opportunity' and exists (select 1 from opportunities o where o.id = item_tags.entity_id and o.user_id = auth.uid()))
+    )
+  );
+
+drop trigger if exists opportunities_tag_cleanup on opportunities;
+create trigger opportunities_tag_cleanup after delete on opportunities
+  for each row execute function fn_cleanup_item_tags('opportunity');
+
+-- ---- updated_at only where a human edits rows ------------------------------
+drop trigger if exists opportunities_set_updated_at on opportunities;
+create trigger opportunities_set_updated_at before update on opportunities
+  for each row execute function set_updated_at();
+drop trigger if exists discovery_profiles_set_updated_at on discovery_profiles;
+create trigger discovery_profiles_set_updated_at before update on discovery_profiles
+  for each row execute function set_updated_at();
+drop trigger if exists discovery_sources_set_updated_at on discovery_sources;
+create trigger discovery_sources_set_updated_at before update on discovery_sources
+  for each row execute function set_updated_at();
+
+-- ---- Dragging a card to "Tracked" files it in the job tracker ---------------
+-- Doing this in Postgres means the React layer needs no new code at all: the
+-- board's existing drag already writes opportunities.status.
+create or replace function fn_opportunity_to_job() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_job uuid;
+begin
+  if new.status = 'Tracked' and old.status is distinct from 'Tracked'
+     and new.job_application_id is null then
+    insert into job_applications (user_id, organization, role, stage, url, deadline, next_action, notes)
+    values (new.user_id, coalesce(new.organization,'Unknown organisation'), new.role, 'Saved',
+            coalesce(new.apply_url, new.url), new.deadline,
+            coalesce(new.next_action, 'Read the ad and draft a cover letter'),
+            concat_ws(chr(10), new.summary, nullif(new.salary_display,''),
+                      'Match ' || new.match_score || ' - ' || coalesce(new.fit_reason,''),
+                      'Found via: ' || coalesce(new.sources_summary,'')))
+    returning id into v_job;
+    new.job_application_id := v_job;
+  end if;
+  return new;
+end $$;
+drop trigger if exists opportunities_to_job on opportunities;
+create trigger opportunities_to_job before update on opportunities
+  for each row execute function fn_opportunity_to_job();
+
+-- ---- Every triage decision is recorded, to weight future ranking ------------
+create or replace function fn_opportunity_feedback() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status is distinct from old.status
+     or new.dismiss_reason is distinct from old.dismiss_reason then
+    insert into opportunity_feedback
+      (user_id, opportunity_id, action, reason, org_key, opportunity_type, region, concepts, match_score)
+    values (new.user_id, new.id, lower(new.status::text), nullif(new.dismiss_reason,''),
+            new.org_key, new.opportunity_type::text, new.region,
+            coalesce((select array_agg(x) from jsonb_array_elements_text(
+                        coalesce(new.score_breakdown->'topic'->'hits','[]'::jsonb)) x), '{}'),
+            new.match_score);
+  end if;
+  return new;
+end $$;
+drop trigger if exists opportunities_feedback on opportunities;
+create trigger opportunities_feedback after update on opportunities
+  for each row execute function fn_opportunity_feedback();
+
+-- ---- Atomic quota ledger ----------------------------------------------------
+-- An RPC rather than an upsert from the client: PostgREST upsert REPLACES the
+-- row, which would silently lose quota accounting under concurrent runs.
+create or replace function discovery_quota_take(
+  p_user_id uuid, p_provider text, p_window_kind text, p_limit integer, p_units integer
+) returns table (granted integer, used_after integer, limit_out integer)
+language plpgsql security definer set search_path = public as $$
+declare v_start date; v_used integer; v_limit integer; v_grant integer;
+begin
+  v_start := case p_window_kind when 'month' then date_trunc('month', now())::date else current_date end;
+  insert into discovery_quota as q (user_id, provider, window_kind, window_start, used, limit_value)
+  values (p_user_id, p_provider, p_window_kind, v_start, 0, p_limit)
+  on conflict (user_id, provider, window_kind, window_start)
+    do update set limit_value = greatest(q.limit_value, excluded.limit_value)
+  returning q.used, q.limit_value into v_used, v_limit;
+
+  v_grant := greatest(least(p_units, v_limit - v_used), 0);
+  if v_grant > 0 then
+    update discovery_quota set used = used + v_grant, last_used_at = now()
+     where user_id=p_user_id and provider=p_provider
+       and window_kind=p_window_kind and window_start=v_start
+    returning used into v_used;
+  end if;
+  granted := v_grant; used_after := v_used; limit_out := v_limit;
+  return next;
+end $$;
+revoke all on function discovery_quota_take(uuid,text,text,integer,integer) from public, anon;
+
+-- ---- Pruning is a correctness requirement, not housekeeping ------------------
+-- useTable fetches every row with no pagination, so an unbounded opportunities
+-- table would be downloaded in full on every window focus.
+create or replace function discovery_prune(p_user_id uuid, p_keep integer default 200)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_expired int; v_deleted int; v_capped int;
+begin
+  update opportunities set status='Expired'
+   where user_id=p_user_id and status='New' and deadline is not null and deadline < now();
+  get diagnostics v_expired = row_count;
+
+  delete from opportunities o
+   where o.user_id=p_user_id and o.status in ('New','Expired') and o.job_application_id is null
+     and not exists (select 1 from opportunity_feedback f where f.opportunity_id=o.id)
+     and not exists (select 1 from item_tags t where t.entity_type='opportunity' and t.entity_id=o.id)
+     and (o.last_seen_at < now() - interval '60 days'
+          or (o.deadline is not null and o.deadline < now() - interval '14 days'));
+  get diagnostics v_deleted = row_count;
+
+  delete from opportunities where id in (
+    select id from opportunities
+     where user_id=p_user_id and status='New' and job_application_id is null
+     order by match_score desc, last_seen_at desc offset p_keep);
+  get diagnostics v_capped = row_count;
+
+  delete from discovery_raw_items where user_id=p_user_id and fetched_at < now() - interval '30 days';
+  delete from discovery_runs where user_id=p_user_id and created_at < now() - interval '90 days';
+  delete from discovery_llm_cache where user_id=p_user_id and created_at < now() - interval '180 days';
+  return jsonb_build_object('expired',v_expired,'deleted',v_deleted,'capped',v_capped);
+end $$;
+
+-- ---- Indexes, following the (user_id, filter_col) convention ---------------
+create index if not exists opportunities_user_status_idx on opportunities(user_id,status);
+create index if not exists opportunities_user_score_idx on opportunities(user_id,match_score desc);
+create index if not exists opportunities_user_deadline_idx on opportunities(user_id,deadline);
+create index if not exists opportunities_user_orgkey_idx on opportunities(user_id,org_key);
+create index if not exists opportunities_simhash_bands_idx on opportunities(user_id,simhash_b0,simhash_b1,simhash_b2,simhash_b3);
+create index if not exists opportunities_open_idx on opportunities(user_id,match_score desc) where status='New';
+create index if not exists opp_sources_urlhash_idx on opportunity_sources(user_id,url_hash);
+create index if not exists opp_sources_atskey_idx on opportunity_sources(user_id,ats_key) where ats_key is not null;
+create index if not exists opp_sources_opportunity_idx on opportunity_sources(opportunity_id);
+create index if not exists opp_salaries_opportunity_idx on opportunity_salaries(opportunity_id);
+create index if not exists opp_feedback_user_idx on opportunity_feedback(user_id,created_at desc);
+create index if not exists raw_items_user_processed_idx on discovery_raw_items(user_id,processed) where processed=false;
+create index if not exists raw_items_urlhash_idx on discovery_raw_items(user_id,url_hash);
+create index if not exists discovery_runs_user_status_idx on discovery_runs(user_id,status);
+create index if not exists discovery_run_sources_run_idx on discovery_run_sources(run_id);
+create index if not exists discovery_sources_user_idx on discovery_sources(user_id,enabled);

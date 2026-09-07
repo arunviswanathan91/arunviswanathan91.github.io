@@ -1,4 +1,4 @@
-import { BookMarked, Bell, BriefcaseBusiness, FileText, FlaskConical, LayoutDashboard } from "lucide-react";
+import { BookMarked, Bell, BriefcaseBusiness, FileText, FlaskConical, LayoutDashboard, Telescope } from "lucide-react";
 import { isColumn } from "./types";
 import type { EntityDef, EntityKey, Row, Tone } from "./types";
 import { dayDelta } from "../lib/format";
@@ -149,8 +149,70 @@ export const reads:EntityDef={
  ],
 };
 
-export const ENTITIES:Record<EntityKey,EntityDef>={tasks,publications,documents,jobs,reminders,reads};
-export const ENTITY_ORDER:EntityKey[]=["tasks","publications","documents","jobs","reminders","reads"];
+export const OPPORTUNITY_STATUS=["New","Shortlisted","Tracked","Dismissed","Expired"] as const;
+export const OPPORTUNITY_KIND=["Postdoc","Research scientist","Industry R&D","Fellowship","Staff scientist","Faculty","Other"] as const;
+export const OPPORTUNITY_FIT=["Strong","Good","Maybe","Weak"] as const;
+export const DISMISS_REASON=["Not relevant","Wrong location","Too junior","Too senior","Salary too low","Deadline too soon","Visa/eligibility","Organisation","Already applied","Other"] as const;
+export const OPPORTUNITY_REGION=["Kerala","Bengaluru","Rest of India","Remote","Europe","North America","Asia-Pacific","Other"] as const;
+export const SALARY_SOURCE=["Stated (API)","Predicted (API)","JSON-LD","From text","Not stated"] as const;
+
+const fitTone=(v:string):Tone=>v==="Strong"?"green":v==="Good"?"violet":v==="Maybe"?"amber":"slate";
+const opportunityTone=(v:string):Tone=>
+ v==="New"?"slate":v==="Shortlisted"?"amber":v==="Tracked"?"green":v==="Expired"?"red":"dim";
+
+export const opportunities:EntityDef={
+ key:"opportunities",table:"opportunities",tagEntity:"opportunity",
+ select:"id,user_id,role,organization,organization_url,status,dismiss_reason,opportunity_type,"+
+  "location,region,is_remote,posted_at,deadline,last_seen_at,match_score,fit_reason,"+
+  "salary_display,salary_source,url,apply_url,source_count,sources_summary,summary,"+
+  "next_action,notes,job_application_id,saved,created_at,updated_at",
+ singular:"opportunity",plural:"Opportunities",kicker:"Career",
+ subtitle:"Postdocs and research roles found overnight, ranked against your profile.",
+ icon:Telescope,
+ titleField:"role",
+ searchFields:["role","organization","location","summary","fit_reason","notes"],
+ projectField:null,
+ groupBy:"status",
+ defaultSort:{key:"match_score",dir:"desc"},
+ defaultLayout:"board",layouts:["board","table"],
+ openWhen:r=>r.status==="New",
+ newDefaults:({userId})=>({user_id:userId,status:"New",match_score:0,opportunity_type:"Other"}),
+ fields:[
+  {key:"role",kind:"text",label:"Role",required:true,create:true,card:"title",table:4,sort:true},
+  {key:"organization",kind:"text",label:"Organisation",create:true,card:"subtitle",table:2,sort:true},
+  {key:"fit",kind:"enum",label:"Fit",options:OPPORTUNITY_FIT,tone:fitTone,card:"accent",filter:true,
+   derive:(r:Row)=>{const s=Number(r.match_score??0);return s>=70?"Strong":s>=50?"Good":s>=30?"Maybe":"Weak"}},
+  {key:"match_score",kind:"text",label:"Match",editable:false,card:"meta",table:1,sort:true},
+  {key:"status",kind:"enum",label:"Status",options:OPPORTUNITY_STATUS,tone:opportunityTone,card:"badge",table:1,filter:true,sort:true},
+  {key:"dismiss_reason",kind:"enum",label:"Why dismissed",options:DISMISS_REASON,free:true,tone:()=>"dim",table:1,filter:true,
+   placeholder:"Feeds the ranking — worth setting"},
+  {key:"opportunity_type",kind:"enum",label:"Type",options:OPPORTUNITY_KIND,free:true,tone:()=>"dim",create:true,table:1,filter:true,sort:true},
+  {key:"location",kind:"text",label:"Location",editable:false,card:"meta",table:2,sort:true},
+  {key:"region",kind:"enum",label:"Region",options:OPPORTUNITY_REGION,free:true,tone:()=>"dim",table:1,filter:true},
+  {key:"is_remote",kind:"bool",label:"Remote",trueLabel:"Remote",editable:false,table:1,filter:true},
+  {key:"deadline",kind:"date",label:"Deadline",buckets:true,create:true,card:"footer",table:1,filter:true,sort:true},
+  {key:"posted_at",kind:"date",label:"Posted",buckets:true,editable:false,table:1,filter:true,sort:true},
+  {key:"salary_display",kind:"text",label:"Salary",editable:false,card:"footer",table:2,sort:true},
+  {key:"salary_source",kind:"enum",label:"Salary source",options:SALARY_SOURCE,free:true,
+   tone:v=>v.startsWith("Predicted")?"amber":v==="Not stated"?"dim":"blue",editable:false,table:1,filter:true},
+  {key:"url",kind:"url",label:"Listing",short:true,create:true,card:"footer",table:1},
+  {key:"apply_url",kind:"url",label:"Apply",short:true,table:1},
+  {key:"organization_url",kind:"url",label:"Organisation site",short:true},
+  {key:"source_count",kind:"text",label:"Sources",editable:false,table:1,sort:true},
+  {key:"sources_summary",kind:"text",label:"Seen on",editable:false,table:2},
+  {key:"saved",kind:"bool",label:"In job tracker",trueLabel:"In job tracker",editable:false,table:1,filter:true},
+  tagsField,
+  {key:"fit_reason",kind:"longtext",label:"Why this scored what it did",rows:3,editable:false,wide:true,table:3},
+  {key:"summary",kind:"longtext",label:"Summary",rows:4,editable:false,wide:true,table:3},
+  {key:"next_action",kind:"text",label:"Next action",table:2},
+  {key:"notes",kind:"longtext",label:"Notes",rows:5,create:true,wide:true},
+  {key:"last_seen_at",kind:"stamp",label:"Last seen",table:1},
+  ...stamps,
+ ],
+};
+
+export const ENTITIES:Record<EntityKey,EntityDef>={tasks,publications,documents,jobs,reminders,reads,opportunities};
+export const ENTITY_ORDER:EntityKey[]=["opportunities","tasks","publications","documents","jobs","reminders","reads"];
 
 // Catch config typos at boot rather than as a confusing runtime blank.
 if(import.meta.env.DEV){

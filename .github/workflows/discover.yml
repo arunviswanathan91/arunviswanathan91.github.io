@@ -1,0 +1,85 @@
+name: Nightly opportunity discovery
+
+on:
+  schedule:
+    - cron: '30 20 * * *'   # 02:00 IST
+  workflow_dispatch:
+    inputs:
+      query:
+        description: 'Extra search terms for this run'
+        required: false
+      maxLlmCalls:
+        description: 'LLM call cap for this run'
+        required: false
+        default: '40'
+  repository_dispatch:
+    types: [discover]       # lets the Telegram bot trigger a run without Cloud Run
+
+permissions:
+  contents: write            # heartbeat commit only, see the last step
+
+concurrency:
+  group: discovery
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: pipeline/package-lock.json
+
+      - name: Install
+        working-directory: pipeline
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        working-directory: pipeline
+        run: npm run build
+
+      - name: Discover
+        working-directory: pipeline
+        env:
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DISCOVERY_USER_ID: ${{ vars.DISCOVERY_USER_ID }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          TRIGGER="schedule"
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then TRIGGER="telegram"; fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TRIGGER="manual"; fi
+          node dist/src/cli.js run \
+            --trigger "$TRIGGER" \
+            --query "${{ github.event.inputs.query || github.event.client_payload.query || '' }}" \
+            --chat-id "${{ github.event.client_payload.chat_id || '' }}" \
+            --run-id "${{ github.event.client_payload.run_id || '' }}" \
+            --claim-token "${{ github.event.client_payload.claim_token || '' }}" \
+            --max-llm "${{ github.event.inputs.maxLlmCalls || '40' }}"
+
+      - name: Keep the schedule alive
+        if: github.event_name == 'schedule'
+        run: |
+          # GitHub disables scheduled workflows on public repos after 60 days of
+          # repository inactivity. A commit under .github/ resets that clock and
+          # is excluded from the Pages artifact, so it never touches the public site.
+          LAST=$(git log -1 --format=%ct)
+          NOW=$(date +%s)
+          if [ $((NOW - LAST)) -gt 2592000 ]; then
+            date -u +%FT%TZ > .github/discovery-heartbeat
+            git config user.name "discovery-bot"
+            git config user.email "discovery-bot@users.noreply.github.com"
+            git add .github/discovery-heartbeat
+            git commit -m "chore: discovery heartbeat"
+            git push
+          fi

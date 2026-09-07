@@ -31,8 +31,14 @@ jobs:
         run: npm run build
       - name: Assemble Pages artifact
         run: |
+          # Allowlist, not a denylist: only what's named here is published, so a
+          # new top-level directory (like pipeline/) is private by default instead
+          # of leaking onto the public site until someone remembers to exclude it.
           mkdir _site
-          rsync -a ./ _site/ --exclude .git --exclude .github --exclude _site --exclude dashboard-app --exclude supabase
+          # TODO.md is intentionally git-ignored (a local-only note) and is never
+          # present in a fresh checkout, so it's deliberately left off this list.
+          cp index.html .nojekyll README.md _site/
+          cp -R css js assets _site/
           mkdir -p _site/dashboard
           cp -R dashboard-app/dist/. _site/dashboard/
       - if: github.event_name != 'pull_request'

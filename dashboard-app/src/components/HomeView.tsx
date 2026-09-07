@@ -7,7 +7,7 @@ import { Badge } from "./ui/Badge";
 import type { EntityKey, Row } from "../entities/types";
 import type { ViewKey } from "../lib/store";
 
-const DUE_FIELDS:Partial<Record<EntityKey,string>>={tasks:"due_at",publications:"due_at",jobs:"deadline",reminders:"remind_at"};
+const DUE_FIELDS:Partial<Record<EntityKey,string>>={tasks:"due_at",publications:"due_at",jobs:"deadline",reminders:"remind_at",opportunities:"deadline"};
 
 export function HomeView(){
  const {tables}=useData();
