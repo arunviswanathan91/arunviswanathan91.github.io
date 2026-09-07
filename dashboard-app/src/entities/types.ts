@@ -49,6 +49,22 @@ export type FieldDef=
 
 export interface SortSpec{key:string;dir:"asc"|"desc"}
 
+/**
+ * A one-click card/row button that writes a patch without opening the drawer —
+ * the fix for triaging a list of auto-discovered or time-sensitive rows one at
+ * a time. `patch` can touch more than one column (e.g. rejecting a manuscript
+ * sets both `stage` and `rejection_type` in the same click).
+ */
+export interface QuickAction{
+ key:string;
+ label:string;
+ icon:LucideIcon;
+ tone?:Tone;
+ /** Omit to always show; used to keep actions relevant to the row's current state. */
+ show?:(row:Row)=>boolean;
+ patch:(row:Row)=>Record<string,unknown>;
+}
+
 export interface EntityDef{
  key:EntityKey;
  table:string;
@@ -73,6 +89,8 @@ export interface EntityDef{
  /** "Still open" predicate — the single source of truth for sidebar and home counts. */
  openWhen?:(row:Row)=>boolean;
  newDefaults:(ctx:{userId:string;projectId:string|null})=>Record<string,unknown>;
+ /** One-click board-card / table-row buttons. Omit for entities with no useful quick action. */
+ quickActions?:QuickAction[];
 }
 
 export const fieldByKey=(def:EntityDef,key:string)=>def.fields.find(f=>f.key===key);

@@ -1,7 +1,8 @@
 import { Db, type SourceRow } from "./db.js";
 import { Http, DEFAULT_HTTP } from "./http.js";
 import { RunLogger } from "./log.js";
-import { readEnv, SCHEDULE_CAPS, INTERACTIVE_CAPS } from "./config.js";
+import { readEnv, FIRECRAWL_MAX_PER_RUN, SCHEDULE_CAPS, INTERACTIVE_CAPS } from "./config.js";
+import { makeRenderer } from "./sources/firecrawl.js";
 import { makeAdapter } from "./sources/registry.js";
 import { SourceConfigError } from "./sources/types.js";
 import { hardFilter, scoreOpportunity } from "./score/score.js";
@@ -71,6 +72,9 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  log.info("run starting", { userId, trigger, sources: sources.length, dryRun: !!opts.dryRun });
 
  const http = new Http(DEFAULT_HTTP, caps.maxHttpRequests);
+ // One shared budget for the whole run, so N crawl sources each hitting a
+ // JS-rendered seed can't multiply into N x FIRECRAWL_MAX_PER_RUN calls.
+ const renderer = makeRenderer(env.firecrawlApiKey, FIRECRAWL_MAX_PER_RUN);
  const bySource: Record<string, SourceOutcome> = {};
  const degradations: string[] = [];
  const accepted: { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> }[] = [];
@@ -78,7 +82,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  for (const row of sources) {
   if (Date.now() > deadlineAt) { degradations.push("runtime cap"); break; }
-  const outcome = await runSource(row, { db, http, profile, caps, deadlineAt, log, userId, runId, dryRun: !!opts.dryRun });
+  const outcome = await runSource(row, { db, http, renderer, profile, caps, deadlineAt, log, userId, runId, dryRun: !!opts.dryRun });
   bySource[row.source_key] = outcome;
   fetched += outcome.itemsFetched;
   if (outcome.status === "skipped_config") degradations.push(`${row.source_key} (not configured)`);
@@ -150,7 +154,8 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 // --- source execution, isolated so one bad site never fails the run ----------
 
 interface SourceCtx {
- db: Db; http: Http; profile: SearchProfile; caps: RunCaps; deadlineAt: number;
+ db: Db; http: Http; renderer: ((url: string) => Promise<string | null>) | null;
+ profile: SearchProfile; caps: RunCaps; deadlineAt: number;
  log: RunLogger; userId: string; runId: string | null; dryRun: boolean;
 }
 
@@ -199,6 +204,7 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceOutcome> {
  };
  const ctx = {
   http: c.http,
+  renderer: c.renderer,
   cursorIn: row.cursor ?? {},
   now: new Date(),
   log: (m: string, extra?: Record<string, unknown>) => c.log.debug(m, extra),

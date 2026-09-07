@@ -13,6 +13,8 @@ import { buildOpportunity } from "../src/sources/build.js";
 import { parseFeed } from "../src/sources/feed.js";
 import { formatDigest } from "../src/sinks/telegram.js";
 import type { NormalizedOpportunity, SearchProfile } from "../src/types.js";
+import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/euraxess.js";
+import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 
 type Check = { name: string; ok: boolean; detail?: string };
 const out: Check[] = [];
@@ -282,6 +284,51 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  eq("atom entry link from href attribute", atomEntries[0].link, "https://x.com/job/2");
 }
 
+// ---- EURAXESS parser (fixture below is a trimmed excerpt of the actual
+// structure fetched live from euraxess.ec.europa.eu/jobs/464104) ----
+{
+ const fixture = `<html><body>
+<h1 class="ecl-content-block__title">Postdoctoral Fellow in Unconventional Close-to-Physics Computation</h1>
+<li>Posted on: 7 September 2026</li>
+<h2 id="job-information" class="ecl-u-type-heading-2">Job Information</h2>
+<dl class="ecl-description-list ecl-description-list--horizontal">
+<dt class="ecl-description-list__term">Organisation/Company</dt><dd class="ecl-description-list__definition"><div>NTNU Norwegian University of Science and Technology</div></dd>
+<dt class="ecl-description-list__term">Department</dt><dd class="ecl-description-list__definition"><div>Department of Computer Science</div></dd>
+<dt class="ecl-description-list__term">Researcher Profile</dt><dd class="ecl-description-list__definition"><div><div>Recognised Researcher (R2)</div></div></dd>
+<dt class="ecl-description-list__term">Positions</dt><dd class="ecl-description-list__definition"><div>Postdoc Positions</div></dd>
+<dt class="ecl-description-list__term">Application Deadline</dt><dd class="ecl-description-list__definition"><div><time datetime="2026-09-23T21:59:00+00:00">23 Sep 2026 - 23:59 (Europe/Oslo)</time></div></dd>
+<dt class="ecl-description-list__term">Country</dt><dd class="ecl-description-list__definition"><div>Norway</div></dd>
+<dt class="ecl-description-list__term">Type of Contract</dt><dd class="ecl-description-list__definition"><div>Temporary</div></dd>
+</dl>
+<h2 id="work-locations" class="ecl-u-type-heading-2">Work Location(s)</h2>
+<dl class="ecl-description-list ecl-description-list--horizontal">
+<dt class="ecl-description-list__term">City</dt><dd class="ecl-description-list__definition">Trondheim</dd>
+</dl>
+<h2 id="offer-description" class="ecl-u-type-heading-2">Offer Description</h2>
+<div class="ecl"><p>Fundamental research in computation at NTNU.</p></div>
+<h2 id="requirements" class="ecl-u-type-heading-2">Requirements</h2>
+</body></html>`;
+
+ const job = parseEuraxessJob(fixture);
+ check("euraxess: parses the title", job?.title === "Postdoctoral Fellow in Unconventional Close-to-Physics Computation");
+ check("euraxess: parses organisation", job?.organization === "NTNU Norwegian University of Science and Technology");
+ check("euraxess: parses department", job?.department === "Department of Computer Science");
+ check("euraxess: parses city (from a different dl than org/deadline)", job?.city === "Trondheim");
+ check("euraxess: parses country", job?.country === "Norway");
+ check("euraxess: parses the ISO deadline from the <time> attribute, not the display text", job?.deadline === "2026-09-23T21:59:00.000Z");
+ check("euraxess: parses posted date", job?.postedAt === new Date("7 September 2026").toISOString());
+ check("euraxess: captures the researcher profile", job?.researcherProfile === "Recognised Researcher (R2)");
+ check("euraxess: captures contract type", job?.contractType === "Temporary");
+ check("euraxess: description excludes the requirements section", !!job && job.description.includes("Fundamental research") && !job.description.includes("Requirements"));
+
+ eq("euraxess: R1 maps to Other", typeFromResearcherProfile("First Stage Researcher (R1)"), "Other");
+ eq("euraxess: R2 maps to Postdoc", typeFromResearcherProfile("Recognised Researcher (R2)"), "Postdoc");
+ eq("euraxess: R3 maps to Research scientist", typeFromResearcherProfile("Established Researcher (R3)"), "Research scientist");
+ eq("euraxess: R4 maps to Faculty", typeFromResearcherProfile("Leading Researcher (R4)"), "Faculty");
+ eq("euraxess: unrecognised profile maps to null (falls back to title heuristic)", typeFromResearcherProfile("Something else"), null);
+ eq("euraxess: no page fields at all returns null, not a garbage object", parseEuraxessJob("<html><body>no title here</body></html>"), null);
+}
+
 // ---- telegram digest formatting ----
 {
  const empty = formatDigest({ runId: "r1", status: "done", fetched: 0, deduped: 0, created: 0, changed: 0, bySource: {}, top: [], degradations: [] }, "https://example.com");
@@ -295,6 +342,19 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("digest includes the role", withResults.includes("Postdoc"));
  check("digest includes the dashboard link", withResults.includes("https://example.com/dashboard"));
  check("digest reports degradations", withResults.includes("quota"));
+}
+
+// ---- Firecrawl budget (the render call itself needs network, so only the
+// ---- pure gate around it is covered here) ----
+{
+ const b = new FirecrawlBudget(2);
+ check("firecrawl budget starts with full remaining", b.remaining === 2);
+ check("firecrawl budget grants up to the cap", b.take() && b.take());
+ check("firecrawl budget refuses past the cap", !b.take());
+ check("firecrawl budget remaining hits zero, not negative", b.remaining === 0);
+
+ check("makeRenderer returns null with no api key", makeRenderer(null, 5) === null);
+ check("makeRenderer returns a function once a key is set", typeof makeRenderer("key", 5) === "function");
 }
 
 let bad = 0;

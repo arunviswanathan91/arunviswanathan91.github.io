@@ -32,6 +32,9 @@ export interface SourceContext {
  cursorIn: Record<string, unknown>;
  now: Date;
  log: (msg: string, extra?: Record<string, unknown>) => void;
+ /** Tier-3 fallback for JS-rendered pages (Firecrawl), or null when no API key is
+  *  configured -- adapters must treat a null renderer as "unavailable", not fail. */
+ renderer: ((url: string) => Promise<string | null>) | null;
 }
 
 export interface SourceAdapter {

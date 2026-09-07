@@ -5,7 +5,7 @@ export type OpportunityKind =
  | "Fellowship" | "Staff scientist" | "Faculty" | "Other";
 
 export type SourceKind = "api" | "feed" | "crawl";
-export type QuotaProvider = "adzuna" | "jooble" | "rapidapi" | "groq" | "gemini" | "none";
+export type QuotaProvider = "adzuna" | "jooble" | "rapidapi" | "groq" | "gemini" | "firecrawl" | "none";
 
 export interface SalaryEvidence {
  min: number | null;

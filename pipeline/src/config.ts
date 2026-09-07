@@ -5,6 +5,7 @@ export interface Env {
  serviceRoleKey: string;
  telegramBotToken: string | null;
  userId: string | null;
+ firecrawlApiKey: string | null;
 }
 
 /** Fails loudly and early rather than half way through a run. */
@@ -20,8 +21,14 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   serviceRoleKey,
   telegramBotToken: env.TELEGRAM_BOT_TOKEN ?? null,
   userId: env.DISCOVERY_USER_ID ?? null,
+  firecrawlApiKey: env.FIRECRAWL_API_KEY ?? null,
  };
 }
+
+/** Hard per-run ceiling on Firecrawl-rendered fetches, independent of the monthly
+ *  free-tier allowance -- keeps one run from burning a big chunk of the month's
+ *  quota on a single misbehaving site. */
+export const FIRECRAWL_MAX_PER_RUN = 20;
 
 export const SCHEDULE_CAPS: RunCaps = {
  maxHttpRequests: 250,

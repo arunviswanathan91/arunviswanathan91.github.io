@@ -34,7 +34,8 @@ export interface BotEntity{
 }
 
 const TASK_STATUS=["Backlog","In progress","Review","Done"] as const;
-const PUBLICATION_STAGE=["Idea","Drafting","Submitted","Revision","Published"] as const;
+const PUBLICATION_STAGE=["Idea","Drafting","Under Review","Revision Requested","Rejected","Accepted","Published"] as const;
+const REJECTION_TYPE=["Desk rejection","After review","Withdrawn"] as const;
 const JOB_STAGE=["Saved","Preparing","Applied","Interview","Offer","Closed"] as const;
 const PRIORITY=["Low","Medium","High"] as const;
 const DOCUMENT_KIND=["Manuscript","Protocol","Dataset","Figure","Reference"] as const;
@@ -63,6 +64,9 @@ export const ENTITIES:Record<EntityKey,BotEntity>={
    {key:"title",kind:"text",aliases:["title"]},
    {key:"venue",kind:"text",aliases:["venue","journal","conference"]},
    {key:"stage",kind:"enum",aliases:["stage","status"],options:PUBLICATION_STAGE},
+   {key:"rejection_type",kind:"enum",aliases:["rejection","rejectiontype","rejected"],options:REJECTION_TYPE},
+   {key:"review_comments",kind:"text",aliases:["review","reviewcomments","comments"]},
+   {key:"decision_email_url",kind:"url",aliases:["email","decisionemail","mail"]},
    {key:"doi",kind:"text",aliases:["doi"]},
    {key:"url",kind:"url",aliases:["url","link"]},
    {key:"due_at",kind:"date",aliases:["due","by","when"]},

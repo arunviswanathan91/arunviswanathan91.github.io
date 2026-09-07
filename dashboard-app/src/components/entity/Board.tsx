@@ -2,13 +2,14 @@ import { Plus } from "lucide-react";
 import { groupValue } from "../../entities/types";
 import { BoardCard, CARD_MIME } from "./BoardCard";
 import type { ValueCtx } from "./FieldValue";
-import type { EntityDef, FieldDef, Row } from "../../entities/types";
+import type { EntityDef, FieldDef, QuickAction, Row } from "../../entities/types";
 
-export function Board({def,groupField,rows,ctx,selection,selecting,onToggle,onOpen,onMove,onAdd}:{
+export function Board({def,groupField,rows,ctx,selection,selecting,onToggle,onOpen,onMove,onAdd,onQuickAction}:{
  def:EntityDef;groupField:FieldDef;rows:Row[];ctx:ValueCtx;
  selection:string[];selecting:boolean;
  onToggle(id:string):void;onOpen(id:string):void;
  onMove(id:string,value:string):void;onAdd(value:string):void;
+ onQuickAction(row:Row,action:QuickAction):void;
 }){
  const derived=groupField.kind==="enum"&&!!groupField.derive;
  const options=groupField.kind==="enum"?groupField.options:[];
@@ -33,7 +34,8 @@ export function Board({def,groupField,rows,ctx,selection,selecting,onToggle,onOp
    <div className="column-body">
     {items.map(row=><BoardCard key={row.id} def={def} row={row} ctx={ctx}
      selected={selection.includes(row.id)} selecting={selecting}
-     onToggle={()=>onToggle(row.id)} onOpen={()=>onOpen(row.id)}/>)}
+     onToggle={()=>onToggle(row.id)} onOpen={()=>onOpen(row.id)}
+     onQuickAction={action=>onQuickAction(row,action)}/>)}
     {!items.length&&<p className="column-empty">Nothing here</p>}
    </div>
   </section>;

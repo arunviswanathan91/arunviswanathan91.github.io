@@ -94,6 +94,37 @@ create table if not exists telegram_pending_confirmations (
 
 alter table publications add column if not exists project_id uuid references projects(id) on delete set null;
 alter table publications add column if not exists url text;
+
+-- ---- Publications lifecycle: submitted/revision split from a bare stage into --
+-- ---- desk-vs-review rejection, reviewer feedback, and a Gmail deep link -------
+-- Renamed in place (not replaced) so existing rows keep their stage, just under
+-- a name that says what you're actually waiting on. Guarded by an existence
+-- check because RENAME VALUE has no IF EXISTS and re-running this file must
+-- never error on a value already renamed by a previous run.
+do $$ begin
+  if exists (select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid
+             where t.typname='publication_stage' and e.enumlabel='Submitted') then
+    alter type publication_stage rename value 'Submitted' to 'Under Review';
+  end if;
+end $$;
+do $$ begin
+  if exists (select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid
+             where t.typname='publication_stage' and e.enumlabel='Revision') then
+    alter type publication_stage rename value 'Revision' to 'Revision Requested';
+  end if;
+end $$;
+alter type publication_stage add value if not exists 'Rejected' after 'Revision Requested';
+alter type publication_stage add value if not exists 'Accepted' after 'Rejected';
+
+-- Free text, not another enum: a locked CHECK on a nullable column rendered as
+-- kind:"enum" breaks the day EnumSelect writes "" for its blank option (see
+-- dismiss_reason/region/salary_source above) -- the dashboard offers the
+-- REJECTION_TYPE list as a datalist instead of enforcing it in Postgres.
+alter table publications add column if not exists rejection_type text;
+alter table publications add column if not exists review_comments text;
+-- A Gmail message permalink (mail.google.com/mail/u/0/#inbox/<id>), so the
+-- decision email opens directly instead of being re-found by search.
+alter table publications add column if not exists decision_email_url text;
 alter table job_applications add column if not exists project_id uuid references projects(id) on delete set null;
 alter table tasks add column if not exists notes text;
 alter table projects add column if not exists color text;
@@ -183,6 +214,34 @@ drop trigger if exists tasks_set_updated_at on tasks;
 create trigger tasks_set_updated_at before update on tasks for each row execute function set_updated_at();
 drop trigger if exists publications_set_updated_at on publications;
 create trigger publications_set_updated_at before update on publications for each row execute function set_updated_at();
+
+-- ---- Publications: a decision is never a dead end -----------------------
+-- Landing in Rejected/Revision Requested/Accepted with no next_action would sit
+-- silently until you happen to open the drawer. This fills in a concrete first
+-- step -- never overwriting one you already wrote -- so the fact of a decision
+-- always comes with something to do about it. Only fires on the transition,
+-- never re-fires on later edits to the same stage.
+create or replace function fn_publication_stage_hint() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if new.stage is distinct from old.stage and (new.next_action is null or new.next_action = '') then
+    new.next_action := case new.stage
+      when 'Rejected' then case coalesce(new.rejection_type,'')
+        when 'Desk rejection' then 'Pick the next journal and resubmit'
+        when 'After review' then 'Address reviewer comments, then pick where to resubmit'
+        else 'Decide: revise and resubmit, or let it go' end
+      when 'Revision Requested' then 'Address reviewer comments and resubmit'
+      when 'Accepted' then 'Complete proofs / production steps'
+      when 'Under Review' then 'Nothing to do but wait -- follow up if it runs long'
+      else new.next_action
+    end;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists publications_stage_hint on publications;
+create trigger publications_stage_hint before update on publications
+  for each row execute function fn_publication_stage_hint();
 drop trigger if exists documents_set_updated_at on documents;
 create trigger documents_set_updated_at before update on documents for each row execute function set_updated_at();
 drop trigger if exists jobs_set_updated_at on job_applications;

@@ -7,15 +7,19 @@
  * (Europe/Scandinavia specifically), not India-based -- India-side coverage
  * comes from the Adzuna adapter instead.
  *
- * Empty on purpose. Every candidate checked against the live site failed:
+ * Candidates checked against the live site and rejected:
  *   - DKFZ (dkfz.de/en/jobs/index.php): 404.
- *   - EMBL (embl.org/jobs/): redirects to a Workday-hosted SPA
- *     (embl.wd103.myworkdayjobs.com) that renders client-side with no
- *     JSON-LD in the initial HTML -- exactly the case the Firecrawl tier
- *     (Phase 3) exists for, not something a plain fetch can read.
- * Shipping guessed URLs as if verified would silently crawl nothing while
- * looking configured. Add rows here (or directly to discovery_sources) once
- * a real target has been checked.
+ *   - EMBL (embl.org/jobs/): redirects to a Workday-hosted SPA that renders
+ *     client-side with no JSON-LD in the initial HTML. crawl.ts now has a
+ *     Firecrawl fallback for exactly this shape (see sources/firecrawl.ts),
+ *     but re-adding EMBL here still needs a live check with FIRECRAWL_API_KEY
+ *     set to confirm the rendered DOM actually carries JobPosting markup --
+ *     Workday boards often load listings via a separate API call the render
+ *     alone won't trigger, so this isn't a guaranteed win.
+ * postdocjobs.com's homepage embeds 13+ JobPosting nodes directly (verified
+ * live) -- no per-posting URL in their JSON-LD, so every posting from this
+ * source links back to the listing page rather than its own page; a real but
+ * minor trade-off given the source data has nothing better to offer.
  */
 export interface CrawlSeed {
  key: string;
@@ -25,4 +29,12 @@ export interface CrawlSeed {
  maxPages?: number;
 }
 
-export const CRAWL_SEEDS: CrawlSeed[] = [];
+export const CRAWL_SEEDS: CrawlSeed[] = [
+ {
+  key: "crawl:postdocjobs",
+  seedUrls: ["https://postdocjobs.com/", "https://postdocjobs.com/job/job/index?page=2"],
+  organization: "PostdocJobs.com",
+  allowPathRe: "^/job/job/index$",
+  maxPages: 10,
+ },
+];

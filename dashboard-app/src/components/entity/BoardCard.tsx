@@ -1,14 +1,15 @@
 import { GripVertical } from "lucide-react";
 import { FieldValue } from "./FieldValue";
+import { QuickActions } from "./QuickActions";
 import type { ValueCtx } from "./FieldValue";
-import type { EntityDef, Row } from "../../entities/types";
+import type { EntityDef, QuickAction, Row } from "../../entities/types";
 
 export const CARD_MIME="application/x-dash-card";
 
 /** Slots fields onto the card by their `card` value — no entity-specific branches. */
-export function BoardCard({def,row,ctx,selected,selecting,onToggle,onOpen}:{
+export function BoardCard({def,row,ctx,selected,selecting,onToggle,onOpen,onQuickAction}:{
  def:EntityDef;row:Row;ctx:ValueCtx;selected:boolean;selecting:boolean;
- onToggle():void;onOpen():void;
+ onToggle():void;onOpen():void;onQuickAction(action:QuickAction):void;
 }){
  const slot=(name:string)=>def.fields.filter(f=>f.card===name);
  const cell=(f:any)=><FieldValue key={f.key} field={f} row={row} ctx={ctx} mode="card"/>;
@@ -32,6 +33,7 @@ export function BoardCard({def,row,ctx,selected,selecting,onToggle,onOpen}:{
   </div>
   {slot("subtitle").length>0&&<p className="card-sub clamp-2">{slot("subtitle").map(cell)}</p>}
   {slot("meta").length>0&&<div className="card-meta">{slot("meta").map(cell)}</div>}
+  <QuickActions actions={def.quickActions} row={row} onRun={onQuickAction}/>
   <footer className="card-foot">
    <div className="card-foot-left">{slot("footer").map(cell)}</div>
    <div className="card-foot-right">{slot("badge").map(cell)}</div>

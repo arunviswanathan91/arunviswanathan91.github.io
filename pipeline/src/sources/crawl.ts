@@ -1,29 +1,11 @@
 import { extractJsonLd, findJobPostings, readJobPosting } from "../normalize/jsonld.js";
 import { canonicalizeUrl } from "../normalize/url.js";
-import { decodeEntities, sha256 } from "../normalize/text.js";
+import { sha256 } from "../normalize/text.js";
 import { buildOpportunity } from "./build.js";
+import { sameSiteLinks } from "./links.js";
 import { SourceConfigError } from "./types.js";
 import type { SourceAdapter, SourceContext, SourceQuery, FetchWindow, SourcePage } from "./types.js";
 import type { NormalizedOpportunity, RawItem } from "../types.js";
-
-const LINK_RE = /<a\b[^>]*href\s*=\s*["']([^"'#]+)["']/gi;
-
-function sameSiteLinks(html: string, base: string, allow: RegExp): string[] {
- const origin = new URL(base).origin;
- const out = new Set<string>();
- let m: RegExpExecArray | null;
- while ((m = LINK_RE.exec(html))) {
-  let href = decodeEntities(m[1]).trim();
-  if (!href || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) continue;
-  let abs: string;
-  try { abs = new URL(href, base).toString(); } catch { continue; }
-  if (!abs.startsWith(origin)) continue;
-  if (/\.(pdf|docx?|xlsx?|zip|jpe?g|png|gif|svg|mp4)(\?|$)/i.test(abs)) continue;
-  if (!allow.test(new URL(abs).pathname)) continue;
-  out.add(canonicalizeUrl(abs));
- }
- return [...out];
-}
 
 /**
  * Walks a small set of known career pages and reads their schema.org JobPosting
@@ -31,8 +13,11 @@ function sameSiteLinks(html: string, base: string, allow: RegExp): string[] {
  * so institutions that want to be found publish it — which means no crawler
  * framework, no headless browser and no model is needed to read them.
  *
- * Pages that render only via JavaScript are skipped rather than escalated; a
- * Firecrawl tier can be slotted in behind this same interface if that ever matters.
+ * A seed page that renders only via JavaScript (no JobPosting markup, no links
+ * to follow in the raw HTML) gets one Firecrawl-rendered retry via
+ * ctx.renderer before being given up on -- see sources/firecrawl.ts. That tier
+ * is optional: with no FIRECRAWL_API_KEY set, ctx.renderer is null and such
+ * pages are simply skipped, exactly as before it existed.
  */
 export function crawlAdapter(sourceKey: string): SourceAdapter {
  let seedUrls: string[] = [];
@@ -67,6 +52,7 @@ export function crawlAdapter(sourceKey: string): SourceAdapter {
     const url = frontier.shift()!;
     if (seen.has(url)) continue;
     seen.add(url);
+    const isSeed = depth0 > 0;   // only seeds get the Firecrawl fallback -- see below
 
     const headers: Record<string, string> = {};
     if (etags[url]) headers["if-none-match"] = etags[url];
@@ -80,7 +66,19 @@ export function crawlAdapter(sourceKey: string): SourceAdapter {
     if (!res.ok || !res.body) continue;
     if (res.headers["etag"]) nextEtags[url] = res.headers["etag"];
 
-    const postings = findJobPostings(extractJsonLd(res.body));
+    let body = res.body;
+    let postings = findJobPostings(extractJsonLd(body));
+    // A seed page with no JobPosting markup and no same-site links to follow is
+    // the signature of a JS-rendered shell (e.g. a Workday SPA) -- fall back to
+    // a rendered fetch before giving up on it, if that tier is configured.
+    if (isSeed && postings.length === 0 && ctx.renderer && sameSiteLinks(body, url, allow).length === 0) {
+     const rendered = await ctx.renderer(url);
+     if (rendered) {
+      body = rendered;
+      postings = findJobPostings(extractJsonLd(body));
+      ctx.log(`${sourceKey}: ${url} rendered via Firecrawl`, { postings: postings.length });
+     }
+    }
     for (const node of postings) {
      const job = readJobPosting(node);
      if (!job.title) continue;
@@ -98,7 +96,7 @@ export function crawlAdapter(sourceKey: string): SourceAdapter {
     // Only the seed pages contribute new links, keeping the crawl one level deep.
     if (depth0 > 0) {
      depth0--;
-     for (const link of sameSiteLinks(res.body, url, allow)) {
+     for (const link of sameSiteLinks(body, url, allow)) {
       if (!seen.has(link) && frontier.length < maxPagesPerHost) frontier.push(link);
      }
     }

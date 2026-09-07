@@ -1,11 +1,19 @@
-import { BookMarked, Bell, BriefcaseBusiness, FileText, FlaskConical, LayoutDashboard, Telescope } from "lucide-react";
+import {
+ BookMarked, Bell, BriefcaseBusiness, Check, FileText, FlaskConical, LayoutDashboard,
+ MailX, PartyPopper, PenLine, Star, Telescope, ThumbsDown, ThumbsUp, Timer,
+} from "lucide-react";
 import { isColumn } from "./types";
-import type { EntityDef, EntityKey, Row, Tone } from "./types";
+import type { EntityDef, EntityKey, QuickAction, Row, Tone } from "./types";
 import { dayDelta } from "../lib/format";
 
 export const TASK_STATUS=["Backlog","In progress","Review","Done"] as const;
 export const PRIORITY=["Low","Medium","High"] as const;
-export const PUBLICATION_STAGE=["Idea","Drafting","Submitted","Revision","Published"] as const;
+// "Under Review"/"Revision Requested" replace the older "Submitted"/"Revision" labels
+// (renamed in place in Postgres, see schema.sql) -- the waiting-on-someone-else state is
+// what you actually track, not the instant of submission. "Accepted" is split out from
+// "Published" because proofs/formalities are a real, separate waiting period.
+export const PUBLICATION_STAGE=["Idea","Drafting","Under Review","Revision Requested","Rejected","Accepted","Published"] as const;
+export const REJECTION_TYPE=["Desk rejection","After review","Withdrawn"] as const;
 export const JOB_STAGE=["Saved","Preparing","Applied","Interview","Offer","Closed"] as const;
 export const DOCUMENT_KIND=["Manuscript","Protocol","Dataset","Figure","Reference"] as const;
 export const REMINDER_GROUP=["Overdue","Today","Upcoming","No date","Done"] as const;
@@ -14,10 +22,10 @@ export const READ_GROUP=["Unread","Read"] as const;
 const stageTone=(v:string):Tone=>
  v==="Backlog"||v==="Idea"||v==="Saved"||v==="No date"||v==="Unread"?"slate":
  v==="In progress"||v==="Drafting"||v==="Preparing"||v==="Today"?"amber":
- v==="Review"||v==="Submitted"||v==="Applied"?"blue":
- v==="Revision"||v==="Interview"||v==="Upcoming"?"violet":
- v==="Done"||v==="Published"||v==="Offer"||v==="Read"?"green":
- v==="Overdue"?"red":"dim";
+ v==="Review"||v==="Under Review"||v==="Applied"?"blue":
+ v==="Revision"||v==="Revision Requested"||v==="Interview"||v==="Upcoming"?"violet":
+ v==="Done"||v==="Published"||v==="Accepted"||v==="Offer"||v==="Read"?"green":
+ v==="Overdue"||v==="Rejected"?"red":"dim";
 const priorityTone=(v:string):Tone=>v==="High"?"red":v==="Medium"?"amber":"slate";
 
 const projectField={key:"project_id",kind:"project",label:"Project",card:"meta",table:2,filter:true} as const;
@@ -46,23 +54,46 @@ export const tasks:EntityDef={
  ],
 };
 
+// One click from "Under Review"/"Revision Requested" both changes the stage and
+// records *why*, so triage never leaves a Rejected card with a blank reason.
+const publicationQuickActions:QuickAction[]=[
+ {key:"desk-reject",label:"Desk reject",icon:MailX,tone:"red",
+  show:r=>r.stage==="Under Review",
+  patch:()=>({stage:"Rejected",rejection_type:"Desk rejection"})},
+ {key:"reviewed-reject",label:"Rejected after review",icon:PenLine,tone:"red",
+  show:r=>r.stage==="Under Review"||r.stage==="Revision Requested",
+  patch:()=>({stage:"Rejected",rejection_type:"After review"})},
+ {key:"accept",label:"Accepted",icon:PartyPopper,tone:"green",
+  show:r=>r.stage==="Under Review"||r.stage==="Revision Requested",
+  patch:()=>({stage:"Accepted"})},
+];
+
 export const publications:EntityDef={
  key:"publications",table:"publications",tagEntity:"publication",
- select:"id,user_id,title,venue,stage,next_action,due_at,doi,notes,project_id,url,created_at,updated_at",
+ select:"id,user_id,title,venue,stage,rejection_type,review_comments,decision_email_url,"+
+  "next_action,due_at,doi,notes,project_id,url,created_at,updated_at",
  singular:"publication",plural:"Publications",kicker:"Knowledge",subtitle:"Every manuscript from idea to print.",icon:FlaskConical,
- titleField:"title",searchFields:["title","venue","next_action","doi","notes"],projectField:"project_id",groupBy:"stage",
+ titleField:"title",searchFields:["title","venue","next_action","doi","notes","review_comments"],projectField:"project_id",groupBy:"stage",
  defaultSort:{key:"created_at",dir:"desc"},defaultLayout:"board",layouts:["board","table"],
+ // A Rejected paper still needs a decision (resubmit elsewhere, or let it go) --
+ // it stays "open" like everything else short of Published.
  openWhen:r=>r.stage!=="Published",
  newDefaults:({userId,projectId})=>({user_id:userId,stage:"Idea",project_id:projectId}),
+ quickActions:publicationQuickActions,
  fields:[
   {key:"title",kind:"text",label:"Title",required:true,create:true,card:"title",table:4,sort:true},
-  {key:"venue",kind:"text",label:"Venue",create:true,card:"subtitle",table:2,sort:true,placeholder:"Journal or conference"},
+  {key:"venue",kind:"text",label:"Journal / venue",create:true,card:"subtitle",table:2,sort:true,placeholder:"Journal or conference"},
   {key:"stage",kind:"enum",label:"Stage",options:PUBLICATION_STAGE,tone:stageTone,card:"badge",table:1,filter:true,sort:true},
+  {key:"rejection_type",kind:"enum",label:"Rejection type",options:REJECTION_TYPE,free:true,tone:()=>"dim",card:"meta",table:1,filter:true,
+   placeholder:"Desk rejection, after review, withdrawn…"},
   {key:"due_at",kind:"date",label:"Due",buckets:true,card:"footer",table:1,filter:true,sort:true},
   {key:"next_action",kind:"text",label:"Next action",card:"footer",table:2,placeholder:"What moves this forward?"},
   {key:"url",kind:"url",label:"Link",short:true,card:"footer",table:1},
+  {key:"decision_email_url",kind:"url",label:"Decision email",short:true,table:1,
+   placeholder:"Gmail link — paste the message URL to open the actual decision email"},
   {key:"doi",kind:"text",label:"DOI",table:1,placeholder:"10.1234/example"},
   projectField,tagsField,
+  {key:"review_comments",kind:"longtext",label:"Review comments",rows:5,wide:true,placeholder:"What the reviewers actually said"},
   {key:"notes",kind:"longtext",label:"Notes",rows:5,wide:true},
   ...stamps,
  ],
@@ -107,6 +138,21 @@ export const jobs:EntityDef={
  ],
 };
 
+// The behavior a reminder actually needs *after* it fires: not just "done" or
+// silence, but a one-click way to push it back without retyping a date. Only
+// offered once it's actually due (Overdue/Today) -- snoozing something in
+// Upcoming would just be editing the date the long way.
+const snoozeTo=(hours:number)=>()=>({remind_at:new Date(Date.now()+hours*3600_000).toISOString(),notified_at:null});
+const reminderQuickActions:QuickAction[]=[
+ {key:"done",label:"Done",icon:Check,tone:"green",show:r=>!r.done,patch:()=>({done:true})},
+ {key:"snooze-1h",label:"+1h",icon:Timer,tone:"amber",
+  show:r=>!r.done&&r.remind_at&&dayDelta(r.remind_at)<=0,patch:snoozeTo(1)},
+ {key:"snooze-1d",label:"+1d",icon:Timer,tone:"amber",
+  show:r=>!r.done&&r.remind_at&&dayDelta(r.remind_at)<=0,patch:snoozeTo(24)},
+ {key:"snooze-1w",label:"+1wk",icon:Timer,tone:"amber",
+  show:r=>!r.done&&r.remind_at&&dayDelta(r.remind_at)<=0,patch:snoozeTo(24*7)},
+];
+
 export const reminders:EntityDef={
  key:"reminders",table:"reminders",tagEntity:"reminder",
  select:"id,user_id,title,body,remind_at,done,notified_at,created_at,updated_at",
@@ -115,6 +161,7 @@ export const reminders:EntityDef={
  defaultSort:{key:"remind_at",dir:"asc"},defaultLayout:"board",layouts:["board","table"],
  openWhen:r=>!r.done,
  newDefaults:({userId})=>({user_id:userId,done:false}),
+ quickActions:reminderQuickActions,
  fields:[
   {key:"title",kind:"text",label:"Title",required:true,create:true,card:"title",table:4,sort:true,placeholder:"What should I remember?"},
   // Derived grouping: Reminders keep their Overdue/Today/Upcoming sections without a bespoke view.
@@ -160,6 +207,18 @@ const fitTone=(v:string):Tone=>v==="Strong"?"green":v==="Good"?"violet":v==="May
 const opportunityTone=(v:string):Tone=>
  v==="New"?"slate":v==="Shortlisted"?"amber":v==="Tracked"?"green":v==="Expired"?"red":"dim";
 
+// Triage without opening the drawer: only shown on "New" rows, since that's the
+// inbox moment this exists for. Track fires the existing fn_opportunity_to_job
+// trigger for free -- clicking Track and dragging to Tracked do the same thing.
+const opportunityQuickActions:QuickAction[]=[
+ {key:"interested",label:"Interested",icon:ThumbsUp,tone:"green",
+  show:r=>r.status==="New",patch:()=>({status:"Shortlisted"})},
+ {key:"pass",label:"Pass",icon:ThumbsDown,tone:"red",
+  show:r=>r.status==="New",patch:r=>({status:"Dismissed",...(r.dismiss_reason?{}:{dismiss_reason:"Not relevant"})})},
+ {key:"track",label:"Track",icon:Star,tone:"violet",
+  show:r=>r.status==="New"||r.status==="Shortlisted",patch:()=>({status:"Tracked"})},
+];
+
 export const opportunities:EntityDef={
  key:"opportunities",table:"opportunities",tagEntity:"opportunity",
  select:"id,user_id,role,organization,organization_url,status,dismiss_reason,opportunity_type,"+
@@ -177,6 +236,7 @@ export const opportunities:EntityDef={
  defaultLayout:"board",layouts:["board","table"],
  openWhen:r=>r.status==="New",
  newDefaults:({userId})=>({user_id:userId,status:"New",match_score:0,opportunity_type:"Other"}),
+ quickActions:opportunityQuickActions,
  fields:[
   {key:"role",kind:"text",label:"Role",required:true,create:true,card:"title",table:4,sort:true},
   {key:"organization",kind:"text",label:"Organisation",create:true,card:"subtitle",table:2,sort:true},

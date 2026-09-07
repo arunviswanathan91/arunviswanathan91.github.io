@@ -11,7 +11,7 @@ package with its own build, its own tests, and two thin entrypoints (`cli.ts` fo
 ## How it works
 
 ```
-sources (feeds, Adzuna, Jooble, JSON-LD crawl)
+sources (feeds, Adzuna, Jooble, EURAXESS, JSON-LD crawl — optionally Firecrawl-rendered)
   → raw items written to the DB first (a crash never loses fetched data)
   → deduplicated against everything already known (URL, ATS id, org+title+location, description fingerprint)
   → hard-filtered (deadline, type, location, salary floor — facts, never judgment calls)
@@ -31,7 +31,7 @@ cd pipeline
 npm install
 cp .env.example .env   # fill in the values below
 npm run build
-npm run check           # 110 offline logic checks — no network, no database
+npm run check           # 132 offline logic checks — no network, no database
 ```
 
 ### Environment variables
@@ -44,6 +44,7 @@ npm run check           # 110 offline logic checks — no network, no database
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | for the Adzuna source | free at [developer.adzuna.com](https://developer.adzuna.com), ~1000 calls/month |
 | `JOOBLE_API_KEY` | for the Jooble source | free key at [jooble.org/api/about](https://jooble.org/api/about) |
 | `TELEGRAM_BOT_TOKEN` | to push a digest | same bot token the dashboard's webhook uses |
+| `FIRECRAWL_API_KEY` | no — crawl targets work without it | Tier-3 fallback for JS-rendered career pages; free at [firecrawl.dev](https://www.firecrawl.dev), capped locally by `FIRECRAWL_MAX_PER_RUN` |
 | `GROQ_API_KEY`, `GEMINI_API_KEY` | not used yet | reserved for Phase 3 (LLM fallback extraction) |
 
 ### One-time setup: register sources and the search profile
@@ -76,15 +77,18 @@ Every source implements one `SourceAdapter` interface (`src/sources/types.ts`), 
 row in `discovery_sources`, not code — except for genuinely new *kinds* of source (a new API, a new
 feed format), which need an adapter file plus one line in `src/sources/registry.ts`.
 
-**The shipped catalog is intentionally small.** Every seed URL was checked against the live site
-before being included, not guessed — and most guesses failed: EURAXESS has no RSS feed at all, Nature
-Careers' feed and DKFZ's careers page both 404, FindAPostDoc returns 403 to automated access, and
-EMBL's careers page is a JavaScript-rendered Workday board a plain `fetch` can't read. Rather than
-ship fabricated config that looks configured but silently returns nothing, `src/sources/catalog/`
-ships with only `jobRxiv` (real, currently empty of postings) and no crawl targets — see the comments
-in `feeds.ts` and `sites.ts` for exactly what was checked. **Adzuna and Jooble are the real workhorses
-for now.** Add real sources as you find them; check the target actually exists and returns what you
-expect before trusting it.
+**Every seed URL was checked against the live site before being included, not guessed** — and several
+guesses failed: EURAXESS's jobs section has no RSS feed at all (it gets a dedicated adapter instead,
+`src/sources/euraxess.ts`, since its own EU researcher career-stage framework R1–R4 classifies a
+posting more reliably than title text), Nature Careers' feed and DKFZ's careers page both 404,
+FindAPostDoc returns 403 to automated access, and academicpositions.com/postdocscanner.com both
+declare `robots.txt: Disallow: /` and are excluded on that basis regardless of what's technically
+fetchable. EMBL's careers page is a JavaScript-rendered Workday board a plain `fetch` can't read —
+`crawl.ts` now falls back to a Firecrawl-rendered fetch for exactly that shape when `FIRECRAWL_API_KEY`
+is set (see `src/sources/firecrawl.ts`), though re-adding EMBL to `sites.ts` still needs a live check
+of whether the rendered DOM actually carries `JobPosting` markup. See the comments in `feeds.ts` and
+`sites.ts` for the full list of what was checked. Add real sources as you find them; check the target
+actually exists and returns what you expect before trusting it.
 
 Direct crawling of LinkedIn, Indeed, or Naukri is deliberately not implemented: all three were
 checked and share the same profile — no public API, active anti-bot measures, and terms of service
@@ -112,6 +116,7 @@ SUPABASE_SERVICE_ROLE_KEY
 ADZUNA_APP_ID, ADZUNA_APP_KEY
 JOOBLE_API_KEY
 TELEGRAM_BOT_TOKEN
+FIRECRAWL_API_KEY   # optional
 ```
 
 And as a repository **variable**: `DISCOVERY_USER_ID` (your user id — the same one the dashboard's
@@ -147,6 +152,7 @@ than assumed:
 | GitHub Actions | unlimited on public repos | ~20 min/night |
 | Adzuna | ~1000 calls/month | 900/month |
 | Jooble | no published cap | 200/day |
+| Firecrawl (if used) | free plan allowance | `FIRECRAWL_MAX_PER_RUN` in `config.ts` (20/run) |
 | Supabase | 500 MB DB, pauses after 7 days idle | nightly writes keep it awake; `discovery_prune()` caps storage |
 | Cloud Run (if used) | 180,000 vCPU-s/month | ~1 request/day at a few seconds each |
 
@@ -156,7 +162,7 @@ works regardless.
 
 ## Testing
 
-`npm run check` runs 110 checks under plain Node — no network, no database — covering URL
+`npm run check` runs 132 checks under plain Node — no network, no database — covering URL
 canonicalization, ATS identity extraction, JSON-LD parsing, salary extraction, the dedup cascade, and
 scoring. The simhash duplicate threshold (`SIMHASH_DUPLICATE_THRESHOLD` in `src/dedupe/cascade.ts`)
 was calibrated empirically against realistic description lengths rather than taken from simhash

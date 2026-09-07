@@ -9,7 +9,7 @@ import { BulkBar } from "./BulkBar";
 import { Composer } from "./Composer";
 import { Drawer } from "./Drawer";
 import { useEntityCtx } from "./ctx";
-import type { EntityDef, FieldDef, Row } from "../../entities/types";
+import type { EntityDef, FieldDef, QuickAction, Row } from "../../entities/types";
 
 export function EntityView({def}:{def:EntityDef}){
  const table=useEntityTable(def.key);
@@ -38,6 +38,8 @@ export function EntityView({def}:{def:EntityDef}){
   if(field.kind==="tags"){if(def.tagEntity)void tags.setFor(def.tagEntity,row.id,value as string[])}
   else void table.update(row.id,{[field.key]:value});
  };
+
+ const runQuickAction=(row:Row,action:QuickAction)=>void table.update(row.id,action.patch(row));
 
  const startNew=(preset:Record<string,unknown>={})=>
   setComposer({...def.newDefaults({userId,projectId:scopeProjectId}),...preset});
@@ -86,10 +88,10 @@ export function EntityView({def}:{def:EntityDef}){
       selection={selection} selecting={selection.length>0}
       onToggle={toggle} onOpen={openDrawer}
       onMove={(id,value)=>void table.update(id,{[groupField.key]:value})}
-      onAdd={value=>startNew({[groupField.key]:value})}/>
+      onAdd={value=>startNew({[groupField.key]:value})} onQuickAction={runQuickAction}/>
     :<Table def={def} columns={columns} rows={rows} ctx={valueCtx} inputCtx={inputCtx} sort={query.sort}
       selection={selection} onSort={key=>ui.setQuery(def.key,{sort:{key,dir:query.sort.key===key&&query.sort.dir==="asc"?"desc":"asc"}})}
-      onToggle={toggle} onOpen={openDrawer} onCommit={commit} onToggleAll={toggleAll}/>}
+      onToggle={toggle} onOpen={openDrawer} onCommit={commit} onToggleAll={toggleAll} onQuickAction={runQuickAction}/>}
 
   {selection.length>0&&<BulkBar def={def} ids={selection} onClear={ui.clearSelection}/>}
   {composer&&<Composer def={def} seed={composer} onClose={()=>setComposer(null)} onSubmit={submitNew}/>}

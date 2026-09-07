@@ -47,6 +47,14 @@ async function main() {
  }, { onConflict: "user_id,source_key" });
  console.log(`  jooble: ${joobleErr ? "FAILED - " + joobleErr.message : "ok"}`);
 
+ // Dedicated adapter (no generic JSON-LD on EURAXESS's own pages), so it's
+ // registered directly rather than living in the CRAWL_SEEDS catalog.
+ const { error: euraxessErr } = await db.client.from("discovery_sources").upsert({
+  user_id: userId, source_key: "euraxess", kind: "crawl", enabled: true,
+  quota_provider: "none", precedence: 20, config: {},
+ }, { onConflict: "user_id,source_key" });
+ console.log(`  euraxess: ${euraxessErr ? "FAILED - " + euraxessErr.message : "ok"}`);
+
  // Seed (or refresh) the candidate profile from the site's own structured markup.
  const http = new Http(DEFAULT_HTTP, 5);
  let snapshot = null;
