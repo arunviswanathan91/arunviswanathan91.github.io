@@ -526,6 +526,22 @@ tbody tr:last-child td{border-bottom:0}
 .field-label{color:var(--text-2);font-size:var(--f-2xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 .req{color:var(--danger);margin-left:3px}
 .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-3)}
+.field-with-action{display:flex;align-items:center;gap:6px}
+.field-with-action>.input{flex:1;min-width:0}
+
+.gmail-picker{display:grid;gap:var(--s-3);padding-bottom:var(--s-4)}
+.gmail-picker-search{display:flex;gap:var(--s-2)}
+.gmail-picker-search>.input{flex:1}
+.gmail-picker-connect{display:grid;gap:6px;justify-items:start;padding:var(--s-3);border:1px solid var(--border);border-radius:var(--r-2)}
+.gmail-hits{display:grid;gap:6px}
+.gmail-hit{
+ display:grid;gap:2px;width:100%;text-align:left;padding:var(--s-2) var(--s-3);
+ border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface-2);cursor:pointer;
+}
+.gmail-hit:hover{border-color:var(--border-strong);background:var(--surface-3)}
+.gmail-hit-subject{font-weight:600;font-size:var(--f-sm)}
+.gmail-hit-meta{color:var(--text-3);font-size:var(--f-2xs)}
+.gmail-hit-snippet{color:var(--text-2);font-size:var(--f-xs)}
 
 /* ============================================================================
    Modal + palette (native <dialog>)

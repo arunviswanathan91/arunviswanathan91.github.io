@@ -92,6 +92,19 @@ create table if not exists telegram_pending_confirmations (
   payload jsonb not null, created_at timestamptz not null default now(), expires_at timestamptz not null
 );
 
+-- Holds the Gmail OAuth refresh token behind the "Find in Gmail" link picker
+-- (gmail-search Edge Function). Service-role only, same convention as
+-- telegram_pending_confirmations above: RLS enabled with no policies at all,
+-- so a refresh token can never reach the browser through any REST query --
+-- connect/search/disconnect all go through Edge Functions, never direct
+-- table access. One row per user; a fresh OAuth consent replaces it in place.
+create table if not exists google_accounts (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  refresh_token text not null, scope text,
+  connected_at timestamptz not null default now()
+);
+alter table google_accounts enable row level security;
+
 alter table publications add column if not exists project_id uuid references projects(id) on delete set null;
 alter table publications add column if not exists url text;
 

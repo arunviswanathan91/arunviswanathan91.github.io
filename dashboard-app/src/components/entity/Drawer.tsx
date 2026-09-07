@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
-import { Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Mail, Trash2, X } from "lucide-react";
 import { useData, useEntityTable } from "../../lib/store";
 import { isEditable } from "../../entities/types";
 import { formatDate } from "../../lib/format";
 import { FieldInput } from "./FieldInput";
+import { GmailLinkPicker } from "./GmailLinkPicker";
 import { useEntityCtx } from "./ctx";
 import type { EntityDef, FieldDef, Row } from "../../entities/types";
 
@@ -15,6 +16,7 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
  const {inputCtx}=useEntityCtx(def);
  const panel=useRef<HTMLDivElement>(null);
  const opener=useRef<Element|null>(null);
+ const [gmailFieldKey,setGmailFieldKey]=useState<string|null>(null);
 
  useEffect(()=>{
   opener.current=document.activeElement;
@@ -46,7 +48,12 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
   <div className="drawer-body">
    {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
     <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
-    <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} onCommit={v=>commit(f,v)}/>
+    <div className="field-with-action">
+     <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} onCommit={v=>commit(f,v)}/>
+     {f.kind==="url"&&f.gmailSearch&&
+      <button type="button" className="icon-button" title="Find in Gmail"
+       onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
+    </div>
    </div>)}
   </div>
   <footer className="drawer-foot">
@@ -55,5 +62,11 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
    </div>
    <button className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>
   </footer>
+  {gmailFieldKey&&(()=>{
+   const f=def.fields.find(x=>x.key===gmailFieldKey);
+   if(!f||f.kind!=="url"||!f.gmailSearch)return null;
+   return <GmailLinkPicker initialQuery={f.gmailSearch(row)}
+    onPick={url=>commit(f,url)} onClose={()=>setGmailFieldKey(null)}/>;
+  })()}
  </aside>;
 }

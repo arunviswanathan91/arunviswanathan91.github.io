@@ -41,7 +41,10 @@ export type FieldDef=
      derive?:(row:Row)=>string;
      tone?:(value:string)=>Tone})
  | (FieldBase&{kind:"date";time?:boolean;buckets?:boolean})
- | (FieldBase&{kind:"url";short?:boolean})
+ | (FieldBase&{kind:"url";short?:boolean;
+     /** Offers a "Find in Gmail" picker next to this field in the drawer, seeded
+      *  with this default search query. See components/entity/GmailLinkPicker. */
+     gmailSearch?:(row:Row)=>string})
  | (FieldBase&{kind:"project"})
  | (FieldBase&{kind:"tags"})
  | (FieldBase&{kind:"bool";trueLabel?:string})

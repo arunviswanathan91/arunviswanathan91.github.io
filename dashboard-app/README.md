@@ -21,6 +21,8 @@ than hand-built:
 - **Light and dark themes**, following the OS by default with a manual override.
 - **Telegram bot** — linking flow, `/add`, `/today`, `/done`, `/job`, `/remind`, and link capture
   with an "add this to Reads?" confirmation, plus push notifications for due reminders.
+- **Gmail link picker** (optional) — search your inbox read-only from any URL field's drawer and
+  turn a picked result into a permalink, instead of hunting for and pasting a Gmail link by hand.
 - Supabase schema with Row Level Security throughout.
 
 All visible records live in the authenticated Supabase project — nothing in this repo contains real data.
@@ -82,6 +84,49 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local environment. T
 7. In the dashboard, open **Telegram** in the sidebar and click **Generate code**, then send `/link <code>` to your bot to connect your account.
 
 The production dashboard build uses `/dashboard/` as its base path.
+
+## Gmail link picker (optional)
+
+Any `url`-kind field can declare `gmailSearch` (see `src/entities/types.ts`) to get a **Find in
+Gmail** button in the drawer — it searches your inbox read-only and turns a picked result into a
+permalink, so you never paste a Gmail link by hand. Publications' **Decision email** field uses it
+today. Entirely optional: with no Google credentials set, the button still opens but the search
+fails closed with "Search failed", not a crash.
+
+**One-time Google Cloud setup:**
+
+1. Create (or reuse) a project at [console.cloud.google.com](https://console.cloud.google.com), then
+   enable the **Gmail API** under APIs & Services → Library.
+2. Configure the **OAuth consent screen**: User type *External*, publishing status *Testing*, and add
+   your own Google account under **Test users** — this avoids Google's app-verification process
+   entirely for personal use. Scope: `.../auth/gmail.readonly` (metadata + snippet, no message body
+   is ever fetched — see `supabase/functions/_shared/gmail.ts`).
+3. Create an **OAuth client ID** (type: *Web application*). Authorized redirect URI must be exactly
+   `https://<project-ref>.functions.supabase.co/gmail-oauth-callback`.
+4. Deploy the three functions — **the callback must be public**, since Google's redirect carries no
+   Supabase session:
+
+   ```bash
+   supabase functions deploy gmail-oauth-start
+   supabase functions deploy gmail-oauth-callback --no-verify-jwt
+   supabase functions deploy gmail-search
+   supabase secrets set \
+     GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... \
+     GOOGLE_REDIRECT_URI=https://<project-ref>.functions.supabase.co/gmail-oauth-callback \
+     GMAIL_OAUTH_STATE_SECRET=$(openssl rand -hex 32)
+   ```
+
+   `GMAIL_OAUTH_STATE_SECRET` signs the OAuth `state` param, which is what proves a completed consent
+   belongs to you rather than Google's default JWT check (impossible here, since the callback has no
+   Supabase session) — any random string works, generate one, never reuse it elsewhere.
+5. In the dashboard, open a publication, click **Find in Gmail** next to Decision email, then
+   **Connect Gmail** — a Google tab opens once, and after approving, refresh tokens are stored
+   server-side (`google_accounts`, service-role only, RLS default-deny like
+   `telegram_pending_confirmations`) so you don't reconnect on every search.
+
+If access is later revoked from `myaccount.google.com/permissions`, the next search cleanly asks you
+to reconnect rather than failing silently forever — there's no separate "disconnect" button in the UI
+by design; revoking from Google's own settings is the disconnect.
 
 ## Telegram bot
 
