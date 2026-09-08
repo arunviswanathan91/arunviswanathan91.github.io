@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mail, Trash2, X } from "lucide-react";
+import { ExternalLink, Mail, Trash2, X } from "lucide-react";
 import { useData, useEntityTable } from "../../lib/store";
 import { isEditable } from "../../entities/types";
 import { formatDate } from "../../lib/format";
@@ -31,6 +31,14 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
  const title=String(row[def.titleField]??"")||`Untitled ${def.singular}`;
 
  const valueOf=(f:FieldDef)=>f.kind==="tags"?(def.tagEntity?tags.idsFor(def.tagEntity,row.id):[]):row[f.key];
+ const safeUrl=(f:FieldDef)=>{
+  if(f.kind!=="url")return null;
+  const value=String(row[f.key]??"").trim();
+  try{
+   const url=new URL(value);
+   return url.protocol==="http:"||url.protocol==="https:"?url.toString():null;
+  }catch{return null}
+ };
  const commit=(f:FieldDef,v:any)=>{
   if(f.kind==="tags"){if(def.tagEntity)void tags.setFor(def.tagEntity,row.id,v as string[])}
   else void table.update(row.id,{[f.key]:v});
@@ -50,8 +58,11 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
     <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
     <div className="field-with-action">
      <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} onCommit={v=>commit(f,v)}/>
+     {safeUrl(f)&&
+      <a className="icon-button" href={safeUrl(f)!} target="_blank" rel="noopener noreferrer"
+       title="Open link" aria-label={`Open ${f.label}`}><ExternalLink/></a>}
      {f.kind==="url"&&f.gmailSearch&&
-      <button type="button" className="icon-button" title="Find in Gmail"
+      <button type="button" className="icon-button" title="Find in Gmail" aria-label="Find in Gmail"
        onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
     </div>
    </div>)}
