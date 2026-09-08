@@ -3,10 +3,21 @@
 // to open in a new tab; the dashboard never talks to Google directly.
 import { signState, GMAIL_SCOPE, userIdFromRequest } from "../_shared/gmail.ts";
 
+const corsHeaders = {
+ "Access-Control-Allow-Origin": "*",
+ "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+ "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 const json = (body: unknown, status = 200) =>
- new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+ new Response(JSON.stringify(body), {
+  status,
+  headers: { ...corsHeaders, "content-type": "application/json" },
+ });
 
 Deno.serve(async (req) => {
+ if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
  const userId = userIdFromRequest(req);
  if (!userId) return json({ error: "unauthenticated" }, 401);
 
