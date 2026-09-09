@@ -283,8 +283,18 @@ create trigger projects_seed_stages after insert on projects
 -- also prevents a task from pointing at a stage owned by another project/user.
 create or replace function fn_task_stage_sync() returns trigger
 language plpgsql set search_path = public as $$
-declare v_project uuid; v_user uuid; v_category task_status;
+declare v_project uuid; v_user uuid; v_category task_status; v_stage uuid;
 begin
+  if tg_op='UPDATE' and new.project_id is distinct from old.project_id
+     and new.stage_id is not distinct from old.stage_id then
+    new.stage_id:=null;
+  end if;
+  if new.stage_id is null and new.project_id is not null then
+    select id into v_stage from project_stages
+    where project_id=new.project_id and user_id=new.user_id and category='Backlog'
+    order by position limit 1;
+    new.stage_id:=v_stage;
+  end if;
   if new.stage_id is not null then
     select project_id,user_id,category into v_project,v_user,v_category
     from project_stages where id=new.stage_id;
@@ -301,8 +311,21 @@ begin
 end;
 $$;
 drop trigger if exists tasks_stage_sync on tasks;
-create trigger tasks_stage_sync before insert or update of stage_id on tasks
+create trigger tasks_stage_sync before insert or update of stage_id,project_id on tasks
   for each row execute function fn_task_stage_sync();
+
+create or replace function fn_stage_category_sync() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.category is distinct from old.category then
+    update tasks set status=new.category where stage_id=new.id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists project_stages_category_sync on project_stages;
+create trigger project_stages_category_sync after update of category on project_stages
+  for each row execute function fn_stage_category_sync();
 
 -- Follow-up is distinct from the work deadline. It creates a linked reminder
 -- for the owner; the assigned person is never contacted by this trigger.
