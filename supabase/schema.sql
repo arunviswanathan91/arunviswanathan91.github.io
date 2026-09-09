@@ -224,9 +224,11 @@ alter table reads add column if not exists project_id uuid references projects(i
 alter table reminders add column if not exists project_id uuid references projects(id) on delete set null;
 alter table reminders add column if not exists task_id uuid references tasks(id) on delete cascade;
 alter table reminders add column if not exists person_id uuid references people(id) on delete set null;
-do $$ begin
-  alter table reminders add constraint reminders_task_id_key unique(task_id);
-exception when duplicate_object then null; end $$;
+-- A UNIQUE constraint creates an index with this same name. `add constraint`
+-- reports that pre-existing index as duplicate_table (42P07), which is not the
+-- duplicate_object exception. Creating the unique index directly is safely
+-- repeatable whether an earlier run created the constraint or only the index.
+create unique index if not exists reminders_task_id_key on reminders(task_id);
 
 -- A paper retains the canonical editorial stage used by the Publications board,
 -- while these ordered nodes describe its own scientific and submission journey.
