@@ -19,10 +19,12 @@ sources (feeds, Adzuna, Jooble, EURAXESS, JSON-LD crawl — optionally Firecrawl
   → written to `opportunities`, read by the dashboard
 ```
 
-Re-seeing an unchanged listing costs nothing — no parsing, no scoring — because the raw-item table's
-unique constraint makes an unchanged insert a no-op. Nothing here calls an LLM in this phase; the
-concept-matching in `src/score/ontology.ts` (hand-curated from the dashboard site's own research tags)
-does the semantic work that would otherwise need one.
+Nightly runs skip unchanged listings because the raw-item table's unique constraint makes an
+unchanged insert a no-op. Interactive Telegram and workspace searches deliberately work differently:
+they use a fresh source window, preserve the nightly cursor, and rescore returned listings so a new
+query can show a good opportunity that was fetched before. Nothing here calls an LLM in this phase;
+the concept-matching in `src/score/ontology.ts` (hand-curated from the dashboard site's own research
+tags) handles the first ranking pass.
 
 ## Local setup
 
@@ -57,7 +59,9 @@ node dist/src/seed.js
 This upserts the source catalog (`src/sources/catalog/`) into `discovery_sources`, and creates a
 default `discovery_profiles` row seeded from the dashboard site's own research tags and publications
 (`https://arunviswanathan91.github.io/` — no CV PDF is parsed). Safe to re-run any time; it refreshes
-the site snapshot without touching anything you've since edited by hand.
+the site snapshot without touching anything you've since edited by hand. Normal discovery runs also
+insert any newly shipped catalog rows that are missing, while preserving existing enabled/disabled
+choices, configuration, and cursors. This keeps an older Supabase seed from silently losing sources.
 
 **Adjust the profile for your own preferences** — location weighting, salary floor, blocked
 organisations, etc. — either by editing the `discovery_profiles` row directly in the Supabase table
@@ -86,7 +90,9 @@ declare `robots.txt: Disallow: /` and are excluded on that basis regardless of w
 fetchable. EMBL's careers page is a JavaScript-rendered Workday board a plain `fetch` can't read —
 `crawl.ts` now falls back to a Firecrawl-rendered fetch for exactly that shape when `FIRECRAWL_API_KEY`
 is set (see `src/sources/firecrawl.ts`), though re-adding EMBL to `sites.ts` still needs a live check
-of whether the rendered DOM actually carries `JobPosting` markup. See the comments in `feeds.ts` and
+of whether the rendered DOM actually carries `JobPosting` markup. jobRxiv has both a feed and a direct
+postdoc-category crawl: the crawl keeps coverage available when the feed is temporarily unavailable.
+See the comments in `feeds.ts` and
 `sites.ts` for the full list of what was checked. Add real sources as you find them; check the target
 actually exists and returns what you expect before trusting it.
 
@@ -162,7 +168,7 @@ works regardless.
 
 ## Testing
 
-`npm run check` runs 132 checks under plain Node — no network, no database — covering URL
+`npm run check` runs 147 checks under plain Node — no network, no database — covering URL
 canonicalization, ATS identity extraction, JSON-LD parsing, salary extraction, the dedup cascade, and
 scoring. The simhash duplicate threshold (`SIMHASH_DUPLICATE_THRESHOLD` in `src/dedupe/cascade.ts`)
 was calibrated empirically against realistic description lengths rather than taken from simhash

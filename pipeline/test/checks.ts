@@ -15,6 +15,8 @@ import { formatDigest } from "../src/sinks/telegram.js";
 import type { NormalizedOpportunity, SearchProfile } from "../src/types.js";
 import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/euraxess.js";
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
+import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
+import { isFreshSearch, shouldEvaluate, termsForRun } from "../src/search/query.js";
 
 type Check = { name: string; ok: boolean; detail?: string };
 const out: Check[] = [];
@@ -237,6 +239,28 @@ check("hard filter allows unknown location rather than rejecting", hardFilter(ma
 check("hard filter does not reject on a predicted salary below floor", hardFilter(makeOpp({ salary: { min: 500000, max: 500000, currency: "INR", period: "year", isPredicted: true, extractedFrom: "api", confidence: 0.3, evidence: null } }), profile).keep);
 eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ salary: { min: 500000, max: 500000, currency: "INR", period: "year", isPredicted: false, extractedFrom: "api", confidence: 0.9, evidence: null } }), profile).reason, "below_salary_floor");
 
+// ---- interactive search semantics ----
+{
+ eq("custom query replaces unrelated profile terms with recall variants",
+  termsForRun(["old profile term"], "pancreatic cancer postdoc"),
+  ["pancreatic cancer postdoc", "pancreatic cancer postdoctoral", "pancreatic cancer research fellow"]);
+ eq("blank query keeps the profile terms", termsForRun(["profile term"], "  "), ["profile term"]);
+ check("Telegram runs are fresh searches", isFreshSearch("telegram"));
+ check("workspace/manual runs are fresh searches", isFreshSearch("manual"));
+ check("scheduled runs remain incremental", !isFreshSearch("schedule"));
+ check("fresh searches rescore unchanged listings", shouldEvaluate(true, false));
+ check("scheduled runs skip unchanged listings", !shouldEvaluate(false, false));
+}
+
+// ---- default source catalog ----
+{
+ const keys = defaultSourceRows("00000000-0000-0000-0000-000000000001").map(s => s.source_key);
+ check("catalog includes the live jobRxiv crawl", keys.includes("crawl:jobrxiv"));
+ check("catalog includes EURAXESS", keys.includes("euraxess"));
+ check("catalog includes ResearchersJob", keys.includes("feed:researchersjob"));
+ check("catalog source keys are unique", new Set(keys).size === keys.length);
+}
+
 {
  const scandi = scoreOpportunity(makeOpp({ country: "SE", city: "Stockholm" }), profile);
  const india = scoreOpportunity(makeOpp({ country: "IN", city: "Bengaluru", title: "Research Scientist", opportunityType: "Research scientist" }), profile);
@@ -331,10 +355,27 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
 
 // ---- telegram digest formatting ----
 {
- const empty = formatDigest({ runId: "r1", status: "done", fetched: 0, deduped: 0, created: 0, changed: 0, bySource: {}, top: [], degradations: [] }, "https://example.com");
+ const empty = formatDigest({
+  runId: "r1", status: "done", mode: "fresh", query: "cancer postdoc",
+  fetched: 0, evaluated: 0, filtered: 0, matched: 0, deduped: 0,
+  created: 0, changed: 0, persistenceFailures: 0, filterReasons: {},
+  bySource: {}, top: [], degradations: [],
+ }, "https://example.com");
  check("empty digest is informative, not blank", empty.length > 10);
+ check("fresh empty digest does not claim nothing new was published", !empty.includes("Nothing new was published"));
+ const filteredOut = formatDigest({
+  runId: "r2", status: "done", mode: "fresh", query: "pancreatic cancer postdoc",
+  fetched: 25, evaluated: 25, filtered: 20, matched: 0, deduped: 5,
+  created: 0, changed: 0, persistenceFailures: 0,
+  filterReasons: { deadline_passed: 12, too_senior: 8 },
+  bySource: {}, top: [], degradations: ["feed:jobrxiv (failed)"],
+ }, "https://example.com");
+ check("no-match digest exposes concrete filter counts", filteredOut.includes("deadline already passed 12"));
+ check("no-match digest no longer invents a score cutoff", !filteredOut.includes("matched well enough"));
  const withResults = formatDigest({
-  runId: "r1", status: "done", fetched: 10, deduped: 3, created: 2, changed: 1,
+  runId: "r1", status: "partial", mode: "fresh", query: "cancer postdoc",
+  fetched: 10, evaluated: 10, filtered: 2, matched: 4, deduped: 3, created: 2, changed: 1,
+  persistenceFailures: 0, filterReasons: { deadline_passed: 2 },
   bySource: {}, degradations: ["adzuna (monthly quota)"],
   top: [{ id: "1", score: 82, role: "Postdoc", organization: "Test Institute", location: "Stockholm", deadline: null, salaryDisplay: "€45,000/yr", url: "https://x.com/1" }],
  }, "https://example.com/dashboard");
@@ -342,6 +383,7 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("digest includes the role", withResults.includes("Postdoc"));
  check("digest includes the dashboard link", withResults.includes("https://example.com/dashboard"));
  check("digest reports degradations", withResults.includes("quota"));
+ check("fresh digest reports already-known matches", withResults.includes("already in your workspace"));
 }
 
 // ---- Firecrawl budget (the render call itself needs network, so only the

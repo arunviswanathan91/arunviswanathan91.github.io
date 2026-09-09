@@ -1,8 +1,7 @@
 import { Db } from "./db.js";
 import { readEnv } from "./config.js";
 import { Http, DEFAULT_HTTP } from "./http.js";
-import { FEED_SEEDS } from "./sources/catalog/feeds.js";
-import { CRAWL_SEEDS } from "./sources/catalog/sites.js";
+import { refreshDefaultSources } from "./sources/catalog/defaults.js";
 import { extractSiteSnapshot, termsFromSnapshot } from "./profile/from-site.js";
 
 const SITE_URL = "https://arunviswanathan91.github.io/";
@@ -19,41 +18,8 @@ async function main() {
  const userId = await db.resolveUserId(env.userId);
  console.log(`Seeding discovery config for user ${userId}`);
 
- for (const f of FEED_SEEDS) {
-  const { error } = await db.client.from("discovery_sources").upsert({
-   user_id: userId, source_key: f.key, kind: "feed", enabled: true,
-   config: { url: f.url, organization: f.organization ?? null },
-  }, { onConflict: "user_id,source_key" });
-  console.log(`  ${f.key}: ${error ? "FAILED - " + error.message : "ok"}`);
- }
-
- for (const c of CRAWL_SEEDS) {
-  const { error } = await db.client.from("discovery_sources").upsert({
-   user_id: userId, source_key: c.key, kind: "crawl", enabled: true,
-   config: { seedUrls: c.seedUrls, organization: c.organization, allowPathRe: c.allowPathRe, maxPages: c.maxPages ?? 15 },
-  }, { onConflict: "user_id,source_key" });
-  console.log(`  ${c.key}: ${error ? "FAILED - " + error.message : "ok"}`);
- }
-
- const { error: adzunaErr } = await db.client.from("discovery_sources").upsert({
-  user_id: userId, source_key: "adzuna", kind: "api", enabled: true,
-  quota_provider: "adzuna", precedence: 40, config: {},
- }, { onConflict: "user_id,source_key" });
- console.log(`  adzuna: ${adzunaErr ? "FAILED - " + adzunaErr.message : "ok"}`);
-
- const { error: joobleErr } = await db.client.from("discovery_sources").upsert({
-  user_id: userId, source_key: "jooble", kind: "api", enabled: true,
-  quota_provider: "jooble", precedence: 45, config: {},
- }, { onConflict: "user_id,source_key" });
- console.log(`  jooble: ${joobleErr ? "FAILED - " + joobleErr.message : "ok"}`);
-
- // Dedicated adapter (no generic JSON-LD on EURAXESS's own pages), so it's
- // registered directly rather than living in the CRAWL_SEEDS catalog.
- const { error: euraxessErr } = await db.client.from("discovery_sources").upsert({
-  user_id: userId, source_key: "euraxess", kind: "crawl", enabled: true,
-  quota_provider: "none", precedence: 20, config: {},
- }, { onConflict: "user_id,source_key" });
- console.log(`  euraxess: ${euraxessErr ? "FAILED - " + euraxessErr.message : "ok"}`);
+ const sourceKeys = await refreshDefaultSources(db, userId);
+ for (const key of sourceKeys) console.log(`  ${key}: ok`);
 
  // Seed (or refresh) the candidate profile from the site's own structured markup.
  const http = new Http(DEFAULT_HTTP, 5);

@@ -11,6 +11,8 @@ import { orgKey, simhash, simhashBands, titleKey } from "./dedupe/keys.js";
 import { normalizeForHash, excerpt } from "./normalize/text.js";
 import { locKey } from "./normalize/location.js";
 import { salaryDisplay, salarySourceLabel, annualInr } from "./normalize/salary.js";
+import { ensureDefaultSources } from "./sources/catalog/defaults.js";
+import { isFreshSearch, shouldEvaluate, termsForRun } from "./search/query.js";
 import type {
  NormalizedOpportunity, OpportunitySummary, RunCaps, RunResult, SearchProfile, SourceOutcome,
 } from "./types.js";
@@ -38,8 +40,10 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const env = readEnv();
  const db = new Db(env);
  const trigger = opts.trigger ?? "schedule";
+ const queryText = opts.query?.trim() || null;
+ const freshSearch = isFreshSearch(trigger);
  const caps: RunCaps = {
-  ...(trigger === "telegram" ? INTERACTIVE_CAPS : SCHEDULE_CAPS),
+  ...(trigger === "schedule" ? SCHEDULE_CAPS : INTERACTIVE_CAPS),
   ...opts.caps,
  };
  const startedAt = Date.now();
@@ -47,11 +51,18 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  const userId = await db.resolveUserId(opts.userId ?? env.userId ?? null);
  const profile = await db.loadProfile(userId);
- if (opts.query) profile.terms = [opts.query, ...profile.terms].slice(0, 5);
+ profile.terms = termsForRun(profile.terms, queryText);
+
+ // Normal runs self-heal databases seeded by an older release. Existing rows
+ // are never overwritten, so user-disabled sources and cursors are preserved.
+ if (!opts.dryRun) {
+  const registered = await ensureDefaultSources(db, userId);
+  if (registered.length) log.info("registered new discovery sources", { sources: registered });
+ }
 
  let runId = opts.runId ?? null;
  if (!runId && !opts.dryRun) {
-  runId = await db.createRun(userId, profile.id, trigger, opts.query ?? null, opts.chatId ?? null);
+  runId = await db.createRun(userId, profile.id, trigger, queryText, opts.chatId ?? null);
  } else if (runId && opts.claimToken && !opts.dryRun) {
   // A caller (the Telegram webhook, via repository_dispatch) pre-created this row
   // for its own busy-check. Claiming it atomically means a duplicate dispatch --
@@ -60,7 +71,12 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   const claimed = await db.claimRun(runId, opts.claimToken);
   if (!claimed) {
    log.info("run already claimed or expired, skipping", { runId });
-   return { runId, status: "done", fetched: 0, deduped: 0, created: 0, changed: 0, bySource: {}, top: [], degradations: [] };
+   return {
+    runId, status: "done", mode: freshSearch ? "fresh" : "incremental", query: queryText,
+    fetched: 0, evaluated: 0, filtered: 0, matched: 0, deduped: 0,
+    created: 0, changed: 0, persistenceFailures: 0, filterReasons: {},
+    bySource: {}, top: [], degradations: [],
+   };
   }
  } else if (runId && !opts.dryRun) {
   await db.client.from("discovery_runs")
@@ -69,7 +85,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  }
 
  const sources = await db.loadSources(userId);
- log.info("run starting", { userId, trigger, sources: sources.length, dryRun: !!opts.dryRun });
+ log.info("run starting", { userId, trigger, freshSearch, query: queryText, sources: sources.length, dryRun: !!opts.dryRun });
 
  const http = new Http(DEFAULT_HTTP, caps.maxHttpRequests);
  // One shared budget for the whole run, so N crawl sources each hitting a
@@ -78,13 +94,22 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const bySource: Record<string, SourceOutcome> = {};
  const degradations: string[] = [];
  const accepted: { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> }[] = [];
- let fetched = 0;
+ let fetched = 0, evaluated = 0, filtered = 0;
+ const filterReasons: Record<string, number> = {};
 
  for (const row of sources) {
   if (Date.now() > deadlineAt) { degradations.push("runtime cap"); break; }
-  const outcome = await runSource(row, { db, http, renderer, profile, caps, deadlineAt, log, userId, runId, dryRun: !!opts.dryRun });
+  const outcome = await runSource(row, {
+   db, http, renderer, profile, caps, deadlineAt, log, userId, runId,
+   dryRun: !!opts.dryRun, freshSearch,
+  });
   bySource[row.source_key] = outcome;
   fetched += outcome.itemsFetched;
+  evaluated += outcome.itemsEvaluated;
+  filtered += outcome.itemsFiltered;
+  for (const [reason, count] of Object.entries(outcome.filterReasons)) {
+   filterReasons[reason] = (filterReasons[reason] ?? 0) + count;
+  }
   if (outcome.status === "skipped_config") degradations.push(`${row.source_key} (not configured)`);
   if (outcome.status === "skipped_circuit") degradations.push(`${row.source_key} (temporarily disabled)`);
   if (outcome.status === "failed") degradations.push(`${row.source_key} (failed)`);
@@ -95,8 +120,9 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  // Dedup and persist. Candidates are loaded once; matches are resolved in memory
  // because at a few thousand rows that is faster than a query per item.
  const candidates: Candidate[] = opts.dryRun ? [] : await db.loadCandidates(userId);
- let created = 0, changed = 0, deduped = 0;
+ let created = 0, changed = 0, deduped = 0, persistenceFailures = 0;
  const summaries: OpportunitySummary[] = [];
+ const summaryIds = new Set<string>();
 
  for (const { o, score } of accepted) {
   const probe = {
@@ -114,23 +140,38 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   if (match.candidate && !match.repost) {
    deduped++;
    if (!opts.dryRun) await linkSource(db, userId, match.candidate.id, o, match.signal, match.confidence);
+   // A person asking interactively wants useful current matches, including a
+   // listing already found last night. Scheduled digests remain new-only.
+   if (freshSearch && !summaryIds.has(match.candidate.id)) {
+    summaries.push(toSummary(match.candidate.id, o, score.score));
+    summaryIds.add(match.candidate.id);
+   }
    continue;
   }
 
   if (opts.dryRun) {
    created++;
-   summaries.push(toSummary("dry-run", o, score.score));
+   const dryId = `dry-run:${o.sourceKey}:${o.externalId}`;
+   summaries.push(toSummary(dryId, o, score.score));
+   summaryIds.add(dryId);
    continue;
   }
 
-  const id = await insertOpportunity(db, userId, runId, profile, o, score, probe.simhash);
+  const inserted = await insertOpportunity(db, userId, runId, profile, o, score, probe.simhash);
+  const id = inserted.id;
   if (id) {
    created++;
    candidates.push({ ...probe, id, titleKey: titleKey(o.title), deadline: o.deadline, status: "New" });
    summaries.push(toSummary(id, o, score.score));
+   summaryIds.add(id);
+  } else {
+   persistenceFailures++;
+   log.warn("opportunity insert failed", { source: o.sourceKey, error: inserted.error ?? "no row returned" });
   }
   if (created >= caps.maxNewOpportunities) { degradations.push("new-opportunity cap"); break; }
  }
+
+ if (persistenceFailures) degradations.push(`${persistenceFailures} database insert(s) failed`);
 
  if (!opts.dryRun) await db.prune(userId);
 
@@ -138,16 +179,23 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const status: RunResult["status"] = anyOk ? (degradations.length ? "partial" : "done") : (sources.length ? "failed" : "done");
 
  const result: RunResult = {
-  runId, status, fetched, deduped, created, changed,
+  runId, status, mode: freshSearch ? "fresh" : "incremental", query: queryText,
+  fetched, evaluated, filtered, matched: summaries.length, deduped, created, changed,
+  persistenceFailures, filterReasons,
   bySource,
   top: summaries.sort((a, b) => b.score - a.score).slice(0, 5),
   degradations,
  };
 
  if (!opts.dryRun) await db.finishRun(runId, status, {
-  fetched, deduped, created, changed, durationMs: Date.now() - startedAt, degradations,
+  mode: result.mode, query: queryText, fetched, evaluated, filtered,
+  matched: result.matched, deduped, created, changed, persistenceFailures,
+  filterReasons, durationMs: Date.now() - startedAt, degradations,
  });
- log.info("run finished", { status, fetched, deduped, created, durationMs: Date.now() - startedAt });
+ log.info("run finished", {
+  status, mode: result.mode, fetched, evaluated, filtered,
+  matched: result.matched, deduped, created, durationMs: Date.now() - startedAt,
+ });
  return result;
 }
 
@@ -156,7 +204,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 interface SourceCtx {
  db: Db; http: Http; renderer: ((url: string) => Promise<string | null>) | null;
  profile: SearchProfile; caps: RunCaps; deadlineAt: number;
- log: RunLogger; userId: string; runId: string | null; dryRun: boolean;
+ log: RunLogger; userId: string; runId: string | null; dryRun: boolean; freshSearch: boolean;
 }
 
 const carried = new WeakMap<SourceOutcome, { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> }[]>();
@@ -166,6 +214,8 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceOutcome> {
  const t0 = Date.now();
  const base: SourceOutcome = {
   sourceKey: row.source_key, status: "ok", itemsFetched: 0, itemsNew: 0,
+  itemsEvaluated: 0, itemsFiltered: 0, itemsMatched: 0, itemsUnchanged: 0,
+  filterReasons: {},
   pages: 0, apiCalls: 0, durationMs: 0,
  };
  const kept: { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> }[] = [];
@@ -189,23 +239,28 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceOutcome> {
  }
 
  const timeout = SOURCE_TIMEOUT_MS[adapter.kind];
+ const perSourceRequestCap = c.freshSearch
+  ? (adapter.kind === "api" ? 20 : adapter.kind === "crawl" ? c.caps.maxPagesPerHost : 1)
+  : c.caps.maxCrawlPages;
  const window = {
   maxItems: c.caps.maxItemsPerSource,
-  maxRequests: Math.min(c.caps.maxCrawlPages, c.http.budgetRemaining),
+  maxRequests: Math.max(0, Math.min(perSourceRequestCap, c.http.budgetRemaining)),
   maxPages: c.caps.maxPagesPerHost,
   deadlineAt: Math.min(c.deadlineAt, Date.now() + timeout),
  };
+ const storedCursor = row.cursor ?? {};
+ const cursorIn = c.freshSearch ? {} : storedCursor;
  const query = {
   terms: c.profile.terms,
   countries: c.profile.countries,
   cities: c.profile.indiaCities,
   remoteOk: c.profile.remoteOk,
-  since: row.cursor?.lastSuccessIso ? new Date(String(row.cursor.lastSuccessIso)) : null,
+  since: !c.freshSearch && storedCursor.lastSuccessIso ? new Date(String(storedCursor.lastSuccessIso)) : null,
  };
  const ctx = {
   http: c.http,
   renderer: c.renderer,
-  cursorIn: row.cursor ?? {},
+  cursorIn,
   now: new Date(),
   log: (m: string, extra?: Record<string, unknown>) => c.log.debug(m, extra),
  };
@@ -239,15 +294,25 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceOutcome> {
   // The set that comes back is exactly what is new or changed.
   const changedHashes = c.dryRun ? new Set(parsed.map(p => p.contentHash)) : await c.db.insertRawItems(rawRows);
   base.itemsNew = changedHashes.size;
+  base.itemsUnchanged = Math.max(0, parsed.length - changedHashes.size);
 
   for (const o of parsed) {
-   if (!changedHashes.has(o.contentHash)) continue;      // seen before: costs nothing
+   if (!shouldEvaluate(c.freshSearch, changedHashes.has(o.contentHash))) continue;
+   base.itemsEvaluated++;
    const verdict = hardFilter(o, c.profile);
-   if (!verdict.keep) continue;
+   if (!verdict.keep) {
+    base.itemsFiltered++;
+    const reason = verdict.reason ?? "unknown";
+    base.filterReasons[reason] = (base.filterReasons[reason] ?? 0) + 1;
+    continue;
+   }
+   base.itemsMatched++;
    kept.push({ o, score: scoreOpportunity(o, c.profile) });
   }
 
-  if (!c.dryRun) await c.db.markSourceSuccess(row.id, cursorOut);
+  // A focused interactive run must not advance the nightly cursor: its narrow
+  // result window cannot prove that unrelated new listings were inspected.
+  if (!c.dryRun) await c.db.markSourceSuccess(row.id, c.freshSearch ? storedCursor : cursorOut);
   return { ...base, durationMs: Date.now() - t0 };
  } catch (e) {
   const msg = e instanceof Error ? e.message : String(e);
@@ -270,7 +335,7 @@ function toSummary(id: string, o: NormalizedOpportunity, score: number): Opportu
 async function insertOpportunity(
  db: Db, userId: string, runId: string | null, profile: SearchProfile,
  o: NormalizedOpportunity, score: ReturnType<typeof scoreOpportunity>, hash: bigint | null,
-): Promise<string | null> {
+): Promise<{ id: string | null; error: string | null }> {
  const bands = hash === null ? [null, null, null, null] : simhashBands(hash);
  const { data, error } = await db.client.from("opportunities").insert({
   user_id: userId, profile_id: profile.id, run_id: runId,
@@ -294,14 +359,14 @@ async function insertOpportunity(
   content_hash: o.contentHash, enrichment: o.completeness < 0.6 ? "deferred" : "none",
  }).select("id").maybeSingle();
 
- if (error || !data) return null;
+ if (error || !data) return { id: null, error: error?.message ?? "insert returned no row" };
  const id = String(data.id);
  await db.client.from("opportunity_sources").upsert({
   user_id: userId, opportunity_id: id, source_key: o.sourceKey, external_id: o.externalId,
   url: o.url, url_canon: o.urlCanon, url_hash: o.urlHash, ats_key: o.atsKey,
   is_primary: true, match_signal: "url", match_confidence: 1, content_hash: o.contentHash,
  }, { onConflict: "user_id,source_key,external_id" });
- return id;
+ return { id, error: null };
 }
 
 /** A second sighting adds a source row and extends the deadline, never shrinks it. */

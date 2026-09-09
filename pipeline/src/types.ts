@@ -106,6 +106,11 @@ export interface SourceOutcome {
  status: "ok" | "skipped_config" | "skipped_quota" | "skipped_circuit" | "partial" | "failed";
  itemsFetched: number;
  itemsNew: number;
+ itemsEvaluated: number;
+ itemsFiltered: number;
+ itemsMatched: number;
+ itemsUnchanged: number;
+ filterReasons: Record<string, number>;
  pages: number;
  apiCalls: number;
  durationMs: number;
@@ -126,10 +131,17 @@ export interface OpportunitySummary {
 export interface RunResult {
  runId: string | null;
  status: "done" | "partial" | "failed";
+ mode: "incremental" | "fresh";
+ query: string | null;
  fetched: number;
+ evaluated: number;
+ filtered: number;
+ matched: number;
  deduped: number;
  created: number;
  changed: number;
+ persistenceFailures: number;
+ filterReasons: Record<string, number>;
  bySource: Record<string, SourceOutcome>;
  top: OpportunitySummary[];
  degradations: string[];

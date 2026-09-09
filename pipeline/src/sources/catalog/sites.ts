@@ -16,6 +16,8 @@
  *     set to confirm the rendered DOM actually carries JobPosting markup --
  *     Workday boards often load listings via a separate API call the render
  *     alone won't trigger, so this isn't a guaranteed win.
+ * jobRxiv's postdoc category is also crawled directly because its feed has
+ * proved unreliable in production while the category page remains current.
  * postdocjobs.com's homepage embeds 13+ JobPosting nodes directly (verified
  * live) -- no per-posting URL in their JSON-LD, so every posting from this
  * source links back to the listing page rather than its own page; a real but
@@ -30,6 +32,13 @@ export interface CrawlSeed {
 }
 
 export const CRAWL_SEEDS: CrawlSeed[] = [
+ {
+  key: "crawl:jobrxiv",
+  seedUrls: ["https://jobrxiv.org/job-category/postdoc/"],
+  organization: "jobRxiv",
+  allowPathRe: "^/job/",
+  maxPages: 12,
+ },
  {
   key: "crawl:postdocjobs",
   seedUrls: ["https://postdocjobs.com/", "https://postdocjobs.com/job/job/index?page=2"],
