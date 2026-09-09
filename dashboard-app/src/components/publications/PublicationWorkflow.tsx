@@ -31,8 +31,8 @@ export function PublicationWorkflow({publicationId}:{publicationId:string}){
 
  return <section className="publication-workflow field-wide" aria-labelledby="publication-workflow-heading">
   <div className="workflow-heading">
-   <div><span className="field-label" id="publication-workflow-heading">Custom paper journey</span>
-    <p className="muted-note">Add and reorder the steps that are specific to this paper.</p></div>
+   <div><span className="field-label" id="publication-workflow-heading">Custom paper nodes</span>
+    <p className="muted-note">Add, assign, date and reorder the work steps specific to this paper.</p></div>
   </div>
   <div className="publication-nodes">
    {nodes.map((node,index)=><article className={"publication-node node-"+node.status.toLowerCase().replaceAll(" ","-")} key={node.id}>
@@ -56,6 +56,8 @@ export function PublicationWorkflow({publicationId}:{publicationId:string}){
     </select>
     <input className="input input-compact" type="date" value={toInput(node.due_at,false)} aria-label={`${node.title} due date`}
      onChange={e=>void publicationNodes.update(node.id,{due_at:fromInput(e.target.value,false)})}/>
+    <input className="input input-compact node-notes" defaultValue={node.notes??""} placeholder="Notes or expected output"
+     aria-label={`${node.title} notes`} onBlur={e=>{const notes=e.target.value.trim()||null;if(notes!==node.notes)void publicationNodes.update(node.id,{notes})}}/>
     {node.status==="Done"&&<span className="node-done"><Check/>Complete</span>}
    </article>)}
    {!nodes.length&&<p className="workflow-empty">No custom steps yet. Examples: analysis, figures, co-author review, preprint and submission.</p>}

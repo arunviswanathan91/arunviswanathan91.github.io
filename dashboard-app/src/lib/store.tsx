@@ -32,6 +32,9 @@ export interface PublicationNode extends Row{
  id:string;publication_id:string;title:string;status:string;assignee_id:string|null;due_at:string|null;
  position:number;notes:string|null;completed_at:string|null;created_at:string;updated_at:string;
 }
+export interface PublicationStageEvent extends Row{
+ id:string;publication_id:string;from_stage:string|null;to_stage:string;created_at:string;
+}
 export type ViewKey=EntityKey|"home"|"project"|"settings";
 export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
@@ -49,6 +52,7 @@ interface DataValue{
  projectLinks:TableStore<ProjectLink>;
  projectFields:TableStore<ProjectField>;
  publicationNodes:TableStore<PublicationNode>;
+ publicationStageEvents:TableStore<PublicationStageEvent>;
  tags:TagStore;
  loading:boolean;
  notices:NoticeItem[];
@@ -106,6 +110,7 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  const projectLinks=useTable<ProjectLink>("project_links","id,user_id,project_id,label,url,kind,position,created_at,updated_at",{key:"position",dir:"asc"});
  const projectFields=useTable<ProjectField>("project_fields","id,user_id,project_id,label,value,field_type,position,created_at,updated_at",{key:"position",dir:"asc"});
  const publicationNodes=useTable<PublicationNode>("publication_nodes","id,user_id,publication_id,title,status,assignee_id,due_at,position,notes,completed_at,created_at,updated_at",{key:"position",dir:"asc"});
+ const publicationStageEvents=useTable<PublicationStageEvent>("publication_stage_events","id,user_id,publication_id,from_stage,to_stage,created_at",{key:"created_at",dir:"desc"});
  const tags=useTags(userId);
 
  const tables=useMemo(()=>({tasks,publications,documents,jobs,reminders,reads,opportunities}),
@@ -132,25 +137,25 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  },[userId,refreshTelegram]);
 
  const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||opportunities.loading||
-  projects.loading||people.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||tags.loading;
+  projects.loading||people.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||publicationStageEvents.loading||tags.loading;
 
  const notices=useMemo(()=>{
   const all:NoticeItem[]=[];
   for(const key of ENTITY_ORDER){const t=tables[key];if(t.error)all.push({key,message:t.error,dismiss:t.dismissError})}
   if(projects.error)all.push({key:"projects",message:projects.error,dismiss:projects.dismissError});
   for(const [key,t] of [["people",people],["project stages",projectStages],["project links",projectLinks],
-   ["project fields",projectFields],["publication nodes",publicationNodes]] as const)
+   ["project fields",projectFields],["publication nodes",publicationNodes],["publication history",publicationStageEvents]] as const)
    if(t.error)all.push({key,message:t.error,dismiss:t.dismissError});
   if(tags.error)all.push({key:"tags",message:tags.error,dismiss:tags.dismissError});
   return all;
- },[tables,projects.error,projects.dismissError,people,projectStages,projectLinks,projectFields,publicationNodes,tags.error,tags.dismissError]);
+ },[tables,projects.error,projects.dismissError,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags.error,tags.dismissError]);
 
  const refreshAll=useCallback(()=>{
   for(const key of ENTITY_ORDER)void tables[key].refetch(true);
   void projects.refetch(true);
   void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
-  void projectFields.refetch(true);void publicationNodes.refetch(true);
- },[tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes]);
+  void projectFields.refetch(true);void publicationNodes.refetch(true);void publicationStageEvents.refetch(true);
+ },[tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents]);
 
  // The DB nulls these FKs via `on delete set null`; mirror it locally so rows don't
  // silently disappear from every board until the next reload.
@@ -160,9 +165,9 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
    tables[key].patchLocal(r=>r.project_id===id?{...r,project_id:null}:null);
  },[projects,tables]);
 
- const dataValue=useMemo(()=>({userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,
+ const dataValue=useMemo(()=>({userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,
   tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject}),
-  [userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject]);
+  [userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject]);
 
  // ---- UI state ----
  const initial=initialRoute();
@@ -193,10 +198,10 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   if(view==="project"){
    void tasks.refetch(true);void publications.refetch(true);void documents.refetch(true);void reminders.refetch(true);void reads.refetch(true);
    void projects.refetch(true);void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
-   void projectFields.refetch(true);void publicationNodes.refetch(true);
+   void projectFields.refetch(true);void publicationNodes.refetch(true);void publicationStageEvents.refetch(true);
   }else if(ENTITY_ORDER.includes(view as EntityKey))void tables[view as EntityKey].refetch(true);
  },[view,scope,tasks.refetch,publications.refetch,documents.refetch,reminders.refetch,reads.refetch,projects.refetch,
-  people.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch]);
+  people.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch,publicationStageEvents.refetch]);
 
  const setQuery=useCallback((k:EntityKey,patch:Partial<Query>)=>setQueries(v=>({...v,[k]:{...v[k],...patch}})),[]);
  useEffect(()=>{
