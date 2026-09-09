@@ -39,14 +39,14 @@ export function Sidebar({open,onNewProject}:{open:boolean;onNewProject():void}){
     onClick={()=>go("home")}><Home/>Home</button>
 
    <p className="nav-label">Projects</p>
-   <button className={"nav-project"+(ui.scope==="all"?" active":"")} onClick={()=>ui.setScope("all")}>
+   <button className={"nav-project"+(ui.scope==="all"?" active":"")} onClick={()=>{ui.setScope("all");if(ui.view==="project")ui.setView("home")}}>
     <span className="project-dot tint-slate"/>All projects{ui.scope==="all"&&<Check className="nav-tick"/>}
    </button>
-   <button className={"nav-project"+(ui.scope===null?" active":"")} onClick={()=>ui.setScope(null)}>
+   <button className={"nav-project"+(ui.scope===null?" active":"")} onClick={()=>{ui.setScope(null);if(ui.view==="project")ui.setView("home")}}>
     <Inbox/>Inbox{ui.scope===null&&<Check className="nav-tick"/>}
    </button>
    {visibleProjects.map(p=>
-    <button key={p.id} className={"nav-project"+(ui.scope===p.id?" active":"")} onClick={()=>ui.setScope(p.id)}>
+    <button key={p.id} className={"nav-project"+(ui.scope===p.id?" active":"")} onClick={()=>ui.openProject(p.id)}>
      <span className={"project-dot tint-"+(p.color??"slate")}/>
      <span className="clamp-1">{p.name}</span>
      {p.status==="Archived"&&<small className="muted-note">archived</small>}

@@ -11,7 +11,7 @@ Deno.serve(async(req)=>{
  const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
  const token=Deno.env.get("TELEGRAM_BOT_TOKEN");
 
- const {data:due,error}=await db.from("reminders").select("id,title,body,user_id")
+ const {data:due,error}=await db.from("reminders").select("id,title,body,user_id,project_id,task_id,person_id")
   .lte("remind_at",new Date().toISOString()).eq("done",false).is("notified_at",null).limit(100);
  if(error)return json({ok:false,error:error.message},500);
 
@@ -20,8 +20,17 @@ Deno.serve(async(req)=>{
   const {data:profile}=await db.from("profiles").select("telegram_chat_id").eq("id",reminder.user_id).maybeSingle();
   const chatId=profile?.telegram_chat_id as number|null;
   if(!chatId)continue;
-  const text=`⏰ ${reminder.title}${reminder.body?`\n${reminder.body}`:""}`;
-  const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chat_id:chatId,text})});
+  let contact="";
+  if(reminder.person_id){
+   const {data:person}=await db.from("people").select("name,email,telegram_handle").eq("id",reminder.person_id).maybeSingle();
+   if(person)contact=[person.name,person.email,person.telegram_handle?`@${String(person.telegram_handle).replace(/^@/,"")}`:null].filter(Boolean).join(" · ");
+  }
+  const text=`⏰ ${reminder.title}${reminder.body?`\n${reminder.body}`:""}${contact?`\nContact: ${contact}`:""}\n\nThis reminder was sent only to you.`;
+  const base=Deno.env.get("DASHBOARD_URL")??"https://arunviswanathan91.github.io/dashboard/";
+  const url=reminder.project_id?`${base.replace(/#.*$/,"").replace(/\/$/,"")}/#/project/${reminder.project_id}`:`${base.replace(/#.*$/,"").replace(/\/$/,"")}/#/reminders`;
+  const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
+   chat_id:chatId,text,reply_markup:{inline_keyboard:[[{text:"Open workspace",url}]]},
+  })});
   // Only mark notified on a confirmed send — a transient failure retries on the next sweep.
   if(r.ok){await db.from("reminders").update({notified_at:new Date().toISOString()}).eq("id",reminder.id);sent++}
  }

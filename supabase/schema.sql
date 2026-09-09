@@ -65,7 +65,7 @@ create table if not exists tags (
 );
 create table if not exists item_tags (
   tag_id uuid not null references tags(id) on delete cascade,
-  entity_type text not null check (entity_type in ('job_application','reminder','read','task','publication','document','opportunity')),
+  entity_type text not null check (entity_type in ('job_application','reminder','read','task','publication','document','opportunity','project')),
   entity_id uuid not null, created_at timestamptz not null default now(),
   primary key (tag_id, entity_type, entity_id)
 );
@@ -88,7 +88,7 @@ create table if not exists reads (
 -- Function's service-role key can touch it.
 create table if not exists telegram_pending_confirmations (
   chat_id bigint primary key, kind text not null default 'read_confirm'
-   check (kind in ('read_confirm','refine','ask_tag','pick')),
+   check (kind in ('read_confirm','read_project','refine','ask_tag','pick')),
   payload jsonb not null, created_at timestamptz not null default now(), expires_at timestamptz not null
 );
 
@@ -144,12 +144,208 @@ alter table projects add column if not exists color text;
 alter table reads add column if not exists read_at timestamptz;
 alter table reads add column if not exists updated_at timestamptz not null default now();
 
+-- ==========================================================================
+--  Private scientific project management
+--  Projects own a configurable work board; publications keep their editorial
+--  stage and may additionally have a paper-specific sequence of custom nodes.
+--  People are private address-book entries, never application users.
+-- ==========================================================================
+
+alter table projects add column if not exists objective text;
+alter table projects add column if not exists phase text not null default 'Planning';
+alter table projects add column if not exists start_date date;
+alter table projects add column if not exists target_date date;
+alter table projects add column if not exists updated_at timestamptz not null default now();
+
+create table if not exists people (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  role text,
+  organization text,
+  email text,
+  telegram_handle text,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- `category` preserves the existing four-state Tasks page while `name` is the
+-- freely editable project column. Several custom columns may share a category.
+create table if not exists project_stages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  name text not null,
+  color text,
+  position integer not null default 0,
+  category task_status not null default 'In progress',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(project_id,name)
+);
+
+create table if not exists project_links (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  label text not null,
+  url text not null,
+  kind text,
+  position integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- User-defined project facts such as cohort, assay, grant code or data freeze.
+-- Rows rather than SQL columns keep the schema stable as the user customises it.
+create table if not exists project_fields (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  label text not null,
+  value text,
+  field_type text not null default 'text'
+    check(field_type in ('text','date','number','url')),
+  position integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table tasks add column if not exists stage_id uuid references project_stages(id) on delete set null;
+alter table tasks add column if not exists assignee_id uuid references people(id) on delete set null;
+alter table tasks add column if not exists publication_id uuid references publications(id) on delete set null;
+alter table tasks add column if not exists start_at timestamptz;
+alter table tasks add column if not exists follow_up_at timestamptz;
+alter table tasks add column if not exists position integer not null default 0;
+
+alter table reads add column if not exists project_id uuid references projects(id) on delete set null;
+
+alter table reminders add column if not exists project_id uuid references projects(id) on delete set null;
+alter table reminders add column if not exists task_id uuid references tasks(id) on delete cascade;
+alter table reminders add column if not exists person_id uuid references people(id) on delete set null;
+do $$ begin
+  alter table reminders add constraint reminders_task_id_key unique(task_id);
+exception when duplicate_object then null; end $$;
+
+-- A paper retains the canonical editorial stage used by the Publications board,
+-- while these ordered nodes describe its own scientific and submission journey.
+create table if not exists publication_nodes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  publication_id uuid not null references publications(id) on delete cascade,
+  title text not null,
+  status text not null default 'Pending'
+    check(status in ('Pending','In progress','Waiting','Done')),
+  assignee_id uuid references people(id) on delete set null,
+  due_at timestamptz,
+  position integer not null default 0,
+  notes text,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Every existing and future project starts usable. Names can then be changed,
+-- reordered or supplemented without changing the task_status enum.
+insert into project_stages(user_id,project_id,name,color,position,category)
+select p.user_id,p.id,v.name,v.color,v.position,v.category
+from projects p
+cross join (values
+ ('Backlog','slate',0,'Backlog'::task_status),
+ ('In progress','amber',1,'In progress'::task_status),
+ ('Review','blue',2,'Review'::task_status),
+ ('Done','green',3,'Done'::task_status)
+) as v(name,color,position,category)
+on conflict(project_id,name) do nothing;
+
+update tasks t set stage_id=s.id
+from project_stages s
+where t.stage_id is null and t.project_id=s.project_id and s.name=t.status::text;
+
+create or replace function fn_seed_project_stages() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into project_stages(user_id,project_id,name,color,position,category) values
+   (new.user_id,new.id,'Backlog','slate',0,'Backlog'),
+   (new.user_id,new.id,'In progress','amber',1,'In progress'),
+   (new.user_id,new.id,'Review','blue',2,'Review'),
+   (new.user_id,new.id,'Done','green',3,'Done')
+  on conflict(project_id,name) do nothing;
+  return new;
+end;
+$$;
+drop trigger if exists projects_seed_stages on projects;
+create trigger projects_seed_stages after insert on projects
+  for each row execute function fn_seed_project_stages();
+
+-- A custom board column determines the compatible high-level task state and
+-- also prevents a task from pointing at a stage owned by another project/user.
+create or replace function fn_task_stage_sync() returns trigger
+language plpgsql set search_path = public as $$
+declare v_project uuid; v_user uuid; v_category task_status;
+begin
+  if new.stage_id is not null then
+    select project_id,user_id,category into v_project,v_user,v_category
+    from project_stages where id=new.stage_id;
+    if v_project is null or v_user<>new.user_id then
+      raise exception 'Invalid project stage';
+    end if;
+    if new.project_id is not null and new.project_id<>v_project then
+      raise exception 'Task stage belongs to a different project';
+    end if;
+    new.project_id:=v_project;
+    new.status:=v_category;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists tasks_stage_sync on tasks;
+create trigger tasks_stage_sync before insert or update of stage_id on tasks
+  for each row execute function fn_task_stage_sync();
+
+-- Follow-up is distinct from the work deadline. It creates a linked reminder
+-- for the owner; the assigned person is never contacted by this trigger.
+create or replace function fn_sync_task_follow_up() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_person text; v_title text; v_body text;
+begin
+  if tg_op='DELETE' then
+    delete from reminders where task_id=old.id;
+    return old;
+  end if;
+
+  if new.follow_up_at is null or new.status='Done' then
+    update reminders set done=true,updated_at=now() where task_id=new.id;
+    return new;
+  end if;
+
+  select name into v_person from people where id=new.assignee_id and user_id=new.user_id;
+  v_title:=case when v_person is null
+    then 'Follow up: '||new.title
+    else 'Ask '||v_person||': '||new.title end;
+  v_body:=case when new.due_at is null then null
+    else 'Work due '||to_char(new.due_at at time zone 'UTC','DD Mon YYYY') end;
+
+  insert into reminders(user_id,title,body,remind_at,done,notified_at,project_id,task_id,person_id)
+  values(new.user_id,v_title,v_body,new.follow_up_at,false,null,new.project_id,new.id,new.assignee_id)
+  on conflict(task_id) do update set
+    title=excluded.title,body=excluded.body,remind_at=excluded.remind_at,
+    done=false,notified_at=null,project_id=excluded.project_id,person_id=excluded.person_id,
+    updated_at=now();
+  return new;
+end;
+$$;
+drop trigger if exists tasks_sync_follow_up on tasks;
+create trigger tasks_sync_follow_up after insert or update of title,due_at,follow_up_at,status,assignee_id,project_id or delete on tasks
+  for each row execute function fn_sync_task_follow_up();
+
 -- The inline CHECK above only applies to a freshly created item_tags. Databases that
 -- already ran an earlier version of this file keep the old three-type constraint, so
 -- replace it explicitly to allow tagging tasks, publications and documents too.
 alter table item_tags drop constraint if exists item_tags_entity_type_check;
 alter table item_tags add constraint item_tags_entity_type_check
-  check (entity_type in ('job_application','reminder','read','task','publication','document','opportunity'));
+  check (entity_type in ('job_application','reminder','read','task','publication','document','opportunity','project'));
 
 -- The bot needs the user's zone to turn "due:friday" or "in 2h" into a correct absolute
 -- timestamp; the dashboard fills it in from the browser on first load.
@@ -159,7 +355,7 @@ alter table profiles add column if not exists timezone text;
 -- which would reject every conversational state the bot now stores.
 alter table telegram_pending_confirmations drop constraint if exists telegram_pending_confirmations_kind_check;
 alter table telegram_pending_confirmations add constraint telegram_pending_confirmations_kind_check
-  check (kind in ('read_confirm','refine','ask_tag','pick'));
+  check (kind in ('read_confirm','read_project','refine','ask_tag','pick'));
 
 alter table profiles enable row level security;
 alter table projects enable row level security;
@@ -174,6 +370,11 @@ alter table item_tags enable row level security;
 alter table reminders enable row level security;
 alter table reads enable row level security;
 alter table telegram_pending_confirmations enable row level security;
+alter table people enable row level security;
+alter table project_stages enable row level security;
+alter table project_links enable row level security;
+alter table project_fields enable row level security;
+alter table publication_nodes enable row level security;
 
 drop policy if exists "own profile" on profiles;
 create policy "own profile" on profiles for all using (auth.uid()=id) with check (auth.uid()=id);
@@ -197,6 +398,24 @@ drop policy if exists "own reminders" on reminders;
 create policy "own reminders" on reminders for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
 drop policy if exists "own reads" on reads;
 create policy "own reads" on reads for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own people" on people;
+create policy "own people" on people for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own project stages" on project_stages;
+create policy "own project stages" on project_stages for all using (auth.uid()=user_id) with check (
+  auth.uid()=user_id and exists(select 1 from projects p where p.id=project_id and p.user_id=auth.uid())
+);
+drop policy if exists "own project links" on project_links;
+create policy "own project links" on project_links for all using (auth.uid()=user_id) with check (
+  auth.uid()=user_id and exists(select 1 from projects p where p.id=project_id and p.user_id=auth.uid())
+);
+drop policy if exists "own project fields" on project_fields;
+create policy "own project fields" on project_fields for all using (auth.uid()=user_id) with check (
+  auth.uid()=user_id and exists(select 1 from projects p where p.id=project_id and p.user_id=auth.uid())
+);
+drop policy if exists "own publication nodes" on publication_nodes;
+create policy "own publication nodes" on publication_nodes for all using (auth.uid()=user_id) with check (
+  auth.uid()=user_id and exists(select 1 from publications p where p.id=publication_id and p.user_id=auth.uid())
+);
 
 -- item_tags has no user_id of its own: ownership is proven by owning the tag (for
 -- read/update/delete) and additionally by owning the tagged row itself (for insert/update).
@@ -212,6 +431,7 @@ create policy "own item tags" on item_tags for all
       or (entity_type = 'task' and exists (select 1 from tasks tk where tk.id = item_tags.entity_id and tk.user_id = auth.uid()))
       or (entity_type = 'publication' and exists (select 1 from publications p where p.id = item_tags.entity_id and p.user_id = auth.uid()))
       or (entity_type = 'document' and exists (select 1 from documents d where d.id = item_tags.entity_id and d.user_id = auth.uid()))
+      or (entity_type = 'project' and exists (select 1 from projects p where p.id = item_tags.entity_id and p.user_id = auth.uid()))
     )
   );
 
@@ -263,6 +483,18 @@ drop trigger if exists reminders_set_updated_at on reminders;
 create trigger reminders_set_updated_at before update on reminders for each row execute function set_updated_at();
 drop trigger if exists reads_set_updated_at on reads;
 create trigger reads_set_updated_at before update on reads for each row execute function set_updated_at();
+drop trigger if exists projects_set_updated_at on projects;
+create trigger projects_set_updated_at before update on projects for each row execute function set_updated_at();
+drop trigger if exists people_set_updated_at on people;
+create trigger people_set_updated_at before update on people for each row execute function set_updated_at();
+drop trigger if exists project_stages_set_updated_at on project_stages;
+create trigger project_stages_set_updated_at before update on project_stages for each row execute function set_updated_at();
+drop trigger if exists project_links_set_updated_at on project_links;
+create trigger project_links_set_updated_at before update on project_links for each row execute function set_updated_at();
+drop trigger if exists project_fields_set_updated_at on project_fields;
+create trigger project_fields_set_updated_at before update on project_fields for each row execute function set_updated_at();
+drop trigger if exists publication_nodes_set_updated_at on publication_nodes;
+create trigger publication_nodes_set_updated_at before update on publication_nodes for each row execute function set_updated_at();
 
 -- item_tags.entity_id can't carry a real FK (it points at one of three different
 -- tables), so scrub orphaned tag links whenever a tagged row is deleted.
@@ -291,6 +523,9 @@ create trigger publications_tag_cleanup after delete on publications
 drop trigger if exists documents_tag_cleanup on documents;
 create trigger documents_tag_cleanup after delete on documents
   for each row execute function fn_cleanup_item_tags('document');
+drop trigger if exists projects_tag_cleanup on projects;
+create trigger projects_tag_cleanup after delete on projects
+  for each row execute function fn_cleanup_item_tags('project');
 
 create index if not exists tasks_user_status_idx on tasks(user_id,status);
 create index if not exists tasks_user_project_idx on tasks(user_id,project_id);
@@ -304,6 +539,15 @@ create index if not exists item_tags_tag_idx on item_tags(tag_id);
 create index if not exists reminders_user_remind_idx on reminders(user_id,remind_at);
 create index if not exists reminders_pending_notify_idx on reminders(remind_at) where done=false and notified_at is null;
 create index if not exists reads_user_created_idx on reads(user_id,created_at desc);
+create index if not exists reads_user_project_idx on reads(user_id,project_id);
+create index if not exists people_user_name_idx on people(user_id,name);
+create index if not exists project_stages_project_position_idx on project_stages(project_id,position);
+create index if not exists project_links_project_position_idx on project_links(project_id,position);
+create index if not exists project_fields_project_position_idx on project_fields(project_id,position);
+create index if not exists tasks_project_stage_idx on tasks(project_id,stage_id,position);
+create index if not exists tasks_assignee_idx on tasks(user_id,assignee_id);
+create index if not exists tasks_follow_up_idx on tasks(user_id,follow_up_at) where follow_up_at is not null;
+create index if not exists publication_nodes_publication_position_idx on publication_nodes(publication_id,position);
 create index if not exists telegram_pending_confirmations_expires_idx on telegram_pending_confirmations(expires_at);
 
 -- ==========================================================================
@@ -625,6 +869,7 @@ create policy "own item tags" on item_tags for all
       or (entity_type = 'publication' and exists (select 1 from publications p where p.id = item_tags.entity_id and p.user_id = auth.uid()))
       or (entity_type = 'document' and exists (select 1 from documents d where d.id = item_tags.entity_id and d.user_id = auth.uid()))
       or (entity_type = 'opportunity' and exists (select 1 from opportunities o where o.id = item_tags.entity_id and o.user_id = auth.uid()))
+      or (entity_type = 'project' and exists (select 1 from projects p where p.id = item_tags.entity_id and p.user_id = auth.uid()))
     )
   );
 

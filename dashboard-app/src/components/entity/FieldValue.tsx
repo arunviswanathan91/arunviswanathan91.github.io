@@ -9,6 +9,8 @@ import type { Tag } from "../../lib/tags";
 export interface ValueCtx{
  projectName(id:string|null):string|null;
  projectColor(id:string|null):string|null;
+ personName(id:string|null):string|null;
+ publicationTitle(id:string|null):string|null;
  tagIds(id:string):string[];
  tagsById:Map<string,Tag>;
 }
@@ -42,6 +44,16 @@ export function FieldValue({field,row,ctx,mode}:{field:FieldDef;row:Row;ctx:Valu
    if(!name)return mode==="cell"?<span className="muted-note">Inbox</span>:null;
    const color=ctx.projectColor(raw??null);
    return <span className={"project-pill tint-"+(color??"slate")}>{name}</span>;
+  }
+  case "person":{
+   const name=ctx.personName(raw??null);
+   if(!name)return mode==="cell"?<span className="muted-note">Unassigned</span>:null;
+   return <span className="project-pill">{name}</span>;
+  }
+  case "publication":{
+   const title=ctx.publicationTitle(raw??null);
+   if(!title)return mode==="cell"?<span className="muted-note">—</span>:null;
+   return <span className={mode==="card"?"clamp-1":""}>{title}</span>;
   }
   case "tags":{
    const ids=ctx.tagIds(row.id);

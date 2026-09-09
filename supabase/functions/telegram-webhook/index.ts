@@ -8,14 +8,14 @@ const STATE_TTL=15*60*1000;
 
 const HELP=[
  "Create — everything after the command is the title:",
- "  /add Draft intro @Thesis #urgent !high due:friday",
+ "  /add Draft intro @Thesis #urgent !high due:friday followup:thursday assign:Maya",
  "  /pub Statin trial venue:Nature #clinical",
  "  /doc Protocol v2 @Thesis kind:Protocol",
  "  /job Acme | Postdoc #postdoc due:2026-03-01",
  "  /remind Call PI in 2h #urgent",
- "  /read https://example.com #later   (or just send me a link)",
+ "  /read https://example.com @Thesis #later   (or just send me a link)",
  "",
- "Tokens: #tag  @project  !high  due:friday  field:value  in 2h",
+ "Tokens: #tag  @project  !high  due:friday  followup:thursday  assign:name  field:value  in 2h",
  "",
  "Work with what's there:",
  "  /today            open tasks, numbered",
@@ -85,14 +85,40 @@ Deno.serve(async(req)=>{
   const {data}=await db.from("projects").select("id,name").eq("user_id",userId).ilike("name",name).maybeSingle();
   return data?{id:data.id as string,name:data.name as string}:null;
  };
+ const resolvePerson=async(name:string):Promise<{id:string;name:string}|null>=>{
+  const {data}=await db.from("people").select("id,name").eq("user_id",userId).ilike("name",name).limit(1).maybeSingle();
+  return data?{id:data.id as string,name:data.name as string}:null;
+ };
+ const resolvePublication=async(title:string):Promise<{id:string;title:string}|null>=>{
+  const clean=title.replace(/[%,]/g,"");
+  const {data}=await db.from("publications").select("id,title").eq("user_id",userId).ilike("title",`%${clean}%`).limit(1).maybeSingle();
+  return data?{id:data.id as string,title:data.title as string}:null;
+ };
+ const resolveReferences=async(entity:BotEntity,fields:Record<string,unknown>)=>{
+  const values={...fields},notes:string[]=[];
+  for(const field of entity.fields){
+   const raw=values[field.key];if(raw===undefined)continue;
+   if(field.kind==="person"){
+    const person=await resolvePerson(String(raw));
+    if(person){values[field.key]=person.id;notes.push(`assigned to ${person.name}`)}
+    else{delete values[field.key];notes.push(`no person named "${raw}"`)}
+   }else if(field.kind==="publication"){
+    const paper=await resolvePublication(String(raw));
+    if(paper){values[field.key]=paper.id;notes.push(`paper ${paper.title}`)}
+    else{delete values[field.key];notes.push(`no paper matching "${raw}"`)}
+   }
+  }
+  return {values,notes};
+ };
  const titleOf=(entity:BotEntity,row:Record<string,unknown>)=>
   entity.searchFields.map(f=>String(row[f]??"").trim()).find(Boolean)||`Untitled ${entity.singular}`;
 
  /** Applies parsed tokens to an existing row; returns a human summary of what changed. */
  const applyTokens=async(entity:BotEntity,id:string,body:string,treatTextAs:string|null)=>{
   const p=parseMessage(body,entity,tz);
-  const patch:Record<string,unknown>={...p.fields};
-  const notes:string[]=[];
+  const resolved=await resolveReferences(entity,p.fields);
+  const patch:Record<string,unknown>={...resolved.values};
+  const notes:string[]=[...resolved.notes];
 
   if(p.project!==null&&entity.projectField){
    const proj=await resolveProject(p.project);
@@ -105,9 +131,10 @@ Deno.serve(async(req)=>{
   }
   if(p.text&&treatTextAs&&patch[treatTextAs]===undefined)patch[treatTextAs]=p.text;
 
-  for(const [k,v] of Object.entries(p.fields)){
+  for(const [k,v] of Object.entries(resolved.values)){
    const f=entity.fields.find(x=>x.key===k);
-   notes.push(f?.kind==="date"?`${f.aliases[0]} ${new Date(String(v)).toLocaleString("en-GB",{timeZone:tz})}`:`${f?.aliases[0]??k} ${v}`);
+   if(f?.kind!=="person"&&f?.kind!=="publication")
+    notes.push(f?.kind==="date"?`${f.aliases[0]} ${new Date(String(v)).toLocaleString("en-GB",{timeZone:tz})}`:`${f?.aliases[0]??k} ${v}`);
   }
   if(Object.keys(patch).length){
    const {error}=await db.from(entity.table).update(patch).eq("id",id);
@@ -132,6 +159,33 @@ Deno.serve(async(req)=>{
   return (data??[]) as Record<string,unknown>[];
  };
 
+ type ReadPayload={url:string;tags:string[];projectId?:string|null;projectName?:string|null};
+ const saveRead=async(payload:ReadPayload)=>{
+  const {data,error}=await db.from("reads").insert({user_id:userId,url:payload.url,project_id:payload.projectId??null}).select("*").maybeSingle();
+  if(error||!data)return send(chatId,"I couldn't save that link.");
+  if(payload.tags?.length)await attachTags(ENTITIES.reads,data.id as string,payload.tags);
+  await setState("refine",{entity:"reads",id:data.id,title:titleOf(ENTITIES.reads,data)});
+  return send(chatId,`Saved to Reads${payload.projectName?` in ${payload.projectName}`:" in Inbox"}: ${payload.url}\nAdd a #tag or a title? Send it, or "done".`);
+ };
+ const offerRead=async(url:string,tags:string[],requestedProject:string|null)=>{
+  if(requestedProject){
+   const project=await resolveProject(requestedProject);
+   if(project){
+    await setState("read_confirm",{url,tags,projectId:project.id,projectName:project.name});
+    return send(chatId,`Add this to ${project.name} Reads?\n${url}\n(yes/no)`);
+   }
+  }
+  const {data}=await db.from("projects").select("id,name").eq("user_id",userId).eq("status","Active").order("name").limit(20);
+  const options=(data??[]) as {id:string;name:string}[];
+  if(!options.length){
+   await setState("read_confirm",{url,tags,projectId:null,projectName:null});
+   return send(chatId,`Add this to Reads in Inbox?\n${url}\n(yes/no)`);
+  }
+  await setState("read_project",{url,tags,options});
+  return send(chatId,`Save this to Reads — choose a project:\n0. Inbox\n${options.map((p,i)=>`${i+1}. ${p.name}`).join("\n")}`+
+   `${requestedProject?`\n\nNo project named "${requestedProject}" was found.`:""}\n\nReply with a number, or "no".`);
+ };
+
  // ---------- commands ----------
  if(text.startsWith("/")){
   const [cmd,...restParts]=text.split(/\s+/);
@@ -146,7 +200,8 @@ Deno.serve(async(req)=>{
    if(!rest){await clearState();return send(chatId,`What should the ${entity.singular} be called? Send: ${entity.command} <title> #tag @project`)}
 
    const p=parseMessage(rest,entity,tz);
-   const values:Record<string,unknown>={user_id:userId,...p.fields};
+   const resolved=await resolveReferences(entity,p.fields);
+   const values:Record<string,unknown>={user_id:userId,...resolved.values};
    let body=p.text;
 
    if(entity.key==="jobs"){
@@ -180,6 +235,7 @@ Deno.serve(async(req)=>{
    if(p.tags.length)bits.push("#"+p.tags.join(" #"));
    if(entity.dateField&&data[entity.dateField])bits.push(new Date(String(data[entity.dateField])).toLocaleString("en-GB",{timeZone:tz}));
    if(entity.priorityField&&values[entity.priorityField])bits.push(String(values[entity.priorityField]));
+   bits.push(...resolved.notes);
    await setState("refine",{entity:entity.key,id:data.id,title});
    return send(chatId,`Saved ${entity.singular}: ${title}${bits.length?"\n"+bits.join(" · "):""}${projectNote}\n\nAdd more? Send #tag @project or field:value — or "done".`);
   }
@@ -385,26 +441,35 @@ Deno.serve(async(req)=>{
  }
 
  if(state?.kind==="read_confirm"){
-  const payload=state.payload as {url:string;tags:string[]};
+  const payload=state.payload as ReadPayload;
   const urlInText=parseMessage(text,ENTITIES.reads,tz).url;
   if(urlInText){
-   await setState("read_confirm",{url:urlInText,tags:parseMessage(text,ENTITIES.reads,tz).tags});
-   return send(chatId,`Replacing the pending link — save this one instead?\n${urlInText}\n(yes/no)`);
+   const parsed=parseMessage(text,ENTITIES.reads,tz);
+   return offerRead(urlInText,parsed.tags,parsed.project);
   }
   await clearState();
   if(!isAffirmative(text))return send(chatId,"Okay, not saved.");
-  const {data,error}=await db.from("reads").insert({user_id:userId,url:payload.url}).select("*").maybeSingle();
-  if(error||!data)return send(chatId,"I couldn't save that link.");
-  if(payload.tags?.length)await attachTags(ENTITIES.reads,data.id as string,payload.tags);
-  await setState("refine",{entity:"reads",id:data.id,title:titleOf(ENTITIES.reads,data)});
-  return send(chatId,`Saved to Reads: ${payload.url}\nAdd a #tag or a title? Send it, or "done".`);
+  return saveRead(payload);
+ }
+
+ if(state?.kind==="read_project"){
+  const payload=state.payload as {url:string;tags:string[];options:{id:string;name:string}[]};
+  const parsed=parseMessage(text,ENTITIES.reads,tz);
+  if(parsed.url)return offerRead(parsed.url,parsed.tags,parsed.project);
+  if(isDone(text)){await clearState();return send(chatId,"Okay, not saved.")}
+  const value=text.trim().toLowerCase();
+  const n=value==="inbox"||isAffirmative(value)?0:parseInt(value,10);
+  if(!Number.isFinite(n)||n<0||n>payload.options.length)
+   return send(chatId,`Reply 0 for Inbox, or 1–${payload.options.length} for a project.`);
+  await clearState();
+  const project=n===0?null:payload.options[n-1];
+  return saveRead({url:payload.url,tags:payload.tags,projectId:project?.id??null,projectName:project?.name??null});
  }
 
  // ---------- no state: a bare link offers to save itself ----------
  const parsed=parseMessage(text,ENTITIES.reads,tz);
  if(parsed.url){
-  await setState("read_confirm",{url:parsed.url,tags:parsed.tags});
-  return send(chatId,`Add this to Reads?\n${parsed.url}${parsed.tags.length?"\nTags: "+parsed.tags.join(", "):""}\n(yes/no)`);
+  return offerRead(parsed.url,parsed.tags,parsed.project);
  }
  return send(chatId,HELP);
 });

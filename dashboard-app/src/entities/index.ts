@@ -28,7 +28,7 @@ const stageTone=(v:string):Tone=>
  v==="Overdue"||v==="Rejected"?"red":"dim";
 const priorityTone=(v:string):Tone=>v==="High"?"red":v==="Medium"?"amber":"slate";
 
-const projectField={key:"project_id",kind:"project",label:"Project",card:"meta",table:2,filter:true} as const;
+const projectField={key:"project_id",kind:"project",label:"Project",create:true,card:"meta",table:2,filter:true} as const;
 const tagsField={key:"tags",kind:"tags",label:"Tags",create:true,card:"meta",table:2,filter:true,wide:true} as const;
 const stamps=[
  {key:"created_at",kind:"stamp",label:"Created",sort:true},
@@ -37,7 +37,8 @@ const stamps=[
 
 export const tasks:EntityDef={
  key:"tasks",table:"tasks",tagEntity:"task",
- select:"id,user_id,project_id,title,status,priority,due_at,notes,source,created_at,updated_at",
+ select:"id,user_id,project_id,title,status,priority,due_at,notes,source,stage_id,assignee_id,publication_id,"+
+  "start_at,follow_up_at,position,created_at,updated_at",
  singular:"task",plural:"Tasks",kicker:"Work",subtitle:"Everything in flight, by status.",icon:LayoutDashboard,
  titleField:"title",searchFields:["title","notes"],projectField:"project_id",groupBy:"status",
  defaultSort:{key:"created_at",dir:"desc"},defaultLayout:"board",layouts:["board","table"],
@@ -47,7 +48,11 @@ export const tasks:EntityDef={
   {key:"title",kind:"text",label:"Title",required:true,create:true,card:"title",table:4,sort:true,placeholder:"What needs doing?"},
   {key:"status",kind:"enum",label:"Status",options:TASK_STATUS,tone:stageTone,card:"badge",table:1,filter:true,sort:true},
   {key:"priority",kind:"enum",label:"Priority",options:PRIORITY,tone:priorityTone,create:true,card:"accent",table:1,filter:true,sort:true},
+  {key:"assignee_id",kind:"person",label:"Assigned to",create:true,card:"meta",table:2},
+  {key:"publication_id",kind:"publication",label:"Linked paper",create:true,table:2},
+  {key:"start_at",kind:"date",label:"Start",time:true,buckets:true,table:1,filter:true,sort:true},
   {key:"due_at",kind:"date",label:"Due",buckets:true,create:true,card:"footer",table:1,filter:true,sort:true},
+  {key:"follow_up_at",kind:"date",label:"Remind me to follow up",time:true,buckets:true,create:true,card:"footer",table:1,filter:true,sort:true},
   projectField,tagsField,
   {key:"notes",kind:"longtext",label:"Notes",rows:5,wide:true,placeholder:"Details, links, next steps…"},
   ...stamps,
@@ -156,12 +161,12 @@ const reminderQuickActions:QuickAction[]=[
 
 export const reminders:EntityDef={
  key:"reminders",table:"reminders",tagEntity:"reminder",
- select:"id,user_id,title,body,remind_at,done,notified_at,created_at,updated_at",
+ select:"id,user_id,title,body,remind_at,done,notified_at,project_id,task_id,person_id,created_at,updated_at",
  singular:"reminder",plural:"Reminders",kicker:"Personal",subtitle:"Set a time and the bot pings you.",icon:Bell,
- titleField:"title",searchFields:["title","body"],projectField:null,groupBy:"bucket",
+ titleField:"title",searchFields:["title","body"],projectField:"project_id",groupBy:"bucket",
  defaultSort:{key:"remind_at",dir:"asc"},defaultLayout:"board",layouts:["board","table"],
  openWhen:r=>!r.done,
- newDefaults:({userId})=>({user_id:userId,done:false}),
+ newDefaults:({userId,projectId})=>({user_id:userId,done:false,project_id:projectId}),
  quickActions:reminderQuickActions,
  fields:[
   {key:"title",kind:"text",label:"Title",required:true,create:true,card:"title",table:4,sort:true,placeholder:"What should I remember?"},
@@ -170,6 +175,7 @@ export const reminders:EntityDef={
    derive:(r:Row)=>{if(r.done)return "Done";if(!r.remind_at)return "No date";const d=dayDelta(r.remind_at);return d<0?"Overdue":d===0?"Today":"Upcoming"}},
   {key:"remind_at",kind:"date",label:"Remind me at",time:true,buckets:true,create:true,card:"footer",table:2,filter:true,sort:true},
   {key:"done",kind:"bool",label:"Done",trueLabel:"Completed",card:"accent",table:1,filter:true},
+  projectField,
   tagsField,
   {key:"body",kind:"longtext",label:"Details",rows:4,create:true,card:"subtitle",table:3,wide:true},
   {key:"notified_at",kind:"stamp",label:"Notified",table:1},
@@ -179,18 +185,19 @@ export const reminders:EntityDef={
 
 export const reads:EntityDef={
  key:"reads",table:"reads",tagEntity:"read",
- select:"id,user_id,url,title,notes,read_at,created_at,updated_at",
+ select:"id,user_id,url,title,notes,read_at,project_id,created_at,updated_at",
  singular:"read",plural:"Reads",kicker:"Personal",subtitle:"Links saved from Telegram and the web.",icon:BookMarked,
- titleField:"title",searchFields:["title","url","notes"],projectField:null,groupBy:"state",
+ titleField:"title",searchFields:["title","url","notes"],projectField:"project_id",groupBy:"state",
  defaultSort:{key:"created_at",dir:"desc"},defaultLayout:"table",layouts:["table","board"],
  openWhen:r=>!r.read_at,
- newDefaults:({userId})=>({user_id:userId}),
+ newDefaults:({userId,projectId})=>({user_id:userId,project_id:projectId}),
  fields:[
   {key:"title",kind:"text",label:"Title",create:true,card:"title",table:4,sort:true,placeholder:"Optional — falls back to the URL"},
   {key:"url",kind:"url",label:"URL",required:true,create:true,card:"subtitle",table:2},
   {key:"state",kind:"enum",label:"State",options:READ_GROUP,tone:stageTone,card:"badge",
    derive:(r:Row)=>r.read_at?"Read":"Unread"},
   {key:"read_at",kind:"date",label:"Read at",time:true,buckets:true,card:"footer",table:1,filter:true,sort:true},
+  projectField,
   tagsField,
   {key:"notes",kind:"longtext",label:"Notes",rows:5,create:true,wide:true},
   ...stamps,

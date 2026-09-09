@@ -6,6 +6,7 @@ import { formatDate } from "../../lib/format";
 import { FieldInput } from "./FieldInput";
 import { GmailLinkPicker } from "./GmailLinkPicker";
 import { useEntityCtx } from "./ctx";
+import { PublicationWorkflow } from "../publications/PublicationWorkflow";
 import type { EntityDef, FieldDef, Row } from "../../entities/types";
 
 /** Non-modal side panel: the board stays interactive, so you can click straight from one
@@ -66,6 +67,7 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
        onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
     </div>
    </div>)}
+   {def.key==="publications"&&<PublicationWorkflow publicationId={row.id}/>} 
   </div>
   <footer className="drawer-foot">
    <div className="stamp-row">

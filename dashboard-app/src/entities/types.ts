@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 
 export type Row={id:string}&Record<string,any>;
 export type EntityKey="tasks"|"publications"|"documents"|"jobs"|"reminders"|"reads"|"opportunities";
-export type TagEntity="task"|"publication"|"document"|"job_application"|"reminder"|"read"|"opportunity";
+export type TagEntity="task"|"publication"|"document"|"job_application"|"reminder"|"read"|"opportunity"|"project";
 export type Layout="board"|"table";
 /** Where a field lands on a board card. */
 export type CardSlot="accent"|"title"|"subtitle"|"badge"|"meta"|"footer";
@@ -46,6 +46,8 @@ export type FieldDef=
       *  with this default search query. See components/entity/GmailLinkPicker. */
      gmailSearch?:(row:Row)=>string})
  | (FieldBase&{kind:"project"})
+ | (FieldBase&{kind:"person"})
+ | (FieldBase&{kind:"publication"})
  | (FieldBase&{kind:"tags"})
  | (FieldBase&{kind:"bool";trueLabel?:string})
  | (FieldBase&{kind:"stamp"});
