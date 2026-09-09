@@ -45,7 +45,7 @@ export function CommandPalette(){
      out.push({id:`find:${key}:${row.id}`,group:def.plural,
       label:def.searchFields.map(f=>String(row[f]??"").trim()).find(Boolean)||`Untitled ${def.singular}`,
       hint:def.singular,icon:def.icon,
-      run:()=>{ui.setView(key as ViewKey);ui.openDrawer(key as EntityKey,row.id)}});
+      run:()=>{if(key==="publications")ui.openPublication(row.id);else{ui.setView(key as ViewKey);ui.openDrawer(key as EntityKey,row.id)}}});
    }
   }
   return out;

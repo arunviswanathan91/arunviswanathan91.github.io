@@ -10,34 +10,45 @@ import type { ViewKey } from "../lib/store";
 const DUE_FIELDS:Partial<Record<EntityKey,string>>={tasks:"due_at",publications:"due_at",jobs:"deadline",reminders:"remind_at",opportunities:"deadline"};
 
 export function HomeView(){
- const {tables}=useData();
+ const {tables,projects}=useData();
  const ui=useUi();
 
- const stats=ENTITY_ORDER.map(key=>{
+ const visibleKeys=ui.scope==="all"?ENTITY_ORDER:ENTITY_ORDER.filter(key=>Boolean(ENTITIES[key].projectField));
+ const scopedRows=(key:EntityKey)=>{
   const def=ENTITIES[key],rows=tables[key].rows;
+  return def.projectField&&ui.scope!=="all"?rows.filter(row=>(row[def.projectField!]??null)===ui.scope):rows;
+ };
+ const stats=visibleKeys.map(key=>{
+  const def=ENTITIES[key],rows=scopedRows(key);
   return {key,def,open:def.openWhen?rows.filter(def.openWhen).length:rows.length,total:rows.length};
  });
 
  // Everything with a date, still open, soonest first — the one list worth waking up to.
  const upcoming=useMemo(()=>{
   const out:{key:EntityKey;row:Row;due:string}[]=[];
-  for(const key of ENTITY_ORDER){
+  for(const key of visibleKeys){
    const field=DUE_FIELDS[key];if(!field)continue;
    const def=ENTITIES[key];
-   for(const row of tables[key].rows){
+   for(const row of scopedRows(key)){
     if(def.openWhen&&!def.openWhen(row))continue;
     if(row[field])out.push({key,row,due:row[field]});
    }
   }
   return out.sort((a,b)=>a.due.localeCompare(b.due)).slice(0,10);
- },[tables]);
+ },[tables,ui.scope]);
+
+ const project=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;
+ const isInbox=ui.scope===null;
+ const heading=isInbox?"Inbox":project?project.name:"Command center";
+ const subtitle=isInbox?"Items captured without a project, ready for you to organise.":
+  project?"Open work assigned to this project.":"Everything open across the workspace.";
 
  return <div className="entity-view">
   <div className="view-head">
    <div>
     <p className="kicker">{new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</p>
-    <h1>Command center</h1>
-    <p className="subtitle">Everything open across the workspace.</p>
+    <h1>{heading}</h1>
+    <p className="subtitle">{subtitle}</p>
    </div>
   </div>
 
@@ -57,14 +68,16 @@ export function HomeView(){
      {upcoming.map(({key,row,due})=>{
       const def=ENTITIES[key];
       const title=def.searchFields.map(f=>String(row[f]??"").trim()).find(Boolean)||`Untitled ${def.singular}`;
-      return <button key={key+row.id} className="due-row" onClick={()=>{ui.setView(key as ViewKey);ui.openDrawer(key,row.id)}}>
+      return <button key={key+row.id} className="due-row" onClick={()=>{
+       if(key==="publications")ui.openPublication(row.id);else{ui.setView(key as ViewKey);ui.openDrawer(key,row.id)}
+      }}>
        <def.icon/>
        <span className="clamp-1">{title}</span>
        <Badge text={def.singular} tone="dim"/>
        <small className={isOverdue(due)?"overdue":""}>{formatDate(due)}</small>
       </button>;
      })}
-     {!upcoming.length&&<p className="muted-note">Nothing scheduled. Add a due date to see it here.</p>}
+     {!upcoming.length&&<p className="muted-note">{isInbox?"No unassigned items have a due date.":"Nothing scheduled. Add a due date to see it here."}</p>}
     </div>
    </article>
 
@@ -73,7 +86,7 @@ export function HomeView(){
     <ol>
      <li><code>/add</code> a task, <code>/job</code> an application, <code>/remind</code> yourself.</li>
      <li>Share any link and confirm to save it to Reads.</li>
-     <li>Everything lands straight in this workspace.</li>
+     <li>Anything without a <code>#Project</code> tag lands in Inbox until you assign it.</li>
     </ol>
     <div className="bot-command"><Send/><code>/add Review draft #Project</code></div>
    </aside>

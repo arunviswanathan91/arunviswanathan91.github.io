@@ -11,6 +11,7 @@ import { EntityView } from "./entity/EntityView";
 import { CommandPalette } from "./CommandPalette";
 import { ProjectComposer } from "./ProjectComposer";
 import { ProjectView } from "./projects/ProjectView";
+import { PublicationView } from "./publications/PublicationView";
 import type { EntityKey } from "../entities/types";
 
 function Shell(){
@@ -38,7 +39,9 @@ function Shell(){
  };
 
  const currentProject=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;
- const title=ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="project"?(currentProject?.name??"Project"):ENTITIES[ui.view as EntityKey].plural;
+ const currentPublication=ui.publicationId?tables.publications.byId.get(ui.publicationId):null;
+ const title=ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="project"?(currentProject?.name??"Project"):
+  ui.view==="publication"?(String(currentPublication?.title??"")||"Publication"):ENTITIES[ui.view as EntityKey].plural;
 
  return <div className="shell">
   {navOpen&&<div className="nav-scrim" onClick={()=>setNavOpen(false)}/>}
@@ -66,6 +69,7 @@ function Shell(){
      :ui.view==="home"?<HomeView/>
      :ui.view==="settings"?<SettingsView/>
      :ui.view==="project"&&typeof ui.scope==="string"?<ProjectView projectId={ui.scope}/>
+     :ui.view==="publication"&&ui.publicationId?<PublicationView publicationId={ui.publicationId}/>
      :<EntityView key={ui.view} def={ENTITIES[ui.view as EntityKey]}/>} 
    </div>
   </main>

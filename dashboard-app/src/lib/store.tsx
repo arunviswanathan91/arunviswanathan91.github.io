@@ -35,7 +35,7 @@ export interface PublicationNode extends Row{
 export interface PublicationStageEvent extends Row{
  id:string;publication_id:string;from_stage:string|null;to_stage:string;created_at:string;
 }
-export type ViewKey=EntityKey|"home"|"project"|"settings";
+export type ViewKey=EntityKey|"home"|"project"|"publication"|"settings";
 export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
 
@@ -63,6 +63,7 @@ interface DataValue{
 }
 interface UiValue{
  view:ViewKey;setView(v:ViewKey):void;openProject(id:string):void;
+ publicationId:string|null;openPublication(id:string):void;
  scope:Scope;setScope(s:Scope):void;
  queries:Record<EntityKey,Query>;
  setQuery(k:EntityKey,patch:Partial<Query>):void;
@@ -88,12 +89,14 @@ export function applyTheme(theme:Theme){
  if(theme==="system")el.removeAttribute("data-theme"); else el.setAttribute("data-theme",theme);
 }
 
-const initialRoute=():{view:ViewKey;scope:Scope}=>{
+const initialRoute=():{view:ViewKey;scope:Scope;publicationId:string|null}=>{
  const hash=location.hash.replace(/^#\/?/,"");
  const project=hash.match(/^project\/([0-9a-f-]+)$/i);
- if(project)return {view:"project",scope:project[1]};
+ if(project)return {view:"project",scope:project[1],publicationId:null};
+ const publication=hash.match(/^publication\/([0-9a-f-]+)$/i);
+ if(publication)return {view:"publication",scope:"all",publicationId:publication[1]};
  const view=(hash&&(hash==="home"||hash==="settings"||ENTITY_ORDER.includes(hash as EntityKey))?hash:"home") as ViewKey;
- return {view,scope:"all"};
+ return {view,scope:"all",publicationId:null};
 };
 
 export function StoreProvider({userId,children}:{userId:string;children:ReactNode}){
@@ -144,7 +147,7 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   for(const key of ENTITY_ORDER){const t=tables[key];if(t.error)all.push({key,message:t.error,dismiss:t.dismissError})}
   if(projects.error)all.push({key:"projects",message:projects.error,dismiss:projects.dismissError});
   for(const [key,t] of [["people",people],["project stages",projectStages],["project links",projectLinks],
-   ["project fields",projectFields],["publication nodes",publicationNodes],["publication history",publicationStageEvents]] as const)
+   ["project fields",projectFields],["publication nodes",publicationNodes]] as const)
    if(t.error)all.push({key,message:t.error,dismiss:t.dismissError});
   if(tags.error)all.push({key:"tags",message:tags.error,dismiss:tags.dismissError});
   return all;
@@ -173,6 +176,7 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  const initial=initialRoute();
  const [view,setViewState]=useState<ViewKey>(initial.view);
  const [scope,setScope]=useState<Scope>(initial.scope);
+ const [publicationId,setPublicationId]=useState<string|null>(initial.publicationId);
  const [drawer,setDrawer]=useState<{entity:EntityKey;id:string}|null>(null);
  const [selection,setSelectionState]=useState<{entity:EntityKey|null;ids:string[]}>({entity:null,ids:[]});
  const [palette,setPalette]=useState(false);
@@ -185,17 +189,23 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   return base;
  });
 
- const setView=useCallback((v:ViewKey)=>{setViewState(v);location.hash="/"+v;setSelectionState({entity:null,ids:[]})},[]);
- const openProject=useCallback((id:string)=>{
-  setScope(id);setViewState("project");location.hash="/project/"+id;setSelectionState({entity:null,ids:[]});
+ const setView=useCallback((v:ViewKey)=>{
+  setViewState(v);if(v!=="publication")setPublicationId(null);
+  location.hash="/"+v;setSelectionState({entity:null,ids:[]});
  },[]);
- useEffect(()=>{const onHash=()=>{const route=initialRoute();setViewState(route.view);if(route.view==="project")setScope(route.scope)};
+ const openProject=useCallback((id:string)=>{
+  setScope(id);setPublicationId(null);setViewState("project");location.hash="/project/"+id;setSelectionState({entity:null,ids:[]});
+ },[]);
+ const openPublication=useCallback((id:string)=>{
+  setPublicationId(id);setViewState("publication");location.hash="/publication/"+id;setSelectionState({entity:null,ids:[]});
+ },[]);
+ useEffect(()=>{const onHash=()=>{const route=initialRoute();setViewState(route.view);setPublicationId(route.publicationId);if(route.view==="project")setScope(route.scope)};
   window.addEventListener("hashchange",onHash);return()=>window.removeEventListener("hashchange",onHash)},[]);
 
  // Navigation is an explicit freshness boundary. This removes the old need to
  // reload after Telegram or another tab changed a row less than 15 seconds ago.
  useEffect(()=>{
-  if(view==="project"){
+  if(view==="project"||view==="publication"){
    void tasks.refetch(true);void publications.refetch(true);void documents.refetch(true);void reminders.refetch(true);void reads.refetch(true);
    void projects.refetch(true);void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
    void projectFields.refetch(true);void publicationNodes.refetch(true);void publicationStageEvents.refetch(true);
@@ -224,9 +234,9 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   return {entity,ids:s.ids.includes(id)?s.ids.filter(x=>x!==id):[...s.ids,id]};
  }),[]);
 
- const uiValue=useMemo(()=>({view,setView,openProject,scope,setScope,queries,setQuery,drawer,openDrawer,closeDrawer,
+ const uiValue=useMemo(()=>({view,setView,openProject,publicationId,openPublication,scope,setScope,queries,setQuery,drawer,openDrawer,closeDrawer,
   selection,toggleSelect,setSelection,clearSelection,palette,setPalette,theme,setTheme,searchRef}),
-  [view,setView,openProject,scope,queries,setQuery,drawer,openDrawer,closeDrawer,selection,toggleSelect,setSelection,clearSelection,palette,theme,setTheme]);
+  [view,setView,openProject,publicationId,openPublication,scope,queries,setQuery,drawer,openDrawer,closeDrawer,selection,toggleSelect,setSelection,clearSelection,palette,theme,setTheme]);
 
  return <Data.Provider value={dataValue}><Ui.Provider value={uiValue}>{children}</Ui.Provider></Data.Provider>;
 }
