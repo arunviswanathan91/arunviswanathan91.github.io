@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { fromInput, toInput } from "../../lib/format";
 import { EnumSelect } from "../ui/EnumSelect";
 import { TagEditor } from "../ui/TagChips";
-import type { FieldDef } from "../../entities/types";
-import type { Project } from "../../lib/store";
+import type { FieldDef, Row } from "../../entities/types";
+import type { Person, Project } from "../../lib/store";
 import type { Tag } from "../../lib/tags";
 
 export interface InputCtx{
  projects:Project[];
+ people:Person[];
+ publications:Row[];
  tags:Tag[];
  createTag(name:string):Promise<Tag|null>;
 }
@@ -45,6 +47,18 @@ export function FieldInput({field,value,onCommit,ctx,compact,autoFocus}:{
     <option value="">Inbox (no project)</option>
     {ctx.projects.filter(p=>p.status==="Active"||p.id===value).map(p=>
      <option key={p.id} value={p.id}>{p.name}{p.status==="Archived"?" (archived)":""}</option>)}
+   </select>;
+  case "person":
+   return <select className={cls} value={value??""} aria-label={field.label}
+    onClick={e=>e.stopPropagation()} onChange={e=>onCommit(e.target.value||null)}>
+    <option value="">Unassigned</option>
+    {ctx.people.map(p=><option key={p.id} value={p.id}>{p.name}{p.role?` · ${p.role}`:""}</option>)}
+   </select>;
+  case "publication":
+   return <select className={cls} value={value??""} aria-label={field.label}
+    onClick={e=>e.stopPropagation()} onChange={e=>onCommit(e.target.value||null)}>
+    <option value="">No linked paper</option>
+    {ctx.publications.map(p=><option key={p.id} value={p.id}>{String(p.title||"Untitled publication")}</option>)}
    </select>;
   case "tags":{
    const selected:string[]=Array.isArray(value)?value:[];

@@ -10,6 +10,7 @@ import { SettingsView } from "./SettingsView";
 import { EntityView } from "./entity/EntityView";
 import { CommandPalette } from "./CommandPalette";
 import { ProjectComposer } from "./ProjectComposer";
+import { ProjectView } from "./projects/ProjectView";
 import type { EntityKey } from "../entities/types";
 
 function Shell(){
@@ -33,10 +34,11 @@ function Shell(){
  const createProject=async(values:{name:string;description:string|null;color:string|null})=>{
   const row=await projects.insert({user_id:userId,status:"Active",...values});
   setProjectComposer(false);
-  if(row)ui.setScope(row.id);
+  if(row)ui.openProject(row.id);
  };
 
- const title=ui.view==="home"?"Home":ui.view==="settings"?"Settings":ENTITIES[ui.view as EntityKey].plural;
+ const currentProject=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;
+ const title=ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="project"?(currentProject?.name??"Project"):ENTITIES[ui.view as EntityKey].plural;
 
  return <div className="shell">
   {navOpen&&<div className="nav-scrim" onClick={()=>setNavOpen(false)}/>}
@@ -63,7 +65,8 @@ function Shell(){
      ?<div className="skeleton-stack">{Array.from({length:5}).map((_,i)=><div className="skeleton" key={i}/>)}</div>
      :ui.view==="home"?<HomeView/>
      :ui.view==="settings"?<SettingsView/>
-     :<EntityView key={ui.view} def={ENTITIES[ui.view as EntityKey]}/>}
+     :ui.view==="project"&&typeof ui.scope==="string"?<ProjectView projectId={ui.scope}/>
+     :<EntityView key={ui.view} def={ENTITIES[ui.view as EntityKey]}/>} 
    </div>
   </main>
 

@@ -3,7 +3,7 @@
 
 export type EntityKey="tasks"|"publications"|"documents"|"jobs"|"reminders"|"reads";
 export type TagEntity="task"|"publication"|"document"|"job_application"|"reminder"|"read";
-export type FieldKind="text"|"enum"|"date"|"url"|"project";
+export type FieldKind="text"|"enum"|"date"|"url"|"project"|"person"|"publication";
 
 export interface BotField{
  key:string;
@@ -51,6 +51,9 @@ export const ENTITIES:Record<EntityKey,BotEntity>={
    {key:"status",kind:"enum",aliases:["status","stage"],options:TASK_STATUS},
    {key:"priority",kind:"enum",aliases:["priority","p"],options:PRIORITY},
    {key:"due_at",kind:"date",aliases:["due","by","when"]},
+   {key:"follow_up_at",kind:"date",aliases:["followup","follow-up","remind"]},
+   {key:"assignee_id",kind:"person",aliases:["assign","assignee","person","to"]},
+   {key:"publication_id",kind:"publication",aliases:["paper","publication"]},
    {key:"notes",kind:"text",aliases:["note","notes","detail","details"]},
    {key:"project_id",kind:"project",aliases:["project"]},
   ],
@@ -105,24 +108,26 @@ export const ENTITIES:Record<EntityKey,BotEntity>={
  },
  reminders:{
   key:"reminders",table:"reminders",command:"/remind",singular:"reminder",tagEntity:"reminder",
-  titleField:"title",searchFields:["title","body"],projectField:null,
+  titleField:"title",searchFields:["title","body"],projectField:"project_id",
   dateField:"remind_at",priorityField:null,stageField:null,stageOptions:[],
   openFilter:{column:"done",eq:false},
   fields:[
    {key:"title",kind:"text",aliases:["title"]},
    {key:"remind_at",kind:"date",aliases:["due","when","at","by"],time:true},
    {key:"body",kind:"text",aliases:["note","notes","body","detail","details"]},
+   {key:"project_id",kind:"project",aliases:["project"]},
   ],
  },
  reads:{
   key:"reads",table:"reads",command:"/read",singular:"read",tagEntity:"read",
-  titleField:"title",searchFields:["title","url","notes"],projectField:null,
+  titleField:"title",searchFields:["title","url","notes"],projectField:"project_id",
   dateField:"read_at",priorityField:null,stageField:null,stageOptions:[],
   openFilter:{column:"read_at",eq:null},
   fields:[
    {key:"title",kind:"text",aliases:["title","name"]},
    {key:"url",kind:"url",aliases:["url","link"]},
    {key:"notes",kind:"text",aliases:["note","notes"]},
+   {key:"project_id",kind:"project",aliases:["project"]},
   ],
  },
 };

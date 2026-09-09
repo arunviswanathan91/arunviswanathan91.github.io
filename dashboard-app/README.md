@@ -16,11 +16,14 @@ than hand-built:
 - **Bulk actions** — multi-select, then change stage, reassign project, add/remove tags or delete.
 - **Keyboard** — `Ctrl/Cmd-K` command palette (jump, create, or find any record across every
   module), `n` new, `/` search, `Esc` to close.
-- **Projects** with colours, full create/rename/archive/delete, driving a global project scope.
+- **Scientific project workspaces** with an overview, custom fields and links, a configurable work
+  board, private people/assignees, project Reads, and direct or tag-related publications.
+- **Custom paper journeys** — every publication can have its own ordered tracking nodes in addition
+  to the canonical editorial stage used by the main Publications board.
 - **Managed tags** with colours, shared across all six modules.
 - **Light and dark themes**, following the OS by default with a manual override.
-- **Telegram bot** — linking flow, `/add`, `/today`, `/done`, `/job`, `/remind`, and link capture
-  with an "add this to Reads?" confirmation, plus push notifications for due reminders.
+- **Telegram bot** — linking flow, `/add`, `/today`, `/done`, `/job`, `/remind`, and project-aware
+  link capture, plus private follow-up notifications for work assigned to your contact labels.
 - **Gmail link picker** (optional) — search your inbox read-only from any URL field's drawer and
   turn a picked result into a permalink, instead of hunting for and pasting a Gmail link by hand.
 - Supabase schema with Row Level Security throughout.
@@ -48,7 +51,9 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local environment. T
 
 ## Supabase setup
 
-1. Paste the full `supabase/schema.sql` into the Supabase SQL editor and run it. Every statement is idempotent (`if not exists` / guarded `create type` / `drop policy if exists`), so re-running the whole file after a future change is always safe.
+1. Paste the full `supabase/schema.sql` into the Supabase SQL editor and run it **before deploying a
+   dashboard commit that adds new fields**. Every statement is idempotent (`if not exists` / guarded
+   `create type` / `drop policy if exists`), so re-running the whole file after a future change is safe.
 2. In Database → Extensions, enable `pg_cron` and `pg_net` (needed for reminder push notifications).
 3. Store `CRON_SWEEP_SECRET` (a random string you generate) in Supabase Vault, e.g. `select vault.create_secret('<value>', 'cron_sweep_secret');`.
 4. Deploy the Edge Functions and set their secrets:
@@ -138,6 +143,8 @@ The bot can reach every module and every field, using one token vocabulary every
 | `@project` | assign a project (quote if spaced) | `@Thesis`, `@"Big Project"` |
 | `!high` | priority — high/medium/low | `!high` |
 | `due:<when>` | a date: `friday`, `tomorrow 9am`, `2026-03-03`, `3/5` | `due:friday` |
+| `followup:<when>` | remind only you to follow up on a task | `followup:thursday` |
+| `assign:<name>` | use a private person entry as the assignee | `assign:Maya` |
 | `in 2h` | relative time — m/h/d/w | `in 30m` |
 | `field:value` | any other column | `venue:Nature`, `doi:10.1/x`, `org:Acme`, `note:"call first"` |
 
@@ -153,6 +160,11 @@ no tokens is saved as a note rather than discarded.
 
 Dates resolve in the time zone on your profile (set automatically from the browser, editable in
 Settings) — without it, `due:friday` would land in UTC.
+
+A bare shared link now asks whether it belongs in Inbox or one of your active projects. You can skip
+the question by including the project: `/read https://example.com @Thesis`. People are private
+address-book records, not authenticated members; neither the app nor the bot contacts them. A task's
+`follow_up_at` creates a linked reminder that Telegram sends only to the workspace owner.
 
 ## Opportunities (discovery pipeline)
 

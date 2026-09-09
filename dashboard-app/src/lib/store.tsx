@@ -11,19 +11,44 @@ import type { TagStore } from "./tags";
 import type { Query, Scope } from "./query";
 import type { EntityKey, Row } from "../entities/types";
 
-export interface Project extends Row{id:string;name:string;description:string|null;status:string;color:string|null;created_at:string}
-export type ViewKey=EntityKey|"home"|"settings";
+export interface Project extends Row{
+ id:string;name:string;description:string|null;objective:string|null;status:string;phase:string;
+ color:string|null;start_date:string|null;target_date:string|null;created_at:string;updated_at:string;
+}
+export interface Person extends Row{
+ id:string;name:string;role:string|null;organization:string|null;email:string|null;
+ telegram_handle:string|null;notes:string|null;created_at:string;updated_at:string;
+}
+export interface ProjectStage extends Row{
+ id:string;project_id:string;name:string;color:string|null;position:number;category:string;created_at:string;updated_at:string;
+}
+export interface ProjectLink extends Row{
+ id:string;project_id:string;label:string;url:string;kind:string|null;position:number;created_at:string;updated_at:string;
+}
+export interface ProjectField extends Row{
+ id:string;project_id:string;label:string;value:string|null;field_type:string;position:number;created_at:string;updated_at:string;
+}
+export interface PublicationNode extends Row{
+ id:string;publication_id:string;title:string;status:string;assignee_id:string|null;due_at:string|null;
+ position:number;notes:string|null;completed_at:string|null;created_at:string;updated_at:string;
+}
+export type ViewKey=EntityKey|"home"|"project"|"settings";
 export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
 
-const PROJECT_SELECT="id,user_id,name,description,status,color,created_at";
+const PROJECT_SELECT="id,user_id,name,description,objective,status,phase,color,start_date,target_date,created_at,updated_at";
 /** Entity tables carrying a project_id, repaired locally when a project is deleted. */
-const PROJECT_SCOPED:EntityKey[]=["tasks","publications","documents","jobs"];
+const PROJECT_SCOPED:EntityKey[]=["tasks","publications","documents","jobs","reminders","reads"];
 
 interface DataValue{
  userId:string;
  tables:Record<EntityKey,TableStore>;
  projects:TableStore<Project>;
+ people:TableStore<Person>;
+ projectStages:TableStore<ProjectStage>;
+ projectLinks:TableStore<ProjectLink>;
+ projectFields:TableStore<ProjectField>;
+ publicationNodes:TableStore<PublicationNode>;
  tags:TagStore;
  loading:boolean;
  notices:NoticeItem[];
@@ -33,7 +58,7 @@ interface DataValue{
  deleteProject(id:string):Promise<void>;
 }
 interface UiValue{
- view:ViewKey;setView(v:ViewKey):void;
+ view:ViewKey;setView(v:ViewKey):void;openProject(id:string):void;
  scope:Scope;setScope(s:Scope):void;
  queries:Record<EntityKey,Query>;
  setQuery(k:EntityKey,patch:Partial<Query>):void;
@@ -59,9 +84,12 @@ export function applyTheme(theme:Theme){
  if(theme==="system")el.removeAttribute("data-theme"); else el.setAttribute("data-theme",theme);
 }
 
-const initialView=():ViewKey=>{
+const initialRoute=():{view:ViewKey;scope:Scope}=>{
  const hash=location.hash.replace(/^#\/?/,"");
- return (hash&&(hash==="home"||hash==="settings"||ENTITY_ORDER.includes(hash as EntityKey))?hash:"home") as ViewKey;
+ const project=hash.match(/^project\/([0-9a-f-]+)$/i);
+ if(project)return {view:"project",scope:project[1]};
+ const view=(hash&&(hash==="home"||hash==="settings"||ENTITY_ORDER.includes(hash as EntityKey))?hash:"home") as ViewKey;
+ return {view,scope:"all"};
 };
 
 export function StoreProvider({userId,children}:{userId:string;children:ReactNode}){
@@ -73,6 +101,11 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  const reads=useTable(ENTITIES.reads.table,ENTITIES.reads.select,ENTITIES.reads.defaultSort);
  const opportunities=useTable(ENTITIES.opportunities.table,ENTITIES.opportunities.select,ENTITIES.opportunities.defaultSort);
  const projects=useTable<Project>("projects",PROJECT_SELECT,{key:"name",dir:"asc"});
+ const people=useTable<Person>("people","id,user_id,name,role,organization,email,telegram_handle,notes,created_at,updated_at",{key:"name",dir:"asc"});
+ const projectStages=useTable<ProjectStage>("project_stages","id,user_id,project_id,name,color,position,category,created_at,updated_at",{key:"position",dir:"asc"});
+ const projectLinks=useTable<ProjectLink>("project_links","id,user_id,project_id,label,url,kind,position,created_at,updated_at",{key:"position",dir:"asc"});
+ const projectFields=useTable<ProjectField>("project_fields","id,user_id,project_id,label,value,field_type,position,created_at,updated_at",{key:"position",dir:"asc"});
+ const publicationNodes=useTable<PublicationNode>("publication_nodes","id,user_id,publication_id,title,status,assignee_id,due_at,position,notes,completed_at,created_at,updated_at",{key:"position",dir:"asc"});
  const tags=useTags(userId);
 
  const tables=useMemo(()=>({tasks,publications,documents,jobs,reminders,reads,opportunities}),
@@ -98,20 +131,26 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   })();
  },[userId,refreshTelegram]);
 
- const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||opportunities.loading||projects.loading||tags.loading;
+ const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||opportunities.loading||
+  projects.loading||people.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||tags.loading;
 
  const notices=useMemo(()=>{
   const all:NoticeItem[]=[];
   for(const key of ENTITY_ORDER){const t=tables[key];if(t.error)all.push({key,message:t.error,dismiss:t.dismissError})}
   if(projects.error)all.push({key:"projects",message:projects.error,dismiss:projects.dismissError});
+  for(const [key,t] of [["people",people],["project stages",projectStages],["project links",projectLinks],
+   ["project fields",projectFields],["publication nodes",publicationNodes]] as const)
+   if(t.error)all.push({key,message:t.error,dismiss:t.dismissError});
   if(tags.error)all.push({key:"tags",message:tags.error,dismiss:tags.dismissError});
   return all;
- },[tables,projects.error,projects.dismissError,tags.error,tags.dismissError]);
+ },[tables,projects.error,projects.dismissError,people,projectStages,projectLinks,projectFields,publicationNodes,tags.error,tags.dismissError]);
 
  const refreshAll=useCallback(()=>{
   for(const key of ENTITY_ORDER)void tables[key].refetch(true);
   void projects.refetch(true);
- },[tables,projects]);
+  void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
+  void projectFields.refetch(true);void publicationNodes.refetch(true);
+ },[tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes]);
 
  // The DB nulls these FKs via `on delete set null`; mirror it locally so rows don't
  // silently disappear from every board until the next reload.
@@ -121,12 +160,14 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
    tables[key].patchLocal(r=>r.project_id===id?{...r,project_id:null}:null);
  },[projects,tables]);
 
- const dataValue=useMemo(()=>({userId,tables,projects,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject}),
-  [userId,tables,projects,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject]);
+ const dataValue=useMemo(()=>({userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,
+  tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject}),
+  [userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject]);
 
  // ---- UI state ----
- const [view,setViewState]=useState<ViewKey>(initialView);
- const [scope,setScope]=useState<Scope>("all");
+ const initial=initialRoute();
+ const [view,setViewState]=useState<ViewKey>(initial.view);
+ const [scope,setScope]=useState<Scope>(initial.scope);
  const [drawer,setDrawer]=useState<{entity:EntityKey;id:string}|null>(null);
  const [selection,setSelectionState]=useState<{entity:EntityKey|null;ids:string[]}>({entity:null,ids:[]});
  const [palette,setPalette]=useState(false);
@@ -140,7 +181,22 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  });
 
  const setView=useCallback((v:ViewKey)=>{setViewState(v);location.hash="/"+v;setSelectionState({entity:null,ids:[]})},[]);
- useEffect(()=>{const onHash=()=>setViewState(initialView());window.addEventListener("hashchange",onHash);return()=>window.removeEventListener("hashchange",onHash)},[]);
+ const openProject=useCallback((id:string)=>{
+  setScope(id);setViewState("project");location.hash="/project/"+id;setSelectionState({entity:null,ids:[]});
+ },[]);
+ useEffect(()=>{const onHash=()=>{const route=initialRoute();setViewState(route.view);if(route.view==="project")setScope(route.scope)};
+  window.addEventListener("hashchange",onHash);return()=>window.removeEventListener("hashchange",onHash)},[]);
+
+ // Navigation is an explicit freshness boundary. This removes the old need to
+ // reload after Telegram or another tab changed a row less than 15 seconds ago.
+ useEffect(()=>{
+  if(view==="project"){
+   void tasks.refetch(true);void publications.refetch(true);void documents.refetch(true);void reminders.refetch(true);void reads.refetch(true);
+   void projects.refetch(true);void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
+   void projectFields.refetch(true);void publicationNodes.refetch(true);
+  }else if(ENTITY_ORDER.includes(view as EntityKey))void tables[view as EntityKey].refetch(true);
+ },[view,scope,tasks.refetch,publications.refetch,documents.refetch,reminders.refetch,reads.refetch,projects.refetch,
+  people.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch]);
 
  const setQuery=useCallback((k:EntityKey,patch:Partial<Query>)=>setQueries(v=>({...v,[k]:{...v[k],...patch}})),[]);
  useEffect(()=>{
@@ -163,9 +219,9 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   return {entity,ids:s.ids.includes(id)?s.ids.filter(x=>x!==id):[...s.ids,id]};
  }),[]);
 
- const uiValue=useMemo(()=>({view,setView,scope,setScope,queries,setQuery,drawer,openDrawer,closeDrawer,
+ const uiValue=useMemo(()=>({view,setView,openProject,scope,setScope,queries,setQuery,drawer,openDrawer,closeDrawer,
   selection,toggleSelect,setSelection,clearSelection,palette,setPalette,theme,setTheme,searchRef}),
-  [view,setView,scope,queries,setQuery,drawer,openDrawer,closeDrawer,selection,toggleSelect,setSelection,clearSelection,palette,theme,setTheme]);
+  [view,setView,openProject,scope,queries,setQuery,drawer,openDrawer,closeDrawer,selection,toggleSelect,setSelection,clearSelection,palette,theme,setTheme]);
 
  return <Data.Provider value={dataValue}><Ui.Provider value={uiValue}>{children}</Ui.Provider></Data.Provider>;
 }
