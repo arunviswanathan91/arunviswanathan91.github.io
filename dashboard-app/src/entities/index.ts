@@ -227,7 +227,7 @@ export const opportunities:EntityDef={
   "salary_display,salary_source,url,apply_url,source_count,sources_summary,summary,"+
   "next_action,notes,job_application_id,saved,created_at,updated_at",
  singular:"opportunity",plural:"Opportunities",kicker:"Career",
- subtitle:"Postdocs and research roles found overnight, ranked against your profile.",
+ subtitle:"Postdocs and research roles found nightly or on demand, ranked against your profile.",
  icon:Telescope,
  titleField:"role",
  searchFields:["role","organization","location","summary","fit_reason","notes"],

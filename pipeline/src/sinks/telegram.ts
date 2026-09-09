@@ -13,6 +13,7 @@ const FILTER_LABELS: Record<string, string> = {
  leadership_role: "senior leadership role",
  below_salary_floor: "confirmed salary below floor",
  blocked_org: "blocked organisation",
+ query_mismatch: "did not match your search",
  unknown: "other filter",
 };
 

@@ -355,6 +355,23 @@ main{min-width:0;display:flex;flex-direction:column}
 .view-head .subtitle{margin-top:2px}
 .scope-note{color:var(--text-3);font-size:var(--f-xs);font-style:italic}
 
+.discovery-search{
+ display:grid;gap:var(--s-2);padding:var(--s-3);border:1px solid var(--accent-border);
+ border-radius:var(--r-3);background:var(--accent-soft);
+}
+.discovery-heading{display:flex;align-items:flex-start;gap:var(--s-2)}
+.discovery-heading h2{font-size:var(--f-sm);font-weight:700}
+.discovery-heading p{color:var(--text-2);font-size:var(--f-xs)}
+.discovery-icon{display:grid;place-items:center;color:var(--accent);padding-top:2px}
+.discovery-form{display:flex;align-items:center;gap:var(--s-2)}
+.discovery-form .input{flex:1;min-width:0;background:var(--surface)}
+.discovery-status{min-height:17px;color:var(--text-2);font-size:var(--f-xs)}
+.discovery-done .discovery-icon,.discovery-done .discovery-status{color:var(--success)}
+.discovery-failed{border-color:var(--danger);background:var(--danger-soft)}
+.discovery-failed .discovery-icon,.discovery-failed .discovery-status{color:var(--danger)}
+.spin{animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 .data-notice{
  display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);
  padding:8px var(--s-3);border:1px solid var(--danger);border-radius:var(--r-2);
@@ -673,4 +690,6 @@ dialog::backdrop{background:var(--scrim)}
  /* Hover-only affordances have no touch equivalent, so pin them visible. */
  .card-grip{display:none}
  .card-check{display:block}
+ .discovery-form{align-items:stretch;flex-direction:column}
+ .discovery-form .primary{width:100%}
 }

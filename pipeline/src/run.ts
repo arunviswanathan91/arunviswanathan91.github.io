@@ -6,6 +6,7 @@ import { makeRenderer } from "./sources/firecrawl.js";
 import { makeAdapter } from "./sources/registry.js";
 import { SourceConfigError } from "./sources/types.js";
 import { hardFilter, scoreOpportunity } from "./score/score.js";
+import { queryRelevance } from "./score/query.js";
 import { matchCandidate, type Candidate } from "./dedupe/cascade.js";
 import { orgKey, simhash, simhashBands, titleKey } from "./dedupe/keys.js";
 import { normalizeForHash, excerpt } from "./normalize/text.js";
@@ -103,7 +104,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   if (Date.now() > deadlineAt) { degradations.push("runtime cap"); break; }
   const execution = await runSource(row, {
    db, http, renderer, profile, caps, deadlineAt, log, userId, runId,
-   dryRun: !!opts.dryRun, freshSearch,
+   dryRun: !!opts.dryRun, freshSearch, queryText,
   });
   const outcome = execution.outcome;
   bySource[row.source_key] = outcome;
@@ -142,7 +143,9 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
   if (match.candidate && !match.repost) {
    deduped++;
-   if (!opts.dryRun) await linkSource(db, userId, match.candidate.id, o, match.signal, match.confidence);
+   if (!opts.dryRun) await linkSource(
+    db, userId, match.candidate.id, o, score, match.signal, match.confidence, runId,
+   );
    // A person asking interactively wants useful current matches, including a
    // listing already found last night. Scheduled digests remain new-only.
    if (freshSearch && !summaryIds.has(match.candidate.id)) {
@@ -208,6 +211,7 @@ interface SourceCtx {
  db: Db; http: Http; renderer: ((url: string) => Promise<string | null>) | null;
  profile: SearchProfile; caps: RunCaps; deadlineAt: number;
  log: RunLogger; userId: string; runId: string | null; dryRun: boolean; freshSearch: boolean;
+ queryText: string | null;
 }
 
 async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution> {
@@ -311,8 +315,14 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution>
     base.filterReasons[reason] = (base.filterReasons[reason] ?? 0) + 1;
     continue;
    }
+   const queryVerdict = queryRelevance(o, c.queryText);
+   if (!queryVerdict.keep) {
+    base.itemsFiltered++;
+    base.filterReasons.query_mismatch = (base.filterReasons.query_mismatch ?? 0) + 1;
+    continue;
+   }
    base.itemsMatched++;
-   kept.push({ o, score: scoreOpportunity(o, c.profile) });
+   kept.push({ o, score: scoreOpportunity(o, c.profile, 0, c.queryText) });
   }
 
   // A focused interactive run must not advance the nightly cursor: its narrow
@@ -377,7 +387,8 @@ async function insertOpportunity(
 /** A second sighting adds a source row and extends the deadline, never shrinks it. */
 async function linkSource(
  db: Db, userId: string, opportunityId: string,
- o: NormalizedOpportunity, signal: string, confidence: number,
+ o: NormalizedOpportunity, score: ReturnType<typeof scoreOpportunity>,
+ signal: string, confidence: number, runId: string | null,
 ) {
  await db.client.from("opportunity_sources").upsert({
   user_id: userId, opportunity_id: opportunityId, source_key: o.sourceKey, external_id: o.externalId,
@@ -389,13 +400,39 @@ async function linkSource(
  const { count } = await db.client.from("opportunity_sources")
   .select("id", { count: "exact", head: true }).eq("opportunity_id", opportunityId);
 
- const patch: Record<string, unknown> = { last_seen_at: new Date().toISOString(), source_count: count ?? 1 };
+ const now = new Date().toISOString();
+ const patch: Record<string, unknown> = {
+  last_seen_at: now, source_count: count ?? 1,
+  match_score: score.score, fit_reason: score.reason, score_breakdown: score.breakdown,
+  ...(runId ? { run_id: runId } : {}),
+ };
+ // Same-listing matches can safely refresh presentation fields. This also
+ // repairs titles imported before repeated HTML entities were handled.
+ if (signal === "url" || signal === "ats") {
+  patch.role = o.title;
+  if (o.organization) patch.organization = o.organization;
+  if (o.locationRaw) patch.location = o.locationRaw;
+  if (o.descriptionText) {
+   patch.summary = excerpt(o.descriptionText, 400);
+   patch.description_excerpt = excerpt(o.descriptionText, 2000);
+  }
+  if (o.salary) {
+   patch.salary_min = o.salary.min;
+   patch.salary_max = o.salary.max;
+   patch.salary_currency = o.salary.currency;
+   patch.salary_period = o.salary.period;
+   patch.salary_is_predicted = o.salary.isPredicted;
+   patch.salary_annual_inr = annualInr(o.salary);
+   patch.salary_display = salaryDisplay(o.salary);
+   patch.salary_source = salarySourceLabel(o.salary);
+  }
+ }
  if (o.deadline) {
   const { data: cur } = await db.client.from("opportunities").select("deadline").eq("id", opportunityId).maybeSingle();
   const existing = cur?.deadline ? new Date(cur.deadline).getTime() : 0;
   if (new Date(o.deadline).getTime() > existing) {
    patch.deadline = o.deadline;
-   patch.last_changed_at = new Date().toISOString();
+   patch.last_changed_at = now;
   }
  }
  await db.client.from("opportunities").update(patch).eq("id", opportunityId);

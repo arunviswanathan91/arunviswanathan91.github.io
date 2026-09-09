@@ -75,7 +75,7 @@ export class Db {
  }
 
  /**
-  * Claims a queued run created by the Telegram webhook. Zero rows means the
+  * Claims a queued run created by an interactive trigger. Zero rows means the
   * token was already used, which makes the endpoint replay-safe.
   */
  async claimRun(runId: string, token: string) {
@@ -83,7 +83,7 @@ export class Db {
    .update({ status: "running", started_at: new Date().toISOString(), claim_token: null })
    .eq("id", runId).eq("claim_token", token).eq("status", "queued")
    .gt("expires_at", new Date().toISOString())
-   .select("user_id,profile_id,query,chat_id").maybeSingle();
+   .select("user_id,profile_id,query,chat_id,trigger").maybeSingle();
   return data ?? null;
  }
 

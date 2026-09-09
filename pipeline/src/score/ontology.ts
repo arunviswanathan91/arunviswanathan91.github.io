@@ -53,7 +53,7 @@ export const ONTOLOGY: Concept[] = [
    "\\bflow cytometr", "\\bfacs\\b", "\\bcytof\\b", "\\bmass cytometr",
  )},
  { id: "broad", label: "cancer biology", weight: 0.35, terms: re(
-   "\\bcancer biolog", "\\boncolog", "\\btumou?r\\b", "\\bimmunolog",
+   "\\bcancer\\b", "\\bcancer biolog", "\\boncolog", "\\btumou?r\\b", "\\bimmunolog",
    "\\btranslational research\\b", "\\bcarcinogen",
  )},
 ];

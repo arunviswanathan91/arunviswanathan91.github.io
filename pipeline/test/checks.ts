@@ -9,6 +9,7 @@ import { orgKey, titleTokens, jaccard, simhash, hamming, simhashBands } from "..
 import { matchCandidate, type Candidate } from "../src/dedupe/cascade.js";
 import { topicMatch } from "../src/score/ontology.js";
 import { hardFilter, scoreOpportunity } from "../src/score/score.js";
+import { queryRelevance } from "../src/score/query.js";
 import { buildOpportunity } from "../src/sources/build.js";
 import { parseFeed } from "../src/sources/feed.js";
 import { formatDigest } from "../src/sinks/telegram.js";
@@ -43,6 +44,7 @@ eq("no ats key for a plain page", atsKey("https://university.edu/careers/1"), nu
 
 // ---- text ----
 eq("decodes entities", decodeEntities("Tom &amp; Jerry &rsquo;s"), "Tom & Jerry 's");
+eq("decodes repeatedly escaped entities", decodeEntities("Cancer Biology &amp;amp; Epigenetics"), "Cancer Biology & Epigenetics");
 check("html to text strips tags", !htmlToText("<p>Hello <b>world</b></p>").includes("<"));
 check("boilerplate paragraph removed", !stripBoilerplate("Real paragraph.\n\nWe are an equal opportunity employer.").includes("equal opportunity"));
 check("real paragraph survives boilerplate strip", stripBoilerplate("Real paragraph.\n\nWe are an equal opportunity employer.").includes("Real paragraph"));
@@ -97,6 +99,10 @@ check("postdoc is not senior leadership", !isSeniorLeadership("Postdoctoral Fell
  eq("annualInr converts usd", annualInr({ min: 60000, max: 60000, currency: "USD", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null }), 60000 * 84);
  eq("salaryDisplay formats inr lakhs", salaryDisplay({ min: 800000, max: 1200000, currency: "INR", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null }), "₹8L–12L/yr");
  eq("salaryDisplay null salary", salaryDisplay(null), null);
+ eq("salaryDisplay ignores a zero lower bound", salaryDisplay({
+  min: 0, max: 80000, currency: "USD", period: "year", isPredicted: false,
+  extractedFrom: "api", confidence: 0.9, evidence: null,
+ }), "$80,000/yr");
 }
 
 // ---- JSON-LD ----
@@ -239,6 +245,35 @@ check("hard filter allows unknown location rather than rejecting", hardFilter(ma
 check("hard filter does not reject on a predicted salary below floor", hardFilter(makeOpp({ salary: { min: 500000, max: 500000, currency: "INR", period: "year", isPredicted: true, extractedFrom: "api", confidence: 0.3, evidence: null } }), profile).keep);
 eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ salary: { min: 500000, max: 500000, currency: "INR", period: "year", isPredicted: false, extractedFrom: "api", confidence: 0.9, evidence: null } }), profile).reason, "below_salary_floor");
 
+// An explicit interactive query is a gate as well as a ranking signal. A role
+// cannot become a match merely because its location and salary score well.
+{
+ const exact = makeOpp({});
+ const related = makeOpp({
+  title: "Postdoctoral Fellow in Cancer Metabolism",
+  descriptionText: "Study cancer metabolism and tumour biology using mouse models.",
+ });
+ const laser = makeOpp({
+  title: "Postdoc - Machine Learning for High-Energy Laser Systems",
+  descriptionText: "Develop machine learning controls for high-energy laser physics.",
+ });
+ const galaxy = makeOpp({
+  title: "Postdoctoral Researcher in Galaxy Evolution",
+  descriptionText: "Research galaxy evolution and bar dynamics using astronomical observations.",
+ });
+ check("explicit query keeps an exact pancreatic-cancer postdoc", queryRelevance(exact, "pancreatic cancer postdoc").keep);
+ check("explicit query keeps a broader cancer postdoc as a related result", queryRelevance(related, "pancreatic cancer postdoc").keep);
+ check("explicit query rejects an unrelated laser postdoc", !queryRelevance(laser, "pancreatic cancer postdoc").keep);
+ check("explicit query rejects an unrelated astronomy postdoc", !queryRelevance(galaxy, "pancreatic cancer postdoc").keep);
+ check("exact query match ranks above a broad cancer match",
+  scoreOpportunity(exact, profile, 0, "pancreatic cancer postdoc").score >
+  scoreOpportunity(related, profile, 0, "pancreatic cancer postdoc").score);
+ check("a role-only postdoc query retains broad recall", queryRelevance(laser, "postdoc").keep);
+ check("workspace query understands Bengaluru/Bangalore aliases", queryRelevance(makeOpp({
+  city: "Bengaluru", locationRaw: "Bengaluru, Karnataka, India",
+ }), "postdoc Bangalore").keep);
+}
+
 // ---- interactive search semantics ----
 {
  eq("custom query replaces unrelated profile terms with recall variants",
@@ -286,6 +321,9 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("buildOpportunity infers salary from text", built!.salary?.min === 1800000);
  check("buildOpportunity infers city/country from raw location", built!.city === "Bengaluru" && built!.country === "IN");
  check("buildOpportunity classifies opportunity type", built!.opportunityType === "Postdoc");
+ eq("buildOpportunity cleans repeatedly escaped titles", buildOpportunity({
+  sourceKey: "x", externalId: "2", url: "https://x.com/2", title: "Cancer Biology &amp;amp; Epigenetics",
+ })?.title, "Cancer Biology & Epigenetics");
  eq("buildOpportunity rejects an empty title", buildOpportunity({ sourceKey: "x", externalId: "1", url: "https://x.com", title: "  " }), null);
 }
 

@@ -1,5 +1,5 @@
 import { atsKey, canonicalizeUrl, urlHash } from "../normalize/url.js";
-import { contentHash, excerpt } from "../normalize/text.js";
+import { contentHash, excerpt, htmlToText } from "../normalize/text.js";
 import { locKey, looksRemote, normalizeCountry, parseLocation, regionOf } from "../normalize/location.js";
 import { classifyType } from "../normalize/type.js";
 import { orgKey } from "../dedupe/keys.js";
@@ -43,7 +43,7 @@ function completenessOf(o: {
 
 /** The one place a source's raw fields become the pipeline's common shape. */
 export function buildOpportunity(input: BuildInput): NormalizedOpportunity | null {
- const title = (input.title ?? "").trim();
+ const title = htmlToText(input.title ?? "").trim();
  if (!title) return null;
 
  const description = (input.description ?? "").trim();

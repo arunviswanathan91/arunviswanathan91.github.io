@@ -8,7 +8,7 @@ const PER_YEAR: Record<string, number> = { hour: 2080, day: 260, week: 52, month
 
 export function annualInr(s: SalaryEvidence | null): number | null {
  if (!s) return null;
- const value = s.max ?? s.min;
+ const value = s.max != null && s.max > 0 ? s.max : s.min != null && s.min > 0 ? s.min : null;
  if (value == null) return null;
  const rate = TO_INR[(s.currency ?? "INR").toUpperCase()];
  if (!rate) return null;
@@ -91,13 +91,16 @@ const fmt = (n: number, currency: string) =>
   : n.toLocaleString("en-US");
 
 export function salaryDisplay(s: SalaryEvidence | null): string | null {
- if (!s || (s.min == null && s.max == null)) return null;
+ if (!s) return null;
+ const min = s.min != null && s.min > 0 ? s.min : null;
+ const max = s.max != null && s.max > 0 ? s.max : null;
+ if (min == null && max == null) return null;
  const cur = s.currency ?? "";
  const sym = cur === "INR" ? "₹" : cur === "USD" ? "$" : cur === "EUR" ? "€" : cur === "GBP" ? "£" : "";
  const unit = sym || (cur ? cur + " " : "");
- const body = s.min != null && s.max != null && s.min !== s.max
-  ? `${unit}${fmt(s.min, cur)}–${fmt(s.max, cur)}`
-  : `${unit}${fmt((s.max ?? s.min)!, cur)}`;
+ const body = min != null && max != null && min !== max
+  ? `${unit}${fmt(min, cur)}–${fmt(max, cur)}`
+  : `${unit}${fmt((max ?? min)!, cur)}`;
  const per = s.period && s.period !== "year" ? `/${s.period}` : s.period === "year" ? "/yr" : "";
  return body + per + (s.isPredicted ? " (est.)" : "");
 }

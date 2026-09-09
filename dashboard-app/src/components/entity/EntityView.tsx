@@ -8,6 +8,7 @@ import { Table } from "./Table";
 import { BulkBar } from "./BulkBar";
 import { Composer } from "./Composer";
 import { Drawer } from "./Drawer";
+import { OpportunityDiscovery } from "./OpportunityDiscovery";
 import { useEntityCtx } from "./ctx";
 import type { EntityDef, FieldDef, QuickAction, Row } from "../../entities/types";
 
@@ -70,6 +71,8 @@ export function EntityView({def}:{def:EntityDef}){
     <p className="subtitle">{def.subtitle}</p>
    </div>
   </div>
+
+  {def.key==="opportunities"&&<OpportunityDiscovery onComplete={()=>void table.refetch(true)}/>}
 
   <Toolbar def={def} query={query} shown={rows.length} total={table.rows.length} tags={tags.tags}
    onChange={patch=>ui.setQuery(def.key,patch)} onNew={()=>startNew()} onRefresh={()=>void table.refetch(true)}/>

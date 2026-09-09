@@ -1,4 +1,4 @@
-import { topicMatch } from "./ontology.js";
+import { queryRelevance } from "./query.js";
 import { annualInr } from "../normalize/salary.js";
 import { isKerala, isMetro, normalizeCity } from "../normalize/location.js";
 import { isSeniorLeadership, JUNK_TITLE, requiredPostPhdYears } from "../normalize/type.js";
@@ -118,9 +118,10 @@ export function scoreOpportunity(
  o: NormalizedOpportunity,
  p: SearchProfile,
  feedbackBias = 0,
+ query: string | null = null,
 ): Scored {
- const topic = topicMatch(o.title, o.descriptionText);
- const topicValue = Math.round(45 * (1 - Math.exp(-topic.raw / 2.5)));
+ const topic = queryRelevance(o, query);
+ const topicValue = topic.value;
 
  const roleValue = ROLE_POINTS[o.opportunityType] ?? 8;
  const loc = locationScore(o, p);
@@ -144,7 +145,7 @@ export function scoreOpportunity(
  // Deterministic and always available. An LLM blurb could invent a requirement
  // the posting never made, which is worse than no explanation at all.
  const parts = [
-  `Topic ${topicValue}/45${topic.labels.length ? ` (${topic.labels.slice(0, 3).join(", ")})` : " (no overlap found)"}`,
+  `${query ? "Query" : "Topic"} ${topicValue}/45${topic.labels.length ? ` (${topic.labels.slice(0, 3).join(", ")})` : " (no overlap found)"}`,
   `Role ${roleValue}/20 ${o.opportunityType.toLowerCase()}`,
   `Location ${breakdown.location.value}/15 ${loc.note}`,
   `Salary ${comp.value}/10 ${comp.note}`,

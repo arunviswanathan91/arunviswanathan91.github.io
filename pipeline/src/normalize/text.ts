@@ -6,10 +6,18 @@ const ENTITIES: Record<string, string> = {
 };
 
 export function decodeEntities(s: string): string {
- return s
-  .replace(/&#x([0-9a-f]+);/gi, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
-  .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(parseInt(d, 10)))
-  .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[String(name).toLowerCase()] ?? m);
+ let value = s;
+ // Feeds sometimes escape an already escaped title (`&amp;amp;`). A bounded
+ // repeat cleans that safely without risking an unending replacement loop.
+ for (let i = 0; i < 3; i++) {
+  const decoded = value
+   .replace(/&#x([0-9a-f]+);/gi, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
+   .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(parseInt(d, 10)))
+   .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[String(name).toLowerCase()] ?? m);
+  if (decoded === value) break;
+  value = decoded;
+ }
+ return value;
 }
 
 /** HTML/XML to readable plain text. Deliberately dependency-free. */

@@ -18,6 +18,19 @@ interface AdzunaResult {
  contract_time?: string;
 }
 
+const currencyFor = (country: string | undefined) => {
+ const name = (country ?? "").toLowerCase();
+ if (name.includes("india")) return "INR";
+ if (name.includes("united kingdom")) return "GBP";
+ if (name.includes("united states")) return "USD";
+ if (name.includes("australia")) return "AUD";
+ if (name.includes("canada")) return "CAD";
+ if (name.includes("singapore")) return "SGD";
+ if (name.includes("switzerland")) return "CHF";
+ if (name.includes("japan")) return "JPY";
+ return null;
+};
+
 const COUNTRY_PATHS: Record<string, string> = {
  IN: "in", GB: "gb", US: "us", DE: "de", NL: "nl", FR: "fr", AU: "au", CA: "ca",
  SG: "sg", AT: "at", BE: "be", CH: "ch", ES: "es", IT: "it", PL: "pl", NZ: "nz", ZA: "za",
@@ -93,13 +106,15 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
   normalize(item: RawItem): NormalizedOpportunity | null {
    const r = item.payload as AdzunaResult;
    const predicted = r.salary_is_predicted === "1";
+   const min = r.salary_min != null && r.salary_min > 0 ? r.salary_min : null;
+   const max = r.salary_max != null && r.salary_max > 0 ? r.salary_max : null;
    const salary: SalaryEvidence | null =
-    r.salary_min || r.salary_max
+    min != null || max != null
      ? {
-        min: r.salary_min ?? null,
-        max: r.salary_max ?? r.salary_min ?? null,
+        min,
+        max: max ?? min,
         // Adzuna reports in the currency of the country endpoint.
-        currency: (r.location?.area?.[0] ?? "").toLowerCase().includes("india") ? "INR" : null,
+        currency: currencyFor(r.location?.area?.[0]),
         period: "year",
         isPredicted: predicted,
         extractedFrom: "api",

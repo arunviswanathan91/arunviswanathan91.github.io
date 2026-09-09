@@ -39,11 +39,13 @@ const server = createServer(async (req, res) => {
   res.writeHead(400).end("run_id and claim_token required");
   return;
  }
+ const runId = payload.run_id;
+ const claimToken = payload.claim_token;
 
  try {
   const env = readEnv();
   const db = new Db(env);
-  const claimed = await db.claimRun(payload.run_id, payload.claim_token);
+  const claimed = await db.claimRun(runId, claimToken);
   if (!claimed) {
    // Not an error: the token was already used, or the run expired. Telegram
    // retries deliveries, so this makes the endpoint safe to call twice.
@@ -51,9 +53,14 @@ const server = createServer(async (req, res) => {
    return;
   }
 
+  const trigger = claimed.trigger === "manual" ? "manual" : "telegram";
   const result = await runDiscovery({
-   userId: claimed.user_id, runId: payload.run_id, trigger: "telegram",
-   query: claimed.query ?? null, chatId: claimed.chat_id ?? null, quiet: true,
+    userId: claimed.user_id, runId, trigger,
+    query: claimed.query ?? null, chatId: claimed.chat_id ?? null, quiet: true,
+  }).catch(async (e: unknown) => {
+   const message = e instanceof Error ? e.message : String(e);
+   await db.finishRun(runId, "failed", {}, message);
+   throw e;
   });
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
