@@ -107,7 +107,9 @@ export function PublicationLifecycle({publication}:{publication:Row}){
    {publication.decision_email_url&&<div className="paper-history-row">
     <span><i/>Decision email linked</span><small>Linked to this paper</small>
    </div>}
-   {!events.length&&<p className="paper-history-note">Earlier stage changes predate history tracking; new changes will be recorded automatically.</p>}
+   {publicationStageEvents.error
+    ?<p className="paper-history-note">Stage history storage is not enabled yet. The current stage still works; run the latest Supabase schema once to start recording changes.</p>
+    :!events.length&&<p className="paper-history-note">Earlier stage changes predate history tracking; new changes will be recorded automatically.</p>}
   </div>
  </section>;
 }

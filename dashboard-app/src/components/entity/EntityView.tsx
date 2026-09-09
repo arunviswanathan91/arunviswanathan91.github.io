@@ -31,7 +31,7 @@ export function EntityView({def}:{def:EntityDef}){
  const layout=query.layout==="board"&&groupField?"board":"table";
  const columns=def.fields.filter(f=>f.table&&!query.hidden.includes(f.key));
 
- const openDrawer=(id:string)=>ui.openDrawer(def.key,id);
+ const openRow=(id:string)=>def.key==="publications"?ui.openPublication(id):ui.openDrawer(def.key,id);
  const toggle=(id:string)=>ui.toggleSelect(def.key,id);
  const toggleAll=()=>ui.setSelection(def.key,selection.length===rows.length?[]:rows.map(r=>r.id));
 
@@ -51,7 +51,7 @@ export function EntityView({def}:{def:EntityDef}){
   setComposer(null);
   if(!row)return;
   if(tagIds.length&&def.tagEntity)await tags.setFor(def.tagEntity,row.id,tagIds);
-  openDrawer(row.id);                       // create-then-fill is one motion
+  openRow(row.id);                          // create-then-fill is one motion
  };
 
  const drawerRow=ui.drawer?.entity===def.key?table.byId.get(ui.drawer.id)??null:null;
@@ -89,12 +89,12 @@ export function EntityView({def}:{def:EntityDef}){
    :layout==="board"&&groupField
     ?<Board def={def} groupField={groupField} rows={rows} ctx={valueCtx}
       selection={selection} selecting={selection.length>0}
-      onToggle={toggle} onOpen={openDrawer}
+      onToggle={toggle} onOpen={openRow}
       onMove={(id,value)=>void table.update(id,{[groupField.key]:value})}
       onAdd={value=>startNew({[groupField.key]:value})} onQuickAction={runQuickAction}/>
     :<Table def={def} columns={columns} rows={rows} ctx={valueCtx} inputCtx={inputCtx} sort={query.sort}
       selection={selection} onSort={key=>ui.setQuery(def.key,{sort:{key,dir:query.sort.key===key&&query.sort.dir==="asc"?"desc":"asc"}})}
-      onToggle={toggle} onOpen={openDrawer} onCommit={commit} onToggleAll={toggleAll} onQuickAction={runQuickAction}/>}
+      onToggle={toggle} onOpen={openRow} onCommit={commit} onToggleAll={toggleAll} onQuickAction={runQuickAction}/>}
 
   {selection.length>0&&<BulkBar def={def} ids={selection} onClear={ui.clearSelection}/>}
   {composer&&<Composer def={def} seed={composer} onClose={()=>setComposer(null)} onSubmit={submitNew}/>}

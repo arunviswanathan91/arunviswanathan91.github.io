@@ -52,7 +52,7 @@ export function ProjectView({projectId}:{projectId:string}){
   const row=await data.tables[key].insert(clean);setComposer(null);
   if(!row)return;
   if(tagIds.length&&def.tagEntity)await data.tags.setFor(def.tagEntity,row.id,tagIds);
-  ui.openDrawer(key,row.id);
+  if(key==="publications")ui.openPublication(row.id);else ui.openDrawer(key,row.id);
  };
  const drawer=ui.drawer;
  const drawerRow=drawer?data.tables[drawer.entity].byId.get(drawer.id)??null:null;
@@ -83,7 +83,7 @@ export function ProjectView({projectId}:{projectId:string}){
   {tab==="work"&&<ProjectBoard project={project} stages={stages} tasks={projectTasks}
    onAdd={stageId=>newEntity("tasks",{stage_id:stageId})} onOpen={id=>ui.openDrawer("tasks",id)} onManage={()=>setManageStages(true)}/>} 
   {tab==="publications"&&<ProjectPublications project={project} direct={directPapers} related={relatedPapers}
-   onAdd={()=>newEntity("publications")} onOpen={id=>ui.openDrawer("publications",id)}/>} 
+   onAdd={()=>newEntity("publications")} onOpen={ui.openPublication}/>} 
   {tab==="reads"&&<ProjectReads project={project} rows={projectReads}
    onAdd={()=>newEntity("reads")} onOpen={id=>ui.openDrawer("reads",id)}/>} 
   {tab==="people"&&<ProjectPeople projectId={projectId} onAdd={()=>setPerson("new")} onEdit={setPerson}/>} 

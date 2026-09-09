@@ -39,11 +39,11 @@ export function Sidebar({open,onNewProject}:{open:boolean;onNewProject():void}){
     onClick={()=>go("home")}><Home/>Home</button>
 
    <p className="nav-label">Projects</p>
-   <button className={"nav-project"+(ui.scope==="all"?" active":"")} onClick={()=>{ui.setScope("all");if(ui.view==="project")ui.setView("home")}}>
+   <button className={"nav-project"+(ui.scope==="all"?" active":"")} onClick={()=>{ui.setScope("all");if(ui.view==="project"||ui.view==="publication")ui.setView("home")}}>
     <span className="project-dot tint-slate"/>All projects{ui.scope==="all"&&<Check className="nav-tick"/>}
    </button>
-   <button className={"nav-project"+(ui.scope===null?" active":"")} onClick={()=>{ui.setScope(null);if(ui.view==="project")ui.setView("home")}}>
-    <Inbox/>Inbox{ui.scope===null&&<Check className="nav-tick"/>}
+   <button className={"nav-project"+(ui.scope===null?" active":"")} onClick={()=>{ui.setScope(null);if(ui.view==="project"||ui.view==="publication")ui.setView("home")}}>
+    <Inbox/><span className="nav-project-copy"><span>Inbox</span><small>Unassigned items</small></span>{ui.scope===null&&<Check className="nav-tick"/>}
    </button>
    {visibleProjects.map(p=>
     <button key={p.id} className={"nav-project"+(ui.scope===p.id?" active":"")} onClick={()=>ui.openProject(p.id)}>
@@ -61,7 +61,8 @@ export function Sidebar({open,onNewProject}:{open:boolean;onNewProject():void}){
    <p className="nav-label">Workspace</p>
    {ENTITY_ORDER.map(key=>{
     const def=ENTITIES[key];
-    return <button key={key} className={ui.view===key?"active":""} aria-current={ui.view===key?"page":undefined}
+    const active=ui.view===key||(key==="publications"&&ui.view==="publication");
+    return <button key={key} className={active?"active":""} aria-current={active?"page":undefined}
      onClick={()=>go(key as ViewKey)}>
      <def.icon/>{def.plural}<span className="nav-count">{counts[key]}</span>
     </button>;
