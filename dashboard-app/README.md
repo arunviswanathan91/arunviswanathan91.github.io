@@ -18,8 +18,10 @@ than hand-built:
   module), `n` new, `/` search, `Esc` to close.
 - **Scientific project workspaces** with an overview, custom fields and links, a configurable work
   board, private people/assignees, project Reads, and direct or tag-related publications.
-- **Custom paper journeys** — every publication can have its own ordered tracking nodes in addition
-  to the canonical editorial stage used by the main Publications board.
+- **Paper lifecycle + custom journeys** — every publication shows its canonical editorial path and
+  durable stage-change history, plus its own ordered tracking nodes for paper-specific work.
+- **Project/publication connections** — a paper may be assigned directly to one project or surfaced
+  in related projects through shared tags, with a one-click option to make that link direct.
 - **Managed tags** with colours, shared across all six modules.
 - **Light and dark themes**, following the OS by default with a manual override.
 - **Telegram bot** — linking flow, `/add`, `/today`, `/done`, `/job`, `/remind`, and project-aware

@@ -6,6 +6,7 @@ import { formatDate } from "../../lib/format";
 import { FieldInput } from "./FieldInput";
 import { GmailLinkPicker } from "./GmailLinkPicker";
 import { useEntityCtx } from "./ctx";
+import { PublicationLifecycle } from "../publications/PublicationLifecycle";
 import { PublicationWorkflow } from "../publications/PublicationWorkflow";
 import type { EntityDef, FieldDef, Row } from "../../entities/types";
 
@@ -55,6 +56,7 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
    <button className="icon-button" onClick={onClose} aria-label="Close panel"><X/></button>
   </header>
   <div className="drawer-body">
+   {def.key==="publications"&&<PublicationLifecycle publication={row}/>} 
    {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
     <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
     <div className="field-with-action">

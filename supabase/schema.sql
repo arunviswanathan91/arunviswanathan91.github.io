@@ -246,6 +246,17 @@ create table if not exists publication_nodes (
   updated_at timestamptz not null default now()
 );
 
+-- Immutable editorial-stage history for the fixed paper lifecycle. Custom
+-- publication_nodes remain the paper-specific scientific/workflow checklist.
+create table if not exists publication_stage_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  publication_id uuid not null references publications(id) on delete cascade,
+  from_stage publication_stage,
+  to_stage publication_stage not null,
+  created_at timestamptz not null default now()
+);
+
 -- Every existing and future project starts usable. Names can then be changed,
 -- reordered or supplemented without changing the task_status enum.
 insert into project_stages(user_id,project_id,name,color,position,category)
@@ -398,6 +409,7 @@ alter table project_stages enable row level security;
 alter table project_links enable row level security;
 alter table project_fields enable row level security;
 alter table publication_nodes enable row level security;
+alter table publication_stage_events enable row level security;
 
 drop policy if exists "own profile" on profiles;
 create policy "own profile" on profiles for all using (auth.uid()=id) with check (auth.uid()=id);
@@ -437,6 +449,10 @@ create policy "own project fields" on project_fields for all using (auth.uid()=u
 );
 drop policy if exists "own publication nodes" on publication_nodes;
 create policy "own publication nodes" on publication_nodes for all using (auth.uid()=user_id) with check (
+  auth.uid()=user_id and exists(select 1 from publications p where p.id=publication_id and p.user_id=auth.uid())
+);
+drop policy if exists "own publication stage events" on publication_stage_events;
+create policy "own publication stage events" on publication_stage_events for select using (
   auth.uid()=user_id and exists(select 1 from publications p where p.id=publication_id and p.user_id=auth.uid())
 );
 
@@ -498,6 +514,27 @@ $$;
 drop trigger if exists publications_stage_hint on publications;
 create trigger publications_stage_hint before update on publications
   for each row execute function fn_publication_stage_hint();
+
+-- Record every future canonical stage transition, irrespective of whether it
+-- came from the dashboard, Telegram or another trusted writer. Existing papers
+-- still show their creation/current state; their pre-migration history is not
+-- fabricated.
+create or replace function fn_record_publication_stage_event() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op='INSERT' then
+    insert into publication_stage_events(user_id,publication_id,from_stage,to_stage,created_at)
+    values(new.user_id,new.id,null,new.stage,new.created_at);
+  elsif new.stage is distinct from old.stage then
+    insert into publication_stage_events(user_id,publication_id,from_stage,to_stage,created_at)
+    values(new.user_id,new.id,old.stage,new.stage,new.updated_at);
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists publications_stage_history on publications;
+create trigger publications_stage_history after insert or update of stage on publications
+  for each row execute function fn_record_publication_stage_event();
 drop trigger if exists documents_set_updated_at on documents;
 create trigger documents_set_updated_at before update on documents for each row execute function set_updated_at();
 drop trigger if exists jobs_set_updated_at on job_applications;
@@ -571,6 +608,7 @@ create index if not exists tasks_project_stage_idx on tasks(project_id,stage_id,
 create index if not exists tasks_assignee_idx on tasks(user_id,assignee_id);
 create index if not exists tasks_follow_up_idx on tasks(user_id,follow_up_at) where follow_up_at is not null;
 create index if not exists publication_nodes_publication_position_idx on publication_nodes(publication_id,position);
+create index if not exists publication_stage_events_publication_created_idx on publication_stage_events(publication_id,created_at desc);
 create index if not exists telegram_pending_confirmations_expires_idx on telegram_pending_confirmations(expires_at);
 
 -- ==========================================================================
