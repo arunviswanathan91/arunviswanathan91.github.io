@@ -33,6 +33,8 @@ export interface RunOptions {
 }
 
 const SOURCE_TIMEOUT_MS = { api: 90_000, feed: 90_000, crawl: 180_000 } as const;
+type AcceptedOpportunity = { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> };
+interface SourceExecution { outcome: SourceOutcome; accepted: AcceptedOpportunity[] }
 
 /** The single orchestration path. cli.ts and server.ts only translate into this. */
 export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
@@ -93,16 +95,17 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const renderer = makeRenderer(env.firecrawlApiKey, FIRECRAWL_MAX_PER_RUN);
  const bySource: Record<string, SourceOutcome> = {};
  const degradations: string[] = [];
- const accepted: { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> }[] = [];
+ const accepted: AcceptedOpportunity[] = [];
  let fetched = 0, evaluated = 0, filtered = 0;
  const filterReasons: Record<string, number> = {};
 
  for (const row of sources) {
   if (Date.now() > deadlineAt) { degradations.push("runtime cap"); break; }
-  const outcome = await runSource(row, {
+  const execution = await runSource(row, {
    db, http, renderer, profile, caps, deadlineAt, log, userId, runId,
    dryRun: !!opts.dryRun, freshSearch,
   });
+  const outcome = execution.outcome;
   bySource[row.source_key] = outcome;
   fetched += outcome.itemsFetched;
   evaluated += outcome.itemsEvaluated;
@@ -113,7 +116,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   if (outcome.status === "skipped_config") degradations.push(`${row.source_key} (not configured)`);
   if (outcome.status === "skipped_circuit") degradations.push(`${row.source_key} (temporarily disabled)`);
   if (outcome.status === "failed") degradations.push(`${row.source_key} (failed)`);
-  for (const item of outcome_items(outcome)) accepted.push(item);
+  for (const item of execution.accepted) accepted.push(item);
   await db.recordSourceOutcome(runId, userId, outcome);
  }
 
@@ -207,10 +210,7 @@ interface SourceCtx {
  log: RunLogger; userId: string; runId: string | null; dryRun: boolean; freshSearch: boolean;
 }
 
-const carried = new WeakMap<SourceOutcome, { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> }[]>();
-const outcome_items = (o: SourceOutcome) => carried.get(o) ?? [];
-
-async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceOutcome> {
+async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution> {
  const t0 = Date.now();
  const base: SourceOutcome = {
   sourceKey: row.source_key, status: "ok", itemsFetched: 0, itemsNew: 0,
@@ -218,22 +218,27 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceOutcome> {
   filterReasons: {},
   pages: 0, apiCalls: 0, durationMs: 0,
  };
- const kept: { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> }[] = [];
- carried.set(base, kept);
+ const kept: AcceptedOpportunity[] = [];
+ // Always return the outcome and its accepted rows together. Previously the
+ // rows lived in a WeakMap keyed by `base`, but every `{ ...base }` return made
+ // a new key and silently discarded every filter-passing opportunity.
+ const finish = (patch: Partial<SourceOutcome> = {}): SourceExecution => ({
+  outcome: { ...base, ...patch }, accepted: kept,
+ });
 
  if (row.disabled_until && new Date(row.disabled_until) > new Date()) {
-  return { ...base, status: "skipped_circuit", durationMs: Date.now() - t0 };
+  return finish({ status: "skipped_circuit", durationMs: Date.now() - t0 });
  }
 
  const adapter = makeAdapter(row.source_key);
- if (!adapter) return { ...base, status: "failed", error: "no adapter", durationMs: Date.now() - t0 };
+ if (!adapter) return finish({ status: "failed", error: "no adapter", durationMs: Date.now() - t0 });
 
  try {
   adapter.configure(row.config ?? {}, process.env);
  } catch (e) {
   if (e instanceof SourceConfigError) {
    c.log.warn(`${row.source_key} skipped`, { reason: e.message });
-   return { ...base, status: "skipped_config", durationMs: Date.now() - t0 };
+   return finish({ status: "skipped_config", durationMs: Date.now() - t0 });
   }
   throw e;
  }
@@ -313,12 +318,12 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceOutcome> {
   // A focused interactive run must not advance the nightly cursor: its narrow
   // result window cannot prove that unrelated new listings were inspected.
   if (!c.dryRun) await c.db.markSourceSuccess(row.id, c.freshSearch ? storedCursor : cursorOut);
-  return { ...base, durationMs: Date.now() - t0 };
+  return finish({ durationMs: Date.now() - t0 });
  } catch (e) {
   const msg = e instanceof Error ? e.message : String(e);
   c.log.warn(`${row.source_key} failed`, { error: msg });
   if (!c.dryRun) await c.db.markSourceFailure(row.id, row.consecutive_failures ?? 0, msg);
-  return { ...base, status: "failed", error: msg, durationMs: Date.now() - t0 };
+  return finish({ status: "failed", error: msg, durationMs: Date.now() - t0 });
  }
 }
 
