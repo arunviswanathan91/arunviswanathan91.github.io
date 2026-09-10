@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Mail, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { ExternalLink, Mail, Trash2 } from "lucide-react";
 import { useData, useEntityTable } from "../../lib/store";
 import { isEditable } from "../../entities/types";
 import { formatDate } from "../../lib/format";
+import { Modal } from "../ui/Modal";
 import { FieldInput } from "./FieldInput";
 import { GmailLinkPicker } from "./GmailLinkPicker";
 import { useEntityCtx } from "./ctx";
@@ -10,23 +11,13 @@ import { PublicationLifecycle } from "../publications/PublicationLifecycle";
 import { PublicationWorkflow } from "../publications/PublicationWorkflow";
 import type { EntityDef, FieldDef, Row } from "../../entities/types";
 
-/** Non-modal side panel: the board stays interactive, so you can click straight from one
- *  record to the next. Esc closes and focus returns to whatever opened it. */
+/** Existing records use the same centered, modal interaction as the create composer.
+ *  The historical component name is retained so callers and UI state stay compatible. */
 export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void}){
  const table=useEntityTable(def.key);
  const {tags}=useData();
  const {inputCtx}=useEntityCtx(def);
- const panel=useRef<HTMLDivElement>(null);
- const opener=useRef<Element|null>(null);
  const [gmailFieldKey,setGmailFieldKey]=useState<string|null>(null);
-
- useEffect(()=>{
-  opener.current=document.activeElement;
-  panel.current?.querySelector<HTMLElement>("input,textarea,select,button")?.focus();
-  const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape"){e.stopPropagation();onClose()}};
-  document.addEventListener("keydown",onKey);
-  return()=>{document.removeEventListener("keydown",onKey);(opener.current as HTMLElement|null)?.focus?.()};
- },[onClose]);
 
  const editable=def.fields.filter(f=>f.drawer!==false&&isEditable(f));
  const stamps=def.fields.filter(f=>f.kind==="stamp"&&f.drawer!==false);
@@ -50,38 +41,36 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
   if(await table.remove(row.id))onClose();
  };
 
- return <aside className="drawer" ref={panel} role="dialog" aria-modal="false" aria-label={`Edit ${def.singular}`}>
-  <header className="drawer-head">
-   <div><p className="kicker">{def.singular}</p><h2 className="clamp-2">{title}</h2></div>
-   <button className="icon-button" onClick={onClose} aria-label="Close panel"><X/></button>
-  </header>
-  <div className="drawer-body">
-   {def.key==="publications"&&<PublicationLifecycle publication={row}/>} 
-   {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
-    <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
-    <div className="field-with-action">
-     <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} onCommit={v=>commit(f,v)}/>
-     {safeUrl(f)&&
-      <a className="icon-button" href={safeUrl(f)!} target="_blank" rel="noopener noreferrer"
-       title="Open link" aria-label={`Open ${f.label}`}><ExternalLink/></a>}
-     {f.kind==="url"&&f.gmailSearch&&
-      <button type="button" className="icon-button" title="Find in Gmail" aria-label="Find in Gmail"
-       onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
+ return <>
+  <Modal kicker={def.singular} title={title} onClose={onClose} footer={
+   <div className="record-edit-footer">
+    <div className="stamp-row">
+     {stamps.map(f=>row[f.key]?<span key={f.key}>{f.label} {formatDate(row[f.key],true)}</span>:null)}
     </div>
-   </div>)}
-   {def.key==="publications"&&<PublicationWorkflow publicationId={row.id}/>} 
-  </div>
-  <footer className="drawer-foot">
-   <div className="stamp-row">
-    {stamps.map(f=>row[f.key]?<span key={f.key}>{f.label} {formatDate(row[f.key],true)}</span>:null)}
+    <button type="button" className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>
+   </div>}>
+   <div className="record-edit-grid">
+    {def.key==="publications"&&<PublicationLifecycle publication={row}/>} 
+    {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
+     <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
+     <div className="field-with-action">
+      <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} onCommit={v=>commit(f,v)}/>
+      {safeUrl(f)&&
+       <a className="icon-button" href={safeUrl(f)!} target="_blank" rel="noopener noreferrer"
+        title="Open link" aria-label={`Open ${f.label}`}><ExternalLink/></a>}
+      {f.kind==="url"&&f.gmailSearch&&
+       <button type="button" className="icon-button" title="Find in Gmail" aria-label="Find in Gmail"
+        onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
+     </div>
+    </div>)}
+    {def.key==="publications"&&<PublicationWorkflow publicationId={row.id}/>} 
    </div>
-   <button className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>
-  </footer>
+  </Modal>
   {gmailFieldKey&&(()=>{
    const f=def.fields.find(x=>x.key===gmailFieldKey);
    if(!f||f.kind!=="url"||!f.gmailSearch)return null;
    return <GmailLinkPicker initialQuery={f.gmailSearch(row)}
     onPick={url=>commit(f,url)} onClose={()=>setGmailFieldKey(null)}/>;
   })()}
- </aside>;
+ </>;
 }
