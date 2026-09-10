@@ -15,7 +15,7 @@ export function Board({def,groupField,rows,ctx,selection,selecting,onToggle,onOp
  const options=groupField.kind==="enum"?groupField.options:[];
  const byId=new Map(rows.map(r=>[r.id,r]));
 
- return <div className="board">{options.map(value=>{
+ return <div className={`board board-${def.key}`}>{options.map(value=>{
   const items=rows.filter(r=>groupValue(groupField,r)===value);
   return <section className="column" key={value}
    onDragOver={e=>{if(!derived&&e.dataTransfer.types.includes(CARD_MIME)){e.preventDefault();e.dataTransfer.dropEffect="move"}}}
