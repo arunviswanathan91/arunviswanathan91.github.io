@@ -288,6 +288,7 @@ button.tag-chip:hover{border-color:currentColor}
    Shell, sidebar
    ========================================================================= */
 .shell{min-height:100dvh;display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr)}
+.shell.project-only-shell{grid-template-columns:minmax(0,1fr)}
 .nav-scrim{display:none}
 
 .sidebar{
