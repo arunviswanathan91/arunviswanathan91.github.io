@@ -7,15 +7,16 @@ const NODE_STATUS=["Pending","In progress","Waiting","Done"] as const;
 
 /** Paper-specific work sequence. The canonical editorial stage remains on the
  * publication itself; these nodes are the custom scientific/submission steps. */
-export function PublicationWorkflow({publicationId}:{publicationId:string}){
- const {userId,people,publicationNodes}=useData();
+export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:{publicationId:string;canEdit?:boolean;canDelete?:boolean}){
+ const {userId,people,publicationNodes,tables}=useData();
  const [title,setTitle]=useState("");
+ const publication=tables.publications.byId.get(publicationId)??null;
  const nodes=useMemo(()=>publicationNodes.rows.filter(n=>n.publication_id===publicationId)
   .sort((a,b)=>a.position-b.position||a.created_at.localeCompare(b.created_at)),[publicationNodes.rows,publicationId]);
 
  const add=async()=>{
   const name=title.trim();if(!name)return;
-  await publicationNodes.insert({user_id:userId,publication_id:publicationId,title:name,status:"Pending",
+  await publicationNodes.insert({user_id:publication?.user_id??userId,publication_id:publicationId,title:name,status:"Pending",
    position:(nodes.at(-1)?.position??-1)+1});
   setTitle("");
  };
@@ -38,34 +39,35 @@ export function PublicationWorkflow({publicationId}:{publicationId:string}){
    {nodes.map((node,index)=><article className={"publication-node node-"+node.status.toLowerCase().replaceAll(" ","-")} key={node.id}>
     <div className="publication-node-head">
      <input className="node-title" defaultValue={node.title} aria-label="Step name"
+      disabled={!canEdit}
       onBlur={e=>{const value=e.target.value.trim();if(value&&value!==node.title)void publicationNodes.update(node.id,{title:value})}}/>
      <div className="node-actions">
-      <button className="icon-button" disabled={index===0} onClick={()=>void move(index,-1)} aria-label="Move step left"><ArrowLeft/></button>
-      <button className="icon-button" disabled={index===nodes.length-1} onClick={()=>void move(index,1)} aria-label="Move step right"><ArrowRight/></button>
-      <button className="icon-button" onClick={()=>{if(window.confirm(`Delete step “${node.title}”?`))void publicationNodes.remove(node.id)}} aria-label="Delete step"><Trash2/></button>
+      <button className="icon-button" disabled={!canEdit||index===0} onClick={()=>void move(index,-1)} aria-label="Move step left"><ArrowLeft/></button>
+      <button className="icon-button" disabled={!canEdit||index===nodes.length-1} onClick={()=>void move(index,1)} aria-label="Move step right"><ArrowRight/></button>
+      {canDelete&&<button className="icon-button" onClick={()=>{if(window.confirm(`Delete step “${node.title}”?`))void publicationNodes.remove(node.id)}} aria-label="Delete step"><Trash2/></button>}
      </div>
     </div>
-    <select className="input input-compact" value={node.status} aria-label={`${node.title} status`}
+    <select className="input input-compact" value={node.status} aria-label={`${node.title} status`} disabled={!canEdit}
      onChange={e=>setStatus(node.id,e.target.value)}>
      {NODE_STATUS.map(s=><option key={s}>{s}</option>)}
     </select>
-    <select className="input input-compact" value={node.assignee_id??""} aria-label={`${node.title} assignee`}
+    <select className="input input-compact" value={node.assignee_id??""} aria-label={`${node.title} assignee`} disabled={!canEdit}
      onChange={e=>void publicationNodes.update(node.id,{assignee_id:e.target.value||null})}>
      <option value="">Unassigned</option>
      {people.rows.map(p=><option key={p.id} value={p.id}>{p.name}{p.role?` · ${p.role}`:""}</option>)}
     </select>
-    <input className="input input-compact" type="date" value={toInput(node.due_at,false)} aria-label={`${node.title} due date`}
+    <input className="input input-compact" type="date" value={toInput(node.due_at,false)} aria-label={`${node.title} due date`} disabled={!canEdit}
      onChange={e=>void publicationNodes.update(node.id,{due_at:fromInput(e.target.value,false)})}/>
-    <input className="input input-compact node-notes" defaultValue={node.notes??""} placeholder="Notes or expected output"
+    <input className="input input-compact node-notes" defaultValue={node.notes??""} placeholder="Notes or expected output" disabled={!canEdit}
      aria-label={`${node.title} notes`} onBlur={e=>{const notes=e.target.value.trim()||null;if(notes!==node.notes)void publicationNodes.update(node.id,{notes})}}/>
     {node.status==="Done"&&<span className="node-done"><Check/>Complete</span>}
    </article>)}
    {!nodes.length&&<p className="workflow-empty">No custom steps yet. Examples: analysis, figures, co-author review, preprint and submission.</p>}
   </div>
-  <div className="workflow-add">
+  {canEdit&&<div className="workflow-add">
    <input className="input" value={title} placeholder="Add a custom step…" aria-label="New paper step"
     onChange={e=>setTitle(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void add()}}}/>
    <button type="button" className="secondary" disabled={!title.trim()} onClick={()=>void add()}><Plus/>Add step</button>
-  </div>
+  </div>}
  </section>;
 }

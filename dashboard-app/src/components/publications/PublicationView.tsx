@@ -15,14 +15,17 @@ const def=ENTITIES.publications;
 
 /** A publication has enough state of its own to be a workspace, not a narrow
  * drawer: editorial lifecycle, custom work nodes, links and manuscript notes. */
-export function PublicationView({publicationId}:{publicationId:string}){
- const {tables,tags,projects}=useData();
+export function PublicationView({publicationId,returnProjectId,accessRole}:{
+ publicationId:string;returnProjectId?:string;accessRole?:"editor"|"viewer";
+}){
+ const {userId,tables,tags,projects}=useData();
  const ui=useUi();
  const {inputCtx}=useEntityCtx(def);
  const [gmailFieldKey,setGmailFieldKey]=useState<string|null>(null);
  const publication=tables.publications.byId.get(publicationId)??null;
 
  const goBack=()=>{
+  if(returnProjectId&&projects.byId.has(returnProjectId)){ui.openProject(returnProjectId);return}
   if(typeof ui.scope==="string"&&projects.byId.has(ui.scope))ui.openProject(ui.scope);
   else ui.setView("publications");
  };
@@ -32,7 +35,9 @@ export function PublicationView({publicationId}:{publicationId:string}){
   <button className="primary" onClick={()=>ui.setView("publications")}>Return to publications</button>
  </div>;
 
- const editable=def.fields.filter(f=>f.drawer!==false&&isEditable(f)&&f.key!=="stage"&&f.key!=="project_id");
+ const isOwner=publication.user_id===userId;
+ const canEdit=isOwner||accessRole==="editor";
+ const editable=def.fields.filter(f=>f.drawer!==false&&isEditable(f)&&f.key!=="stage"&&f.key!=="project_id"&&(isOwner||f.kind!=="tags"));
  const stamps=def.fields.filter(f=>f.kind==="stamp"&&f.drawer!==false);
  const valueOf=(f:FieldDef)=>f.kind==="tags"&&def.tagEntity?tags.idsFor(def.tagEntity,publication.id):publication[f.key];
  const safeUrl=(f:FieldDef)=>{
@@ -41,6 +46,7 @@ export function PublicationView({publicationId}:{publicationId:string}){
   try{const url=new URL(value);return url.protocol==="http:"||url.protocol==="https:"?url.toString():null}catch{return null}
  };
  const commit=(f:FieldDef,value:any)=>{
+  if(!canEdit)return;
   if(f.kind==="tags"&&def.tagEntity)void tags.setFor(def.tagEntity,publication.id,value as string[]);
   else void tables.publications.update(publication.id,{[f.key]:value});
  };
@@ -62,9 +68,9 @@ export function PublicationView({publicationId}:{publicationId:string}){
 
   <div className="publication-page-grid">
    <main className="publication-page-main">
-    <PublicationLifecycle publication={publication}/>
+    <PublicationLifecycle publication={publication} canEdit={canEdit} canReassign={isOwner}/>
     <section className="panel publication-workflow-panel">
-     <PublicationWorkflow publicationId={publication.id}/>
+     <PublicationWorkflow publicationId={publication.id} canEdit={canEdit} canDelete={isOwner}/>
     </section>
    </main>
 
@@ -74,17 +80,17 @@ export function PublicationView({publicationId}:{publicationId:string}){
      {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
       <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
       <div className="field-with-action">
-       <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} onCommit={value=>commit(f,value)}/>
+       <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} disabled={!canEdit} onCommit={value=>commit(f,value)}/>
        {safeUrl(f)&&<a className="icon-button" href={safeUrl(f)!} target="_blank" rel="noopener noreferrer"
         title="Open link" aria-label={`Open ${f.label}`}><ExternalLink/></a>}
-       {f.kind==="url"&&f.gmailSearch&&<button type="button" className="icon-button" title="Find in Gmail"
+       {canEdit&&f.kind==="url"&&f.gmailSearch&&<button type="button" className="icon-button" title="Find in Gmail"
         aria-label="Find in Gmail" onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
       </div>
      </div>)}
     </div>
     <footer className="publication-details-foot">
      <div className="stamp-row">{stamps.map(f=>publication[f.key]?<span key={f.key}>{f.label} {formatDate(publication[f.key],true)}</span>:null)}</div>
-     <button className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>
+     {isOwner&&<button className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>}
     </footer>
    </aside>
   </div>

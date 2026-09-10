@@ -7,9 +7,10 @@ import type { EntityDef, FieldDef } from "../../entities/types";
 
 /** Starts with the handful of `create` fields and expands to the full set on request —
  *  so the quick path stays quick but nothing is unreachable at creation time. */
-export function Composer({def,seed,onClose,onSubmit}:{
+export function Composer({def,seed,onClose,onSubmit,hiddenFields=[]}:{
  def:EntityDef;seed:Record<string,unknown>;onClose():void;
  onSubmit(values:Record<string,unknown>,tagIds:string[]):Promise<void>;
+ hiddenFields?:string[];
 }){
  const {inputCtx}=useEntityCtx(def);
  const [values,setValues]=useState<Record<string,any>>(seed);
@@ -17,7 +18,7 @@ export function Composer({def,seed,onClose,onSubmit}:{
  const [expanded,setExpanded]=useState(false);
  const [busy,setBusy]=useState(false);
 
- const editable=def.fields.filter(f=>isEditable(f)&&f.drawer!==false);
+ const editable=def.fields.filter(f=>isEditable(f)&&f.drawer!==false&&!hiddenFields.includes(f.key));
  const quick=editable.filter(f=>f.create);
  const shown=expanded?editable:quick;
  const missing=def.fields.filter(f=>f.required&&!String(values[f.key]??"").trim());

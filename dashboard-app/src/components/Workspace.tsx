@@ -55,12 +55,16 @@ function Shell(){
 
  const currentProject=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;
  const currentPublication=ui.publicationId?tables.publications.byId.get(ui.publicationId):null;
+ const sharedPublication=projectOnly&&sharedProject&&currentPublication?.project_id===sharedProject.id?currentPublication:null;
  const title=ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="project"?(currentProject?.name??"Project"):
   ui.view==="publication"?(String(currentPublication?.title??"")||"Publication"):ENTITIES[ui.view as EntityKey].plural;
 
  useEffect(()=>{
-  if(!loading&&projectOnly&&sharedProject&&(ui.view!=="project"||ui.scope!==sharedProject.id))ui.openProject(sharedProject.id);
- },[loading,projectOnly,sharedProject,ui]);
+  if(loading||!projectOnly||!sharedProject)return;
+  const projectRoute=ui.view==="project"&&ui.scope===sharedProject.id;
+  const publicationRoute=ui.view==="publication"&&Boolean(sharedPublication);
+  if(!projectRoute&&!publicationRoute)ui.openProject(sharedProject.id);
+ },[loading,projectOnly,sharedProject,sharedPublication,ui]);
 
  if(membership===undefined)return <div className="shell project-only-shell"><main>
   <header className="topbar"><div className="crumb"><strong>Loading workspace…</strong></div></header>
@@ -90,7 +94,9 @@ function Shell(){
 
     {loading
      ?<div className="skeleton-stack">{Array.from({length:5}).map((_,i)=><div className="skeleton" key={i}/>)}</div>
-     :projectOnly&&sharedProject?<ProjectView projectId={sharedProject.id}/>
+     :projectOnly&&sharedProject&&sharedPublication?<PublicationView publicationId={sharedPublication.id}
+       returnProjectId={sharedProject.id} accessRole={membership?.role}/>
+     :projectOnly&&sharedProject?<ProjectView projectId={sharedProject.id} accessRole={membership?.role}/>
      :projectOnly?<div className="empty-state"><p>This shared project is unavailable.</p></div>
      :ui.view==="home"?<HomeView/>
      :ui.view==="settings"?<SettingsView/>

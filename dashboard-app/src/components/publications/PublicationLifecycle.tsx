@@ -21,7 +21,7 @@ const possibleOutcomes=(stage:string)=>stage==="Under Review"?"Revision requeste
 
 /** Canonical editorial lifecycle and durable stage history. It intentionally
  * stays separate from PublicationWorkflow's freely editable paper work nodes. */
-export function PublicationLifecycle({publication}:{publication:Row}){
+export function PublicationLifecycle({publication,canEdit=true,canReassign=true}:{publication:Row;canEdit?:boolean;canReassign?:boolean}){
  const {projects,tables,publicationStageEvents,tags}=useData();
  const ui=useUi();
  const stage=String(publication.stage||"Idea");
@@ -52,19 +52,19 @@ export function PublicationLifecycle({publication}:{publication:Row}){
    <div><span className="field-label">Selected paper</span><h3 id="publication-lifecycle-heading">{publication.title}</h3>
     <div className="paper-lifecycle-meta">
      {publication.venue&&<span>{publication.venue}</span>}
-     <label className={directProject?"paper-project-link":"paper-project-link is-inbox"}>
+     <span className={directProject?"paper-project-link":"paper-project-link is-inbox"}>
       {directProject?<FolderKanban/>:<Inbox/>}
-      <select value={publication.project_id??""} aria-label="Assign paper to project"
-       onChange={e=>void tables.publications.update(publication.id,{project_id:e.target.value||null})}>
-       <option value="">Inbox — assign a project</option>
-       {projects.rows.filter(p=>p.status==="Active"||p.id===publication.project_id)
-        .map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-      </select>
-     </label>
+      {canReassign?<select value={publication.project_id??""} aria-label="Assign paper to project"
+        onChange={e=>void tables.publications.update(publication.id,{project_id:e.target.value||null})}>
+        <option value="">Inbox — assign a project</option>
+        {projects.rows.filter(p=>p.status==="Active"||p.id===publication.project_id)
+         .map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+       </select>:<span>{directProject?.name??"Inbox"}</span>}
+     </span>
     </div>
    </div>
    <label className="paper-stage-control"><span>Update stage</span>
-    <select value={stage} aria-label="Update publication stage"
+    <select value={stage} aria-label="Update publication stage" disabled={!canEdit}
      onChange={e=>void tables.publications.update(publication.id,{stage:e.target.value})}>
      {PUBLICATION_STAGE.map(value=><option key={value}>{value}</option>)}
     </select>
@@ -86,7 +86,7 @@ export function PublicationLifecycle({publication}:{publication:Row}){
 
   <p className="paper-next-action"><strong>Next action:</strong> {next}{outcomes&&<> · <span>Possible outcomes: {outcomes}.</span></>}</p>
 
-  <div className="paper-project-relations">
+  {canReassign&&<div className="paper-project-relations">
    <div className="paper-section-label"><Tag/>Project connections from shared tags</div>
    {tagProjects.length?<div className="paper-related-projects">{tagProjects.map(project=>{
     const shared=paperTagIds.filter(tagId=>tags.idsFor("project",project.id).includes(tagId))
@@ -97,7 +97,7 @@ export function PublicationLifecycle({publication}:{publication:Row}){
      <button className="link-button" onClick={()=>void tables.publications.update(publication.id,{project_id:project.id})}>Link directly</button>
     </span>;
    })}</div>:<p className="muted-note">Give the paper and a project the same tag to relate them without moving the paper.</p>}
-  </div>
+  </div>}
 
   <div className="paper-history">
    <div className="paper-section-label"><History/>Stage history</div>

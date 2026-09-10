@@ -56,22 +56,25 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local environment. T
 1. Paste the full `supabase/schema.sql` into the Supabase SQL editor and run it **before deploying a
    dashboard commit that adds new fields**. Every statement is idempotent (`if not exists` / guarded
    `create type` / `drop policy if exists`), so re-running the whole file after a future change is safe.
-2. In Database → Extensions, enable `pg_cron` and `pg_net` (needed for reminder push notifications).
-3. Store `CRON_SWEEP_SECRET` (a random string you generate) in Supabase Vault, e.g. `select vault.create_secret('<value>', 'cron_sweep_secret');`.
-4. Deploy the Edge Functions and set their secrets:
+2. To share one project with signed-in collaborators, run `supabase/project-collaboration.sql` after
+   the base schema. It is rerunnable and gives `editor` members add/edit/move access while keeping
+   every delete, project reassignment, tag mutation and private-people mutation owner-only.
+3. In Database → Extensions, enable `pg_cron` and `pg_net` (needed for reminder push notifications).
+4. Store `CRON_SWEEP_SECRET` (a random string you generate) in Supabase Vault, e.g. `select vault.create_secret('<value>', 'cron_sweep_secret');`.
+5. Deploy the Edge Functions and set their secrets:
    ```bash
    supabase functions deploy telegram-webhook
    supabase functions deploy telegram-reminder-sweep
    supabase secrets set TELEGRAM_BOT_TOKEN=... SUPABASE_SERVICE_ROLE_KEY=... TELEGRAM_WEBHOOK_SECRET=... CRON_SWEEP_SECRET=...
    ```
    Never commit these values.
-5. Register the webhook with Telegram (via BotFather-issued token):
+6. Register the webhook with Telegram (via BotFather-issued token):
    ```bash
    curl -X POST https://api.telegram.org/bot<TOKEN>/setWebhook \
      -d url=https://<project-ref>.functions.supabase.co/telegram-webhook \
      -d secret_token=<TELEGRAM_WEBHOOK_SECRET>
    ```
-6. Schedule the reminder sweep to run every minute:
+7. Schedule the reminder sweep to run every minute:
    ```sql
    select cron.schedule(
      'telegram-reminder-sweep',
@@ -88,7 +91,7 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local environment. T
      $$
    );
    ```
-7. In the dashboard, open **Telegram** in the sidebar and click **Generate code**, then send `/link <code>` to your bot to connect your account.
+8. In the dashboard, open **Telegram** in the sidebar and click **Generate code**, then send `/link <code>` to your bot to connect your account.
 
 The production dashboard build uses `/dashboard/` as its base path.
 

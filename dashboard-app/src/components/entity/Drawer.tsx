@@ -13,13 +13,15 @@ import type { EntityDef, FieldDef, Row } from "../../entities/types";
 
 /** Existing records use the same centered, modal interaction as the create composer.
  *  The historical component name is retained so callers and UI state stay compatible. */
-export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void}){
+export function Drawer({def,row,onClose,canEdit=true,canDelete=true,hiddenFields=[]}:{
+ def:EntityDef;row:Row;onClose():void;canEdit?:boolean;canDelete?:boolean;hiddenFields?:string[];
+}){
  const table=useEntityTable(def.key);
  const {tags}=useData();
  const {inputCtx}=useEntityCtx(def);
  const [gmailFieldKey,setGmailFieldKey]=useState<string|null>(null);
 
- const editable=def.fields.filter(f=>f.drawer!==false&&isEditable(f));
+ const editable=def.fields.filter(f=>f.drawer!==false&&isEditable(f)&&!hiddenFields.includes(f.key));
  const stamps=def.fields.filter(f=>f.kind==="stamp"&&f.drawer!==false);
  const title=String(row[def.titleField]??"")||`Untitled ${def.singular}`;
 
@@ -33,6 +35,7 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
   }catch{return null}
  };
  const commit=(f:FieldDef,v:any)=>{
+  if(!canEdit)return;
   if(f.kind==="tags"){if(def.tagEntity)void tags.setFor(def.tagEntity,row.id,v as string[])}
   else void table.update(row.id,{[f.key]:v});
  };
@@ -47,23 +50,23 @@ export function Drawer({def,row,onClose}:{def:EntityDef;row:Row;onClose():void})
     <div className="stamp-row">
      {stamps.map(f=>row[f.key]?<span key={f.key}>{f.label} {formatDate(row[f.key],true)}</span>:null)}
     </div>
-    <button type="button" className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>
+    {canDelete&&<button type="button" className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>}
    </div>}>
    <div className="record-edit-grid">
-    {def.key==="publications"&&<PublicationLifecycle publication={row}/>} 
+    {def.key==="publications"&&<PublicationLifecycle publication={row} canEdit={canEdit} canReassign={canDelete}/>} 
     {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
      <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
      <div className="field-with-action">
-      <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} onCommit={v=>commit(f,v)}/>
+      <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} disabled={!canEdit} onCommit={v=>commit(f,v)}/>
       {safeUrl(f)&&
        <a className="icon-button" href={safeUrl(f)!} target="_blank" rel="noopener noreferrer"
         title="Open link" aria-label={`Open ${f.label}`}><ExternalLink/></a>}
-      {f.kind==="url"&&f.gmailSearch&&
+      {canEdit&&f.kind==="url"&&f.gmailSearch&&
        <button type="button" className="icon-button" title="Find in Gmail" aria-label="Find in Gmail"
         onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
      </div>
     </div>)}
-    {def.key==="publications"&&<PublicationWorkflow publicationId={row.id}/>} 
+    {def.key==="publications"&&<PublicationWorkflow publicationId={row.id} canEdit={canEdit} canDelete={canDelete}/>} 
    </div>
   </Modal>
   {gmailFieldKey&&(()=>{
