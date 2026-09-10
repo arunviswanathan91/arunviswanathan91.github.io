@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { FolderKanban, Inbox } from "lucide-react";
 import { useData, useEntityTable, useUi } from "../../lib/store";
 import { applyQuery } from "../../lib/query";
 import { fieldByKey } from "../../entities/types";
@@ -14,7 +15,7 @@ import type { EntityDef, FieldDef, QuickAction, Row } from "../../entities/types
 
 export function EntityView({def}:{def:EntityDef}){
  const table=useEntityTable(def.key);
- const {tags,userId}=useData();
+ const {tags,userId,projects}=useData();
  const ui=useUi();
  const {valueCtx,inputCtx}=useEntityCtx(def);
  const [composer,setComposer]=useState<Record<string,unknown>|null>(null);
@@ -30,6 +31,8 @@ export function EntityView({def}:{def:EntityDef}){
  const groupField=query.groupBy?fieldByKey(def,query.groupBy):null;
  const layout=query.layout==="board"&&groupField?"board":"table";
  const columns=def.fields.filter(f=>f.table&&!query.hidden.includes(f.key));
+ const scopeLabel=ui.scope===null?"Inbox — unassigned items":
+  typeof ui.scope==="string"?projects.byId.get(ui.scope)?.name??"Selected project":null;
 
  const openRow=(id:string)=>def.key==="publications"?ui.openPublication(id):ui.openDrawer(def.key,id);
  const toggle=(id:string)=>ui.toggleSelect(def.key,id);
@@ -73,6 +76,14 @@ export function EntityView({def}:{def:EntityDef}){
   </div>
 
   {def.key==="opportunities"&&<OpportunityDiscovery onComplete={()=>void table.refetch(true)}/>}
+
+  {def.projectField&&ui.scope!=="all"&&<section className="scope-banner" aria-label="Active project filter">
+   <div className="scope-banner-copy">
+    {ui.scope===null?<Inbox/>:<FolderKanban/>}
+    <span>Viewing <strong>{scopeLabel}</strong><small>{rows.length} of {table.rows.length} {def.plural.toLowerCase()}</small></span>
+   </div>
+   <button className="secondary" onClick={()=>ui.setScope("all")}>Show all {def.plural.toLowerCase()}</button>
+  </section>}
 
   <Toolbar def={def} query={query} shown={rows.length} total={table.rows.length} tags={tags.tags}
    onChange={patch=>ui.setQuery(def.key,patch)} onNew={()=>startNew()} onRefresh={()=>void table.refetch(true)}/>
