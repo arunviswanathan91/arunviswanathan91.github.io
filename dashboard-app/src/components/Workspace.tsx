@@ -49,8 +49,7 @@ function Shell(){
 
  const createProject=async(values:{name:string;description:string|null;color:string|null})=>{
   const row=await projects.insert({user_id:userId,status:"Active",...values});
-  setProjectComposer(false);
-  if(row)ui.openProject(row.id);
+  if(row){setProjectComposer(false);ui.openProject(row.id)}
  };
 
  const currentProject=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;

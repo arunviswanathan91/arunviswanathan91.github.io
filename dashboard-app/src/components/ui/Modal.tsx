@@ -9,8 +9,7 @@ export function Modal({kicker,title,onClose,children,footer,size="md"}:{
  const ref=useRef<HTMLDialogElement>(null);
  useEffect(()=>{const d=ref.current;if(d&&!d.open)d.showModal()},[]);
  return <dialog ref={ref} className={"modal modal-"+size}
-  onCancel={e=>{e.preventDefault();onClose()}}
-  onMouseDown={e=>{if(e.target===ref.current)onClose()}}>
+  onCancel={e=>{e.preventDefault();onClose()}}>
   <form method="dialog" className="modal-inner" onSubmit={e=>e.preventDefault()}>
    <header className="modal-head">
     <div>{kicker&&<p className="kicker">{kicker}</p>}<h2>{title}</h2></div>

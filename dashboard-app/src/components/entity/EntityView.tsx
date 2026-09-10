@@ -51,10 +51,9 @@ export function EntityView({def}:{def:EntityDef}){
  const submitNew=async(values:Record<string,unknown>,tagIds:string[])=>{
   const clean=Object.fromEntries(Object.entries(values).filter(([,v])=>v!==""&&v!==undefined));
   const row=await table.insert(clean);
-  setComposer(null);
   if(!row)return;
   if(tagIds.length&&def.tagEntity)await tags.setFor(def.tagEntity,row.id,tagIds);
-  openRow(row.id);                          // create-then-fill is one motion
+  setComposer(null);
  };
 
  const drawerRow=ui.drawer?.entity===def.key?table.byId.get(ui.drawer.id)??null:null;

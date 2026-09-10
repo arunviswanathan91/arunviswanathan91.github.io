@@ -51,10 +51,10 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
   if(!composer)return;
   const key=composer.key,def=ENTITIES[key];
   const clean=Object.fromEntries(Object.entries(values).filter(([,v])=>v!==""&&v!==undefined));
-  const row=await data.tables[key].insert(clean);setComposer(null);
+  const row=await data.tables[key].insert(clean);
   if(!row)return;
   if(tagIds.length&&def.tagEntity)await data.tags.setFor(def.tagEntity,row.id,tagIds);
-  if(key==="publications")ui.openPublication(row.id);else ui.openDrawer(key,row.id);
+  setComposer(null);
  };
  const drawer=ui.drawer;
  const drawerRow=drawer?data.tables[drawer.entity].byId.get(drawer.id)??null:null;
