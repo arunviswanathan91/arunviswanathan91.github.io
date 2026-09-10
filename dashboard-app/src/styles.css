@@ -456,6 +456,19 @@ main{min-width:0;display:flex;flex-direction:column}
 .column-body{display:grid;gap:6px;align-content:start}
 .column-empty{color:var(--text-3);font-size:var(--f-xs);padding:var(--s-2);text-align:center}
 
+/* Discovery can add hundreds of cards at once. Keep the Kanban lanes inside a
+   single visible board instead of letting the busiest lane grow down the page. */
+.board-opportunities{
+ height:clamp(320px,calc(100dvh - 370px),720px);min-height:0;
+ align-items:stretch;overflow-x:auto;overflow-y:hidden;
+}
+.board-opportunities .column{height:100%;min-height:0;overflow:hidden}
+.board-opportunities .column-body{
+ flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+ scrollbar-gutter:stable;padding-right:2px;
+}
+.board-opportunities .card-item{min-width:0;overflow:hidden}
+
 .card-item{
  display:grid;gap:6px;padding:var(--s-3);border:1px solid var(--border);border-radius:var(--r-2);
  background:var(--surface);box-shadow:var(--shadow-1);cursor:pointer;
@@ -903,6 +916,7 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
  .publication-page-head{align-items:flex-start;flex-direction:column}
  .scope-banner{align-items:stretch;flex-direction:column}
  .scope-banner .secondary{width:100%}
+ .board-opportunities{height:min(58dvh,520px)}
  .project-head-actions{justify-content:flex-start}
  .project-detail-grid{grid-template-columns:1fr}
  .stage-row{grid-template-columns:auto minmax(120px,1fr) auto auto auto}
