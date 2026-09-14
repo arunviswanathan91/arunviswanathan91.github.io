@@ -104,14 +104,9 @@ $$;
 create or replace function public.can_view_project_person(target_person_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
-    select 1 from public.tasks t
-    where t.assignee_id=target_person_id and t.project_id is not null
-      and public.can_view_project(t.project_id)
-  ) or exists (
-    select 1 from public.publication_nodes n
-    join public.publications p on p.id=n.publication_id
-    where n.assignee_id=target_person_id and p.project_id is not null
-      and public.can_view_project(p.project_id)
+    select 1 from public.project_people pp
+    where pp.person_id=target_person_id and pp.deleted_at is null
+      and public.can_view_project(pp.project_id)
   );
 $$;
 
@@ -182,6 +177,15 @@ create policy "members read shared publication stage events" on public.publicati
 drop policy if exists "members read assigned project people" on public.people;
 create policy "members read assigned project people" on public.people
   for select to authenticated using (public.can_view_project_person(id));
+alter table public.project_people enable row level security;
+grant select on public.project_people to authenticated;
+drop policy if exists "members read project people" on public.project_people;
+create policy "members read project people" on public.project_people
+  for select to authenticated using (deleted_at is null and public.can_view_project(project_id));
+drop policy if exists "owners manage project people" on public.project_people;
+create policy "owners manage project people" on public.project_people
+  for all to authenticated using (public.is_project_owner(project_id))
+  with check (public.is_project_owner(project_id));
 drop policy if exists "members read shared tags" on public.tags;
 create policy "members read shared tags" on public.tags
   for select to authenticated using (public.can_view_shared_tag(id));
