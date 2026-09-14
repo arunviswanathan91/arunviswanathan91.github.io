@@ -170,6 +170,27 @@ create table if not exists people (
   updated_at timestamptz not null default now()
 );
 
+-- A contact may participate in several projects, but removing them from one
+-- project must never remove them from the others. This join row is therefore
+-- the project-scoped record that is moved to Trash and restored.
+create table if not exists project_people (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  person_id uuid not null references people(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  unique(project_id,person_id)
+);
+
+-- Preserve the former global-directory behaviour during migration. Once these
+-- memberships exist, each project can remove/restore a person independently.
+insert into project_people(user_id,project_id,person_id)
+select project.user_id,project.id,person.id
+from projects project join people person on person.user_id=project.user_id
+on conflict(project_id,person_id) do nothing;
+
 -- `category` preserves the existing four-state Tasks page while `name` is the
 -- freely editable project column. Several custom columns may share a category.
 create table if not exists project_stages (
@@ -407,6 +428,7 @@ alter table reminders enable row level security;
 alter table reads enable row level security;
 alter table telegram_pending_confirmations enable row level security;
 alter table people enable row level security;
+alter table project_people enable row level security;
 alter table project_stages enable row level security;
 alter table project_links enable row level security;
 alter table project_fields enable row level security;
@@ -437,6 +459,11 @@ drop policy if exists "own reads" on reads;
 create policy "own reads" on reads for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
 drop policy if exists "own people" on people;
 create policy "own people" on people for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own project people" on project_people;
+create policy "own project people" on project_people for all using (auth.uid()=user_id) with check (
+  auth.uid()=user_id and exists(select 1 from projects p where p.id=project_id and p.user_id=auth.uid())
+  and exists(select 1 from people person where person.id=person_id and person.user_id=auth.uid())
+);
 drop policy if exists "own project stages" on project_stages;
 create policy "own project stages" on project_stages for all using (auth.uid()=user_id) with check (
   auth.uid()=user_id and exists(select 1 from projects p where p.id=project_id and p.user_id=auth.uid())
@@ -549,6 +576,8 @@ drop trigger if exists projects_set_updated_at on projects;
 create trigger projects_set_updated_at before update on projects for each row execute function set_updated_at();
 drop trigger if exists people_set_updated_at on people;
 create trigger people_set_updated_at before update on people for each row execute function set_updated_at();
+drop trigger if exists project_people_set_updated_at on project_people;
+create trigger project_people_set_updated_at before update on project_people for each row execute function set_updated_at();
 drop trigger if exists project_stages_set_updated_at on project_stages;
 create trigger project_stages_set_updated_at before update on project_stages for each row execute function set_updated_at();
 drop trigger if exists project_links_set_updated_at on project_links;
@@ -603,6 +632,8 @@ create index if not exists reminders_pending_notify_idx on reminders(remind_at) 
 create index if not exists reads_user_created_idx on reads(user_id,created_at desc);
 create index if not exists reads_user_project_idx on reads(user_id,project_id);
 create index if not exists people_user_name_idx on people(user_id,name);
+create index if not exists project_people_project_idx on project_people(project_id,created_at) where deleted_at is null;
+create index if not exists project_people_person_idx on project_people(person_id) where deleted_at is null;
 create index if not exists project_stages_project_position_idx on project_stages(project_id,position);
 create index if not exists project_links_project_position_idx on project_links(project_id,position);
 create index if not exists project_fields_project_position_idx on project_fields(project_id,position);
