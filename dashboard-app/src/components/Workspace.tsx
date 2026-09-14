@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CircleUserRound, Command, Menu, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { StoreProvider, useData, useUi } from "../lib/store";
+import { loadRaw, save } from "../lib/persist";
 import { useHotkeys } from "../lib/keys";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
 import { Sidebar } from "./Sidebar";
@@ -12,6 +13,7 @@ import { CommandPalette } from "./CommandPalette";
 import { ProjectComposer } from "./ProjectComposer";
 import { ProjectView } from "./projects/ProjectView";
 import { PublicationView } from "./publications/PublicationView";
+import { TrashView } from "./TrashView";
 import type { EntityKey } from "../entities/types";
 
 type ProjectMembership={project_id:string;role:"editor"|"viewer"};
@@ -20,8 +22,11 @@ function Shell(){
  const {userId,projects,loading,notices,tables}=useData();
  const ui=useUi();
  const [navOpen,setNavOpen]=useState(false);
+ const [sidebarCollapsed,setSidebarCollapsed]=useState(()=>loadRaw("sidebar-collapsed",false));
  const [projectComposer,setProjectComposer]=useState(false);
  const [membership,setMembership]=useState<ProjectMembership|null|undefined>(undefined);
+
+ useEffect(()=>save("sidebar-collapsed",sidebarCollapsed),[sidebarCollapsed]);
 
  useEffect(()=>{
   let active=true;
@@ -49,13 +54,14 @@ function Shell(){
 
  const createProject=async(values:{name:string;description:string|null;color:string|null})=>{
   const row=await projects.insert({user_id:userId,status:"Active",...values});
-  if(row){setProjectComposer(false);ui.openProject(row.id)}
+  if(!row)return false;
+  ui.openProject(row.id);return true;
  };
 
  const currentProject=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;
  const currentPublication=ui.publicationId?tables.publications.byId.get(ui.publicationId):null;
  const sharedPublication=projectOnly&&sharedProject&&currentPublication?.project_id===sharedProject.id?currentPublication:null;
- const title=ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="project"?(currentProject?.name??"Project"):
+ const title=ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
   ui.view==="publication"?(String(currentPublication?.title??"")||"Publication"):ENTITIES[ui.view as EntityKey].plural;
 
  useEffect(()=>{
@@ -70,9 +76,11 @@ function Shell(){
   <div className="page"><div className="skeleton-stack">{Array.from({length:5}).map((_,i)=><div className="skeleton" key={i}/>)}</div></div>
  </main></div>;
 
- return <div className={"shell"+(projectOnly?" project-only-shell":"")}>
+ const pageKey=ui.view==="publication"?`publication:${ui.publicationId}`:`${ui.view}:${String(ui.scope)}`;
+
+ return <div className={"shell"+(projectOnly?" project-only-shell":sidebarCollapsed?" sidebar-collapsed":"")}>
   {!projectOnly&&navOpen&&<div className="nav-scrim" onClick={()=>setNavOpen(false)}/>}
-  {!projectOnly&&<Sidebar open={navOpen} onNewProject={()=>setProjectComposer(true)}/>}
+  {!projectOnly&&<Sidebar open={navOpen} collapsed={sidebarCollapsed} onToggleCollapsed={()=>setSidebarCollapsed(v=>!v)} onNewProject={()=>setProjectComposer(true)}/>} 
   <main>
    <header className="topbar">
     {!projectOnly&&<button className="icon-button nav-toggle" onClick={()=>setNavOpen(v=>!v)} aria-label="Toggle navigation"><Menu/></button>}
@@ -91,7 +99,7 @@ function Shell(){
      <button className="icon-button" onClick={n.dismiss} aria-label="Dismiss"><X/></button>
     </p>)}
 
-    {loading
+    <div className="page-transition" key={pageKey}>{loading
      ?<div className="skeleton-stack">{Array.from({length:5}).map((_,i)=><div className="skeleton" key={i}/>)}</div>
      :projectOnly&&sharedProject&&sharedPublication?<PublicationView publicationId={sharedPublication.id}
        returnProjectId={sharedProject.id} accessRole={membership?.role}/>
@@ -99,14 +107,15 @@ function Shell(){
      :projectOnly?<div className="empty-state"><p>This shared project is unavailable.</p></div>
      :ui.view==="home"?<HomeView/>
      :ui.view==="settings"?<SettingsView/>
+     :ui.view==="trash"?<TrashView/>
      :ui.view==="project"&&typeof ui.scope==="string"?<ProjectView projectId={ui.scope}/>
      :ui.view==="publication"&&ui.publicationId?<PublicationView publicationId={ui.publicationId}/>
-     :<EntityView key={ui.view} def={ENTITIES[ui.view as EntityKey]}/>} 
+     :<EntityView key={ui.view} def={ENTITIES[ui.view as EntityKey]}/>}</div>
    </div>
   </main>
 
   {!projectOnly&&<CommandPalette/>}
-  {!projectOnly&&projectComposer&&<ProjectComposer onClose={()=>setProjectComposer(false)} onCreate={v=>void createProject(v)}/>}
+  {!projectOnly&&projectComposer&&<ProjectComposer onClose={()=>setProjectComposer(false)} onCreate={createProject}/>}
  </div>;
 }
 
