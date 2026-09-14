@@ -11,6 +11,10 @@ Deno.serve(async(req)=>{
  const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
  const token=Deno.env.get("TELEGRAM_BOT_TOKEN");
 
+ // The same scheduled sweep also enforces each user's 14/30-day Trash policy.
+ // Ignore "function not found" until the one-time trash.sql migration is applied.
+ await db.rpc("purge_expired_trash");
+
  const {data:due,error}=await db.from("reminders").select("id,title,body,user_id,project_id,task_id,person_id")
   .lte("remind_at",new Date().toISOString()).eq("done",false).is("notified_at",null).limit(100);
  if(error)return json({ok:false,error:error.message},500);
