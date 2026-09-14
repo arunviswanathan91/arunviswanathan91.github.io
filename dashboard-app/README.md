@@ -23,6 +23,9 @@ than hand-built:
 - **Project/publication connections** — a paper may be assigned directly to one project or surfaced
   in related projects through shared tags, with a one-click option to make that link direct.
 - **Managed tags** with colours, shared across all six modules.
+- **Recoverable Trash** for dashboard records, with a user-selectable 14- or 30-day retention period,
+  restore controls, and automatic permanent cleanup during the reminder sweep.
+- **Collapsible navigation** that becomes a labelled icon rail on desktop, plus fast modal and page transitions.
 - **Light and dark themes**, following the OS by default with a manual override.
 - **Telegram bot** — linking flow, `/add`, `/today`, `/done`, `/job`, `/remind`, and project-aware
   link capture, plus private follow-up notifications for work assigned to your contact labels.
@@ -59,22 +62,24 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local environment. T
 2. To share one project with signed-in collaborators, run `supabase/project-collaboration.sql` after
    the base schema. It is rerunnable and gives `editor` members add/edit/move access while keeping
    every delete, project reassignment, tag mutation and private-people mutation owner-only.
-3. In Database → Extensions, enable `pg_cron` and `pg_net` (needed for reminder push notifications).
-4. Store `CRON_SWEEP_SECRET` (a random string you generate) in Supabase Vault, e.g. `select vault.create_secret('<value>', 'cron_sweep_secret');`.
-5. Deploy the Edge Functions and set their secrets:
+3. Run `supabase/trash.sql` once after the files above. It is rerunnable and adds soft deletion,
+   restore/permanent-delete functions, and the per-user 14/30-day retention setting.
+4. In Database → Extensions, enable `pg_cron` and `pg_net` (needed for reminder push notifications and scheduled Trash cleanup).
+5. Store `CRON_SWEEP_SECRET` (a random string you generate) in Supabase Vault, e.g. `select vault.create_secret('<value>', 'cron_sweep_secret');`.
+6. Deploy the Edge Functions and set their secrets:
    ```bash
    supabase functions deploy telegram-webhook
    supabase functions deploy telegram-reminder-sweep
    supabase secrets set TELEGRAM_BOT_TOKEN=... SUPABASE_SERVICE_ROLE_KEY=... TELEGRAM_WEBHOOK_SECRET=... CRON_SWEEP_SECRET=...
    ```
    Never commit these values.
-6. Register the webhook with Telegram (via BotFather-issued token):
+7. Register the webhook with Telegram (via BotFather-issued token):
    ```bash
    curl -X POST https://api.telegram.org/bot<TOKEN>/setWebhook \
      -d url=https://<project-ref>.functions.supabase.co/telegram-webhook \
      -d secret_token=<TELEGRAM_WEBHOOK_SECRET>
    ```
-7. Schedule the reminder sweep to run every minute:
+8. Schedule the reminder sweep to run every minute:
    ```sql
    select cron.schedule(
      'telegram-reminder-sweep',
@@ -91,7 +96,7 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local environment. T
      $$
    );
    ```
-8. In the dashboard, open **Telegram** in the sidebar and click **Generate code**, then send `/link <code>` to your bot to connect your account.
+9. In the dashboard, open **Telegram** in the sidebar and click **Generate code**, then send `/link <code>` to your bot to connect your account.
 
 The production dashboard build uses `/dashboard/` as its base path.
 
