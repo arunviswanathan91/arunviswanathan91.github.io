@@ -35,21 +35,35 @@ export interface TableStore<T extends Row=Row>{
  patchLocal(fn:(row:T)=>T|null):void;
 }
 
-export function useTable<T extends Row=Row>(table:string,select:string,sort:SortSpec):TableStore<T>{
+interface TableOptions{
+ /** Dashboard records are soft-deleted through move_to_trash. Infrastructure
+  *  tables such as trash_items opt out and retain normal table semantics. */
+ softDelete?:boolean;
+}
+
+export function useTable<T extends Row=Row>(table:string,select:string,sort:SortSpec,options:TableOptions={}):TableStore<T>{
  const [rows,setRows]=useState<T[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
  const rowsRef=useRef<T[]>([]);rowsRef.current=rows;
  const fetchedAt=useRef(0),alive=useRef(true);
  const {key:sortKey,dir:sortDir}=sort;
+ const softDelete=options.softDelete!==false;
 
  const refetch=useCallback(async(force=false)=>{
   if(!supabase)return;
   if(!force&&Date.now()-fetchedAt.current<REFETCH_THROTTLE)return;
   fetchedAt.current=Date.now();
-  const {data,error}=await supabase.from(table).select(select).order(sortKey,{ascending:sortDir==="asc"});
+  let result=softDelete
+   ?await supabase.from(table).select(select).is("deleted_at",null).order(sortKey,{ascending:sortDir==="asc"})
+   :await supabase.from(table).select(select).order(sortKey,{ascending:sortDir==="asc"});
+  // Keep the dashboard usable while the one-time Trash migration is pending.
+  // Deletes stay blocked until the RPC exists, but reads do not collapse.
+  if(softDelete&&result.error&&/deleted_at|column .* does not exist/i.test(result.error.message))
+   result=await supabase.from(table).select(select).order(sortKey,{ascending:sortDir==="asc"});
+  const {data,error}=result;
   if(!alive.current)return;
   if(error)setError(error.message); else setRows((data??[]) as unknown as T[]);
   setLoading(false);
- },[table,select,sortKey,sortDir]);
+ },[table,select,sortKey,sortDir,softDelete]);
 
  useEffect(()=>{
   alive.current=true;
@@ -105,19 +119,27 @@ export function useTable<T extends Row=Row>(table:string,select:string,sort:Sort
   if(!supabase||!id)return false;
   const before=rowsRef.current;
   setRows(v=>v.filter(r=>r.id!==id));
-  const {error}=await supabase.from(table).delete().eq("id",id);
+  const {error}=softDelete
+   ?await supabase.rpc("move_to_trash",{p_table:table,p_record_id:id})
+   :await supabase.from(table).delete().eq("id",id);
   if(error){setRows(before);setError(error.message);return false}
+  if(softDelete)window.dispatchEvent(new CustomEvent("dash:trash-changed"));
   return true;
- },[table]);
+ },[table,softDelete]);
 
  const removeMany=useCallback(async(ids:string[])=>{
   if(!supabase||!ids.length)return false;
+  const db=supabase;
   const before=rowsRef.current,set=new Set(ids);
   setRows(v=>v.filter(r=>!set.has(r.id)));
-  const {error}=await supabase.from(table).delete().in("id",ids);
+  const results=softDelete
+   ?await Promise.all(ids.map(p_record_id=>db.rpc("move_to_trash",{p_table:table,p_record_id})))
+   :[await db.from(table).delete().in("id",ids)];
+  const error=results.find(r=>r.error)?.error;
   if(error){setRows(before);setError(error.message);return false}
+  if(softDelete)window.dispatchEvent(new CustomEvent("dash:trash-changed"));
   return true;
- },[table]);
+ },[table,softDelete]);
 
  const patchLocal=useCallback((fn:(row:T)=>T|null)=>{
   setRows(v=>v.map(r=>fn(r)??r));
