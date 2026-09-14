@@ -9,7 +9,7 @@ import type { EntityDef, FieldDef } from "../../entities/types";
  *  so the quick path stays quick but nothing is unreachable at creation time. */
 export function Composer({def,seed,onClose,onSubmit,hiddenFields=[]}:{
  def:EntityDef;seed:Record<string,unknown>;onClose():void;
- onSubmit(values:Record<string,unknown>,tagIds:string[]):Promise<void>;
+ onSubmit(values:Record<string,unknown>,tagIds:string[]):Promise<boolean>;
  hiddenFields?:string[];
 }){
  const {inputCtx}=useEntityCtx(def);
@@ -24,17 +24,18 @@ export function Composer({def,seed,onClose,onSubmit,hiddenFields=[]}:{
  const missing=def.fields.filter(f=>f.required&&!String(values[f.key]??"").trim());
 
  const set=(f:FieldDef,v:any)=>{if(f.kind==="tags")setTagIds(v as string[]);else setValues(s=>({...s,[f.key]:v}))};
- const submit=async()=>{
+ const submit=async(close:()=>void)=>{
   if(missing.length){setExpanded(true);return}
-  setBusy(true);await onSubmit(values,tagIds);setBusy(false);
+  setBusy(true);const saved=await onSubmit(values,tagIds);setBusy(false);
+  if(saved)close();
  };
 
  return <Modal kicker={def.kicker} title={`New ${def.singular}`} onClose={onClose}
-  footer={<>
+  footer={close=><>
    {!expanded&&editable.length>quick.length&&
     <button type="button" className="secondary" onClick={()=>setExpanded(true)}>More fields</button>}
-   <button type="button" className="secondary" onClick={onClose}>Cancel</button>
-   <button type="button" className="primary" onClick={()=>void submit()} disabled={busy||missing.length>0}>
+   <button type="button" className="secondary" onClick={close}>Cancel</button>
+   <button type="button" className="primary" onClick={()=>void submit(close)} disabled={busy||missing.length>0}>
     {busy?"Adding…":"Add"}</button>
   </>}>
   <div className="field-grid">
