@@ -39,18 +39,18 @@ export function Drawer({def,row,onClose,canEdit=true,canDelete=true,hiddenFields
   if(f.kind==="tags"){if(def.tagEntity)void tags.setFor(def.tagEntity,row.id,v as string[])}
   else void table.update(row.id,{[f.key]:v});
  };
- const remove=async()=>{
-  if(!window.confirm(`Delete this ${def.singular}?`))return;
-  if(await table.remove(row.id))onClose();
+ const remove=async(close:()=>void)=>{
+  if(!window.confirm(`Move this ${def.singular} to Trash? You can restore it before its scheduled removal date.`))return;
+  if(await table.remove(row.id))close();
  };
 
  return <>
-  <Modal kicker={def.singular} title={title} onClose={onClose} footer={
+  <Modal kicker={def.singular} title={title} onClose={onClose} footer={close=>
    <div className="record-edit-footer">
     <div className="stamp-row">
      {stamps.map(f=>row[f.key]?<span key={f.key}>{f.label} {formatDate(row[f.key],true)}</span>:null)}
     </div>
-    {canDelete&&<button type="button" className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>}
+    {canDelete&&<button type="button" className="danger-button" onClick={()=>void remove(close)}><Trash2/>Move to Trash</button>}
    </div>}>
    <div className="record-edit-grid">
     {def.key==="publications"&&<PublicationLifecycle publication={row} canEdit={canEdit} canReassign={canDelete}/>} 
