@@ -2,18 +2,19 @@ import { Tag as TagIcon, Trash2, X } from "lucide-react";
 import { Popover } from "../ui/Popover";
 import { useData, useEntityTable } from "../../lib/store";
 import type { EntityDef } from "../../entities/types";
+import { useConfirmDialog } from "../ui/ConfirmDialog";
 
 /** Every action here is derived from the entity config, so no per-entity code. */
 export function BulkBar({def,ids,onClear}:{def:EntityDef;ids:string[];onClear():void}){
  const table=useEntityTable(def.key);
  const {projects,tags}=useData();
+ const {ask,confirmation}=useConfirmDialog();
  const enums=def.fields.filter(f=>f.kind==="enum"&&!f.derive&&f.filter);
 
  const setField=async(key:string,value:string|null)=>{await table.updateMany(ids,{[key]:value});onClear()};
- const remove=async()=>{
-  if(!window.confirm(`Move ${ids.length} ${ids.length===1?def.singular:def.singular+"s"} to Trash?`))return;
-  await table.removeMany(ids);onClear();
- };
+ const remove=()=>ask({title:"Move selected items to Trash?",
+  message:`${ids.length} ${ids.length===1?def.singular:def.singular+"s"} will remain recoverable until their scheduled removal date.`,confirmLabel:"Move to Trash"},
+  async()=>{await table.removeMany(ids);onClear()});
 
  return <div className="bulk-bar" role="region" aria-label="Bulk actions">
   <span className="bulk-count">{ids.length} selected</span>
@@ -47,7 +48,8 @@ export function BulkBar({def,ids,onClear}:{def:EntityDef;ids:string[];onClear():
    </div>}
   </Popover>}
 
-  <button className="danger-button" onClick={()=>void remove()}><Trash2/>Move to Trash</button>
+  <button className="danger-button" onClick={remove}><Trash2/>Move to Trash</button>
   <button className="icon-button" onClick={onClear} aria-label="Clear selection"><X/></button>
+  {confirmation}
  </div>;
 }
