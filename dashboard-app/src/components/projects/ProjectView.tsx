@@ -48,13 +48,13 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
  const newEntity=(key:ProjectEntityKey,preset:Record<string,unknown>={})=>
   setComposer({key,seed:{...ENTITIES[key].newDefaults({userId:String(project.user_id),projectId}),...preset}});
  const submitEntity=async(values:Record<string,unknown>,tagIds:string[])=>{
-  if(!composer)return;
+  if(!composer)return false;
   const key=composer.key,def=ENTITIES[key];
   const clean=Object.fromEntries(Object.entries(values).filter(([,v])=>v!==""&&v!==undefined));
   const row=await data.tables[key].insert(clean);
-  if(!row)return;
+  if(!row)return false;
   if(tagIds.length&&def.tagEntity)await data.tags.setFor(def.tagEntity,row.id,tagIds);
-  setComposer(null);
+  return true;
  };
  const drawer=ui.drawer;
  const drawerRow=drawer?data.tables[drawer.entity].byId.get(drawer.id)??null:null;
@@ -157,7 +157,7 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
     <div className="resource-list">
      {links.map(link=><div className="resource-row" key={link.id}>
       <a href={safeHttp(link.url)??undefined} target="_blank" rel="noopener noreferrer"><ExternalLink/><span>{link.label}</span></a>
-      {isOwner&&<button className="icon-button" onClick={()=>void projectLinks.remove(link.id)} aria-label={`Delete ${link.label}`}><Trash2/></button>}
+      {isOwner&&<button className="icon-button" onClick={()=>void projectLinks.remove(link.id)} aria-label={`Move ${link.label} to Trash`}><Trash2/></button>}
      </div>)}
      {!links.length&&<p className="muted-note">Add Drive folders, repositories, protocols or datasets.</p>}
     </div>
@@ -178,7 +178,7 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
       <input className="input input-compact" defaultValue={field.value??""} aria-label={`${field.label} value`}
        disabled={!canEdit}
        onBlur={e=>{const value=e.target.value.trim()||null;if(value!==field.value)void projectFields.update(field.id,{value})}}/>
-      {isOwner&&<button className="icon-button" onClick={()=>void projectFields.remove(field.id)} aria-label={`Delete ${field.label}`}><Trash2/></button>}
+      {isOwner&&<button className="icon-button" onClick={()=>void projectFields.remove(field.id)} aria-label={`Move ${field.label} to Trash`}><Trash2/></button>}
      </div>)}
     </div>
     {canEdit&&<div className="compact-add-grid">
@@ -329,7 +329,7 @@ function StageManager({project,stages,tasks,isOwner,onClose}:{project:Project;st
   const position=stage.position;await projectStages.update(stage.id,{position:other.position});await projectStages.update(other.id,{position});
  };
  return <Modal kicker="Project workflow" title={`Stages for ${project.name}`} size="lg" onClose={onClose}
-  footer={<button type="button" className="primary" onClick={onClose}>Done</button>}>
+  footer={close=><button type="button" className="primary" onClick={close}>Done</button>}>
   <p className="stage-help">Names are fully custom. The behaviour keeps the global Tasks page compatible when a card moves.</p>
   <div className="stage-list">{stages.map((stage,index)=>{
    const used=tasks.filter(t=>t.stage_id===stage.id).length;
@@ -344,8 +344,8 @@ function StageManager({project,stages,tasks,isOwner,onClose}:{project:Project;st
     <span className="muted-note">{used} card{used===1?"":"s"}</span>
     <button className="icon-button" disabled={index===0} onClick={()=>void move(index,-1)} aria-label={`Move ${stage.name} left`}><ArrowLeft/></button>
     <button className="icon-button" disabled={index===stages.length-1} onClick={()=>void move(index,1)} aria-label={`Move ${stage.name} right`}><ArrowRight/></button>
-    {isOwner&&<button className="icon-button" disabled={used>0} title={used?"Move its cards before deleting":"Delete stage"}
-     onClick={()=>{if(window.confirm(`Delete stage “${stage.name}”?`))void projectStages.remove(stage.id)}} aria-label={`Delete ${stage.name}`}><Trash2/></button>}
+    {isOwner&&<button className="icon-button" disabled={used>0} title={used?"Move its cards before deleting":"Move stage to Trash"}
+     onClick={()=>{if(window.confirm(`Move stage “${stage.name}” to Trash?`))void projectStages.remove(stage.id)}} aria-label={`Move ${stage.name} to Trash`}><Trash2/></button>}
    </div>})}</div>
   <div className="stage-add">
    <input className="input" value={name} placeholder="New stage, e.g. Wet lab" aria-label="New stage name" onChange={e=>setName(e.target.value)}
@@ -363,17 +363,17 @@ function PersonEditor({person,onClose}:{person:Person|"new";onClose():void}){
  const [values,setValues]=useState({name:current?.name??"",role:current?.role??"",organization:current?.organization??"",
   email:current?.email??"",telegram_handle:current?.telegram_handle??"",notes:current?.notes??""});
  const set=(key:keyof typeof values,value:string)=>setValues(v=>({...v,[key]:value}));
- const save=async()=>{
+ const save=async(close:()=>void)=>{
   const name=values.name.trim();if(!name)return;
   const payload={name,role:values.role.trim()||null,organization:values.organization.trim()||null,email:values.email.trim()||null,
    telegram_handle:cleanTelegram(values.telegram_handle),notes:values.notes.trim()||null};
-  if(current)await people.update(current.id,payload);else await people.insert({user_id:userId,...payload});
-  onClose();
+  const saved=current?await people.update(current.id,payload):Boolean(await people.insert({user_id:userId,...payload}));
+  if(saved)close();
  };
  return <Modal kicker="Private contact" title={current?`Edit ${current.name}`:"Add person"} onClose={onClose}
-  footer={<><button type="button" className="secondary" onClick={onClose}>Cancel</button>
-   {current&&<button type="button" className="danger-button" onClick={async()=>{if(window.confirm(`Delete ${current.name}? Assignments will become unassigned.`)){await people.remove(current.id);onClose()}}}><Trash2/>Delete</button>}
-   <button type="button" className="primary" disabled={!values.name.trim()} onClick={()=>void save()}>Save</button></>}>
+  footer={close=><><button type="button" className="secondary" onClick={close}>Cancel</button>
+   {current&&<button type="button" className="danger-button" onClick={async()=>{if(window.confirm(`Move ${current.name} to Trash? Assignments will become unassigned when permanently deleted.`)&&await people.remove(current.id))close()}}><Trash2/>Move to Trash</button>}
+   <button type="button" className="primary" disabled={!values.name.trim()} onClick={()=>void save(close)}>Save</button></>}>
   <div className="private-note"><Users/><span>This person is a private label in your workspace. No invitation or message will be sent.</span></div>
   <div className="field-grid">
    <div className="field field-wide"><label className="field-label" htmlFor="person-name">Name</label><input id="person-name" className="input" autoFocus value={values.name} onChange={e=>set("name",e.target.value)}/></div>

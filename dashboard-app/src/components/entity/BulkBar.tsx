@@ -11,7 +11,7 @@ export function BulkBar({def,ids,onClear}:{def:EntityDef;ids:string[];onClear():
 
  const setField=async(key:string,value:string|null)=>{await table.updateMany(ids,{[key]:value});onClear()};
  const remove=async()=>{
-  if(!window.confirm(`Delete ${ids.length} ${ids.length===1?def.singular:def.singular+"s"}?`))return;
+  if(!window.confirm(`Move ${ids.length} ${ids.length===1?def.singular:def.singular+"s"} to Trash?`))return;
   await table.removeMany(ids);onClear();
  };
 
@@ -47,7 +47,7 @@ export function BulkBar({def,ids,onClear}:{def:EntityDef;ids:string[];onClear():
    </div>}
   </Popover>}
 
-  <button className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>
+  <button className="danger-button" onClick={()=>void remove()}><Trash2/>Move to Trash</button>
   <button className="icon-button" onClick={onClear} aria-label="Clear selection"><X/></button>
  </div>;
 }

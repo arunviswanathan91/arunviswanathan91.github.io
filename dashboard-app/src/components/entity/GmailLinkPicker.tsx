@@ -44,7 +44,7 @@ export function GmailLinkPicker({initialQuery,onPick,onClose}:{
   if(data?.url)window.open(data.url,"_blank","noopener,noreferrer");
  };
 
- return <Modal title="Find in Gmail" kicker="Decision email" onClose={onClose}>
+ return <Modal title="Find in Gmail" kicker="Decision email" onClose={onClose}>{close=>
   <div className="gmail-picker">
    <div className="gmail-picker-search">
     <input className="input" value={query} onChange={e=>setQuery(e.target.value)} autoFocus
@@ -66,13 +66,13 @@ export function GmailLinkPicker({initialQuery,onPick,onClose}:{
    {hits&&hits.length>0&&<ul className="gmail-hits">
     {hits.map(h=><li key={h.threadId}>
      <button type="button" className="gmail-hit"
-      onClick={()=>{onPick(`https://mail.google.com/mail/u/0/#all/${h.threadId}`);onClose()}}>
+      onClick={()=>{onPick(`https://mail.google.com/mail/u/0/#all/${h.threadId}`);close()}}>
       <span className="gmail-hit-subject clamp-1">{h.subject}</span>
       <span className="gmail-hit-meta clamp-1">{h.from} · {h.date}</span>
       <span className="gmail-hit-snippet clamp-1">{h.snippet}</span>
      </button>
     </li>)}
    </ul>}
-  </div>
+  </div>}
  </Modal>;
 }

@@ -35,13 +35,15 @@ export interface PublicationNode extends Row{
 export interface PublicationStageEvent extends Row{
  id:string;publication_id:string;from_stage:string|null;to_stage:string;created_at:string;
 }
-export type ViewKey=EntityKey|"home"|"project"|"publication"|"settings";
+export interface TrashItem extends Row{
+ id:string;user_id:string;source_table:string;record_id:string;item_type:string;
+ title:string;deleted_at:string;purge_at:string;
+}
+export type ViewKey=EntityKey|"home"|"project"|"publication"|"settings"|"trash";
 export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
 
 const PROJECT_SELECT="id,user_id,name,description,objective,status,phase,color,start_date,target_date,created_at,updated_at";
-/** Entity tables carrying a project_id, repaired locally when a project is deleted. */
-const PROJECT_SCOPED:EntityKey[]=["tasks","publications","documents","jobs","reminders","reads"];
 
 interface DataValue{
  userId:string;
@@ -53,6 +55,7 @@ interface DataValue{
  projectFields:TableStore<ProjectField>;
  publicationNodes:TableStore<PublicationNode>;
  publicationStageEvents:TableStore<PublicationStageEvent>;
+ trashItems:TableStore<TrashItem>;
  tags:TagStore;
  loading:boolean;
  notices:NoticeItem[];
@@ -60,6 +63,9 @@ interface DataValue{
  chatId:number|null;
  refreshTelegram():Promise<void>;
  deleteProject(id:string):Promise<void>;
+ restoreTrashItem(id:string):Promise<string|null>;
+ purgeTrashItem(id:string):Promise<string|null>;
+ emptyTrash():Promise<string|null>;
 }
 interface UiValue{
  view:ViewKey;setView(v:ViewKey):void;openProject(id:string):void;
@@ -95,7 +101,7 @@ const initialRoute=():{view:ViewKey;scope:Scope;publicationId:string|null}=>{
  if(project)return {view:"project",scope:project[1],publicationId:null};
  const publication=hash.match(/^publication\/([0-9a-f-]+)$/i);
  if(publication)return {view:"publication",scope:"all",publicationId:publication[1]};
- const view=(hash&&(hash==="home"||hash==="settings"||ENTITY_ORDER.includes(hash as EntityKey))?hash:"home") as ViewKey;
+ const view=(hash&&(hash==="home"||hash==="settings"||hash==="trash"||ENTITY_ORDER.includes(hash as EntityKey))?hash:"home") as ViewKey;
  return {view,scope:"all",publicationId:null};
 };
 
@@ -114,6 +120,7 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  const projectFields=useTable<ProjectField>("project_fields","id,user_id,project_id,label,value,field_type,position,created_at,updated_at",{key:"position",dir:"asc"});
  const publicationNodes=useTable<PublicationNode>("publication_nodes","id,user_id,publication_id,title,status,assignee_id,due_at,position,notes,completed_at,created_at,updated_at",{key:"position",dir:"asc"});
  const publicationStageEvents=useTable<PublicationStageEvent>("publication_stage_events","id,user_id,publication_id,from_stage,to_stage,created_at",{key:"created_at",dir:"desc"});
+ const trashItems=useTable<TrashItem>("trash_items","id,user_id,source_table,record_id,item_type,title,deleted_at,purge_at",{key:"deleted_at",dir:"desc"},{softDelete:false});
  const tags=useTags(userId);
 
  const tables=useMemo(()=>({tasks,publications,documents,jobs,reminders,reads,opportunities}),
@@ -136,11 +143,14 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
     if(zone)await supabase!.from("profiles").update({timezone:zone}).eq("id",userId);
    }
    await refreshTelegram();
+   // Service-role sweeps also purge globally; this covers an expired item
+   // immediately when its owner returns to the dashboard.
+   await supabase!.rpc("purge_expired_trash");
   })();
  },[userId,refreshTelegram]);
 
  const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||opportunities.loading||
-  projects.loading||people.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||publicationStageEvents.loading||tags.loading;
+  projects.loading||people.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||publicationStageEvents.loading||trashItems.loading||tags.loading;
 
  const notices=useMemo(()=>{
   const all:NoticeItem[]=[];
@@ -158,19 +168,41 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   void projects.refetch(true);
   void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
   void projectFields.refetch(true);void publicationNodes.refetch(true);void publicationStageEvents.refetch(true);
- },[tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents]);
+  void tags.refetch();
+ },[tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags]);
 
- // The DB nulls these FKs via `on delete set null`; mirror it locally so rows don't
- // silently disappear from every board until the next reload.
+ useEffect(()=>{
+  const refresh=()=>void trashItems.refetch(true);
+  window.addEventListener("dash:trash-changed",refresh);
+  return()=>window.removeEventListener("dash:trash-changed",refresh);
+ },[trashItems.refetch]);
+
+ const restoreTrashItem=useCallback(async(id:string)=>{
+  if(!supabase)return "Supabase is not configured.";
+  const {error}=await supabase.rpc("restore_trash_item",{p_trash_id:id});
+  if(error)return error.message;
+  await trashItems.refetch(true);refreshAll();return null;
+ },[trashItems,refreshAll]);
+ const purgeTrashItem=useCallback(async(id:string)=>{
+  if(!supabase)return "Supabase is not configured.";
+  const {error}=await supabase.rpc("delete_trash_item",{p_trash_id:id});
+  if(error)return error.message;
+  await trashItems.refetch(true);return null;
+ },[trashItems]);
+ const emptyTrash=useCallback(async()=>{
+  if(!supabase)return "Supabase is not configured.";
+  const {error}=await supabase.rpc("empty_trash");
+  if(error)return error.message;
+  await trashItems.refetch(true);return null;
+ },[trashItems]);
+
  const deleteProject=useCallback(async(id:string)=>{
-  if(!await projects.remove(id))return;
-  for(const key of PROJECT_SCOPED)
-   tables[key].patchLocal(r=>r.project_id===id?{...r,project_id:null}:null);
- },[projects,tables]);
+  await projects.remove(id);
+ },[projects]);
 
  const dataValue=useMemo(()=>({userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,
-  tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject}),
-  [userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject]);
+  trashItems,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,emptyTrash}),
+  [userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,trashItems,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,emptyTrash]);
 
  // ---- UI state ----
  const initial=initialRoute();
@@ -209,9 +241,10 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
    void tasks.refetch(true);void publications.refetch(true);void documents.refetch(true);void reminders.refetch(true);void reads.refetch(true);
    void projects.refetch(true);void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
    void projectFields.refetch(true);void publicationNodes.refetch(true);void publicationStageEvents.refetch(true);
-  }else if(ENTITY_ORDER.includes(view as EntityKey))void tables[view as EntityKey].refetch(true);
+  }else if(view==="trash")void trashItems.refetch(true);
+  else if(ENTITY_ORDER.includes(view as EntityKey))void tables[view as EntityKey].refetch(true);
  },[view,scope,tasks.refetch,publications.refetch,documents.refetch,reminders.refetch,reads.refetch,projects.refetch,
-  people.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch,publicationStageEvents.refetch]);
+  people.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch,publicationStageEvents.refetch,trashItems.refetch]);
 
  const setQuery=useCallback((k:EntityKey,patch:Partial<Query>)=>setQueries(v=>({...v,[k]:{...v[k],...patch}})),[]);
  useEffect(()=>{

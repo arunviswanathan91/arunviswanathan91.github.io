@@ -19,6 +19,7 @@ export interface TagStore{
  loading:boolean;
  error:string;
  dismissError():void;
+ refetch():Promise<void>;
  create(name:string,color?:string|null):Promise<Tag|null>;
  rename(id:string,name:string):Promise<boolean>;
  recolor(id:string,color:string|null):Promise<boolean>;
@@ -32,22 +33,27 @@ export function useTags(userId:string):TagStore{
  const [tags,setTags]=useState<Tag[]>([]),[links,setLinks]=useState<LinkRow[]>([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState("");
  const linksRef=useRef<LinkRow[]>([]);linksRef.current=links;
+ const alive=useRef(true);
+
+ const refetch=useCallback(async()=>{
+  if(!supabase){setLoading(false);return}
+  let tagResult=await supabase.from("tags").select("id,name,color").is("deleted_at",null).order("name");
+  if(tagResult.error&&/deleted_at|column .* does not exist/i.test(tagResult.error.message))
+   tagResult=await supabase.from("tags").select("id,name,color").order("name");
+  const [t,l]=await Promise.all([
+    Promise.resolve(tagResult),
+    supabase!.from("item_tags").select("tag_id,entity_type,entity_id"),
+  ]);
+  if(!alive.current)return;
+  if(t.error)setError(t.error.message); else setTags((t.data??[]) as unknown as Tag[]);
+  if(l.error)setError(l.error.message); else setLinks((l.data??[]) as unknown as LinkRow[]);
+  setLoading(false);
+ },[]);
 
  useEffect(()=>{
-  let alive=true;
-  if(!supabase){setLoading(false);return}
-  void(async()=>{
-   const [t,l]=await Promise.all([
-    supabase!.from("tags").select("id,name,color").order("name"),
-    supabase!.from("item_tags").select("tag_id,entity_type,entity_id"),
-   ]);
-   if(!alive)return;
-   if(t.error)setError(t.error.message); else setTags((t.data??[]) as unknown as Tag[]);
-   if(l.error)setError(l.error.message); else setLinks((l.data??[]) as unknown as LinkRow[]);
-   setLoading(false);
-  })();
-  return()=>{alive=false};
- },[]);
+  alive.current=true;void refetch();
+  return()=>{alive.current=false};
+ },[refetch]);
 
  // Index once per link change: O(1) lookups instead of a filter per item per render,
  // and a stable identity so consumers' useMemo actually holds.
@@ -93,8 +99,9 @@ export function useTags(userId:string):TagStore{
   const beforeTags=tags,beforeLinks=linksRef.current;
   setTags(v=>v.filter(t=>t.id!==id));
   setLinks(v=>v.filter(l=>l.tag_id!==id));      // DB cascades; mirror it locally
-  const {error}=await supabase.from("tags").delete().eq("id",id);
+  const {error}=await supabase.rpc("move_to_trash",{p_table:"tags",p_record_id:id});
   if(error){setTags(beforeTags);setLinks(beforeLinks);setError(error.message);return false}
+  window.dispatchEvent(new CustomEvent("dash:trash-changed"));
   return true;
  },[tags]);
 
@@ -144,6 +151,6 @@ export function useTags(userId:string):TagStore{
 
  const dismissError=useCallback(()=>setError(""),[]);
 
- return useMemo(()=>({tags,byId,idsFor,usage,loading,error,dismissError,create,rename,recolor,destroy,setFor,addTo,removeFrom}),
-  [tags,byId,idsFor,usage,loading,error,dismissError,create,rename,recolor,destroy,setFor,addTo,removeFrom]);
+ return useMemo(()=>({tags,byId,idsFor,usage,loading,error,dismissError,refetch,create,rename,recolor,destroy,setFor,addTo,removeFrom}),
+  [tags,byId,idsFor,usage,loading,error,dismissError,refetch,create,rename,recolor,destroy,setFor,addTo,removeFrom]);
 }

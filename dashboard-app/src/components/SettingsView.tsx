@@ -18,14 +18,16 @@ export function SettingsView(){
  const [notice,setNotice]=useState("");
  const [displayName,setDisplayName]=useState("");
  const [timezone,setTimezone]=useState("");
+ const [trashRetention,setTrashRetention]=useState<14|30>(30);
  const [names,setNames]=useState<Record<string,string>>({});
 
  useEffect(()=>{
   if(!supabase)return;
-  void supabase.from("profiles").select("display_name,timezone").eq("id",userId).maybeSingle()
+  void supabase.from("profiles").select("display_name,timezone,trash_retention_days").eq("id",userId).maybeSingle()
    .then(({data})=>{
     setDisplayName((data?.display_name as string|null)??"");
     setTimezone((data?.timezone as string|null)??Intl.DateTimeFormat().resolvedOptions().timeZone??"UTC");
+    setTrashRetention(data?.trash_retention_days===14?14:30);
    });
  },[userId]);
 
@@ -36,6 +38,13 @@ export function SettingsView(){
  const saveTimezone=async()=>{
   if(!supabase)return;
   await supabase.from("profiles").update({timezone:timezone.trim()||null}).eq("id",userId);
+ };
+
+ const saveTrashRetention=async(days:14|30)=>{
+  setTrashRetention(days);
+  if(!supabase)return;
+  const {error}=await supabase.from("profiles").update({trash_retention_days:days}).eq("id",userId);
+  if(error)setNotice(error.message);
  };
 
  const generate=async()=>{
@@ -69,6 +78,14 @@ export function SettingsView(){
       onChange={e=>setTimezone(e.target.value)} onBlur={()=>void saveTimezone()}/>
      <small className="muted-note">The bot reads dates like “due:friday” and “in 2h” in this zone.</small>
     </div>
+    <div className="field">
+     <label className="field-label" htmlFor="trash-retention">Keep deleted items</label>
+     <select id="trash-retention" className="input" value={trashRetention}
+      onChange={e=>void saveTrashRetention(Number(e.target.value)===14?14:30)}>
+      <option value={14}>14 days</option><option value={30}>30 days</option>
+     </select>
+     <small className="muted-note">Changing this also updates the removal date of items already in Trash.</small>
+    </div>
    </section>
 
    <section className="panel">
@@ -99,8 +116,8 @@ export function SettingsView(){
       <button className="icon-button" title={p.status==="Active"?"Archive":"Restore"}
        onClick={()=>void projects.update(p.id,{status:p.status==="Active"?"Archived":"Active"})}>
        {p.status==="Active"?<Archive/>:<ArchiveRestore/>}</button>
-      <button className="icon-button" title="Delete project"
-       onClick={()=>{if(window.confirm(`Delete “${p.name}”? Its records move to Inbox.`))void deleteProject(p.id)}}>
+      <button className="icon-button" title="Move project to Trash"
+       onClick={()=>{if(window.confirm(`Move “${p.name}” to Trash? Its linked work stays attached and returns if you restore the project.`))void deleteProject(p.id)}}>
        <Trash2/></button>
      </div>)}
      {!projects.rows.length&&<p className="muted-note">No projects yet.</p>}
@@ -119,8 +136,8 @@ export function SettingsView(){
        {TAG_COLORS.map(c=><option key={c} value={c}>{c}</option>)}
       </select>
       <small className="muted-note">{tags.usage.get(t.id)??0} uses</small>
-      <button className="icon-button" title="Delete tag"
-       onClick={()=>{if(window.confirm(`Delete “${t.name}”? It will be removed from ${tags.usage.get(t.id)??0} record(s).`))void tags.destroy(t.id)}}>
+      <button className="icon-button" title="Move tag to Trash"
+       onClick={()=>{if(window.confirm(`Move “${t.name}” to Trash? Its record connections are kept if you restore it.`))void tags.destroy(t.id)}}>
        <Trash2/></button>
      </div>)}
      {!tags.tags.length&&<p className="muted-note">No tags yet — add one from any record.</p>}

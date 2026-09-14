@@ -51,7 +51,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
   else void tables.publications.update(publication.id,{[f.key]:value});
  };
  const remove=async()=>{
-  if(!window.confirm("Delete this publication?"))return;
+  if(!window.confirm("Move this publication to Trash?"))return;
   if(await tables.publications.remove(publication.id))goBack();
  };
 
@@ -90,7 +90,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
     </div>
     <footer className="publication-details-foot">
      <div className="stamp-row">{stamps.map(f=>publication[f.key]?<span key={f.key}>{f.label} {formatDate(publication[f.key],true)}</span>:null)}</div>
-     {isOwner&&<button className="danger-button" onClick={()=>void remove()}><Trash2/>Delete</button>}
+     {isOwner&&<button className="danger-button" onClick={()=>void remove()}><Trash2/>Move to Trash</button>}
     </footer>
    </aside>
   </div>
