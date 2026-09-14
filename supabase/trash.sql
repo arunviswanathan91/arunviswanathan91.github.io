@@ -17,6 +17,7 @@ alter table public.reads add column if not exists deleted_at timestamptz;
 alter table public.opportunities add column if not exists deleted_at timestamptz;
 alter table public.tags add column if not exists deleted_at timestamptz;
 alter table public.people add column if not exists deleted_at timestamptz;
+alter table public.project_people add column if not exists deleted_at timestamptz;
 alter table public.project_stages add column if not exists deleted_at timestamptz;
 alter table public.project_links add column if not exists deleted_at timestamptz;
 alter table public.project_fields add column if not exists deleted_at timestamptz;
@@ -69,7 +70,7 @@ declare
 begin
   if v_user is null then raise exception 'Authentication required'; end if;
   if p_table not in ('projects','tasks','publications','documents','job_applications','reminders','reads',
-    'opportunities','tags','people','project_stages','project_links','project_fields','publication_nodes','publication_stage_events')
+    'opportunities','tags','people','project_people','project_stages','project_links','project_fields','publication_nodes','publication_stage_events')
   then raise exception 'Table is not trash-enabled: %',p_table; end if;
 
   execute format('select to_jsonb(t) from public.%I t where id=$1 and user_id=$2 and deleted_at is null',p_table)
@@ -87,6 +88,7 @@ begin
     when 'opportunities' then 'opportunity'
     when 'tags' then 'tag'
     when 'people' then 'person'
+    when 'project_people' then 'project_person'
     when 'project_stages' then 'project_stage'
     when 'project_links' then 'project_link'
     when 'project_fields' then 'project_field'
@@ -96,12 +98,20 @@ begin
   v_title:=coalesce(nullif(v_snapshot->>'title',''),nullif(v_snapshot->>'name',''),
     nullif(v_snapshot->>'role',''),nullif(v_snapshot->>'label',''),nullif(v_snapshot->>'url',''),
     initcap(replace(v_type,'_',' ')));
+  if p_table='project_people' then
+    select person.name||' — '||project.name into v_title
+    from public.people person cross join public.projects project
+    where person.id=(v_snapshot->>'person_id')::uuid and project.id=(v_snapshot->>'project_id')::uuid;
+    v_title:=coalesce(v_title,'Project person');
+  end if;
   select coalesce(trash_retention_days,30) into v_days from public.profiles where id=v_user;
   v_days:=coalesce(v_days,30);
 
   execute format('update public.%I set deleted_at=$1 where id=$2 and user_id=$3 and deleted_at is null',p_table)
     using v_deleted,p_record_id,v_user;
 
+  -- A task-generated follow-up should disappear and stop firing with its task.
+  -- It is restored with the task and is hard-deleted by the existing FK cascade.
   if p_table='tasks' then
     update public.reminders set deleted_at=v_deleted,done=true
       where task_id=p_record_id and user_id=v_user and deleted_at is null;
@@ -179,6 +189,8 @@ begin
 end;
 $$;
 
+-- Authenticated calls purge only the caller's expired rows. The reminder sweep
+-- uses service_role and therefore performs the scheduled cleanup for all users.
 create or replace function public.purge_expired_trash()
 returns integer
 language plpgsql security definer set search_path=public
