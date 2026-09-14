@@ -3,6 +3,7 @@ import { ArrowUpDown, Columns3, LayoutGrid, Plus, RefreshCw, Search, SlidersHori
 import { Popover } from "../ui/Popover";
 import { activeFilterCount, clearFilters, DATE_BUCKETS } from "../../lib/query";
 import { useUi } from "../../lib/store";
+import { SelectMenu } from "../ui/SelectMenu";
 import type { DateBucket, Query } from "../../lib/query";
 import type { EntityDef, FieldDef, Layout } from "../../entities/types";
 import type { Tag } from "../../lib/tags";
@@ -44,10 +45,9 @@ export function Toolbar({def,query,shown,total,tags,onChange,onNew,onRefresh}:{
         <input type="checkbox" checked={(query.enums[f.key]??[]).includes(o)} onChange={()=>toggleEnum(f.key,o)}/>
         <span>{o}</span></label>)}
       </div>}
-      {f.kind==="date"&&<select className="input input-compact" value={query.dates[f.key]??"any"}
-       onChange={e=>onChange({dates:{...query.dates,[f.key]:e.target.value as DateBucket}})}>
-       {DATE_BUCKETS.map(b=><option key={b.value} value={b.value}>{b.label}</option>)}
-      </select>}
+      {f.kind==="date"&&<SelectMenu className="input input-compact" value={query.dates[f.key]??"any"} label={`${f.label} range`}
+       options={DATE_BUCKETS.map(bucket=>({value:bucket.value,label:bucket.label}))}
+       onChange={value=>onChange({dates:{...query.dates,[f.key]:value as DateBucket}})}/>}
       {f.kind==="bool"&&<div className="pop-options">
        <label className="check-label">
         <input type="checkbox" checked={query.bools[f.key]===true} onChange={e=>{
