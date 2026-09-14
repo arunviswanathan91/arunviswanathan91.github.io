@@ -44,7 +44,7 @@ export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:
      <div className="node-actions">
       <button className="icon-button" disabled={!canEdit||index===0} onClick={()=>void move(index,-1)} aria-label="Move step left"><ArrowLeft/></button>
       <button className="icon-button" disabled={!canEdit||index===nodes.length-1} onClick={()=>void move(index,1)} aria-label="Move step right"><ArrowRight/></button>
-      {canDelete&&<button className="icon-button" onClick={()=>{if(window.confirm(`Delete step “${node.title}”?`))void publicationNodes.remove(node.id)}} aria-label="Delete step"><Trash2/></button>}
+      {canDelete&&<button className="icon-button" onClick={()=>{if(window.confirm(`Move step “${node.title}” to Trash?`))void publicationNodes.remove(node.id)}} aria-label="Move step to Trash"><Trash2/></button>}
      </div>
     </div>
     <select className="input input-compact" value={node.status} aria-label={`${node.title} status`} disabled={!canEdit}
