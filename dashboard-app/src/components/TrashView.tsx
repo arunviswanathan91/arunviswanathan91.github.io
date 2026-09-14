@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Clock3, RotateCcw, Trash2 } from "lucide-react";
 import { useData } from "../lib/store";
+import { useConfirmDialog } from "./ui/ConfirmDialog";
 
 const TYPE_LABELS:Record<string,string>={
  project:"Project",task:"Task",publication:"Publication",document:"Document",
  application:"Job application",reminder:"Reminder",read:"Read",opportunity:"Opportunity",
- tag:"Tag",person:"Person",project_stage:"Project stage",project_link:"Project link",
+ tag:"Tag",person:"Person",project_person:"Project person",project_stage:"Project stage",project_link:"Project link",
  project_field:"Custom field",publication_node:"Publication step",
  publication_stage_event:"Publication stage change",
 };
@@ -19,22 +20,21 @@ export function TrashView(){
  const {trashItems,restoreTrashItem,purgeTrashItem,emptyTrash}=useData();
  const [busy,setBusy]=useState<string|null>(null);
  const [notice,setNotice]=useState("");
+ const {ask,confirmation}=useConfirmDialog();
  const run=async(id:string,action:()=>Promise<string|null>)=>{
   setBusy(id);setNotice("");
   const error=await action();
   if(error)setNotice(error);
   setBusy(null);
  };
- const clear=async()=>{
-  if(!window.confirm("Delete everything in Trash permanently? This cannot be undone."))return;
-  await run("all",emptyTrash);
- };
+ const clear=()=>ask({title:"Empty Trash permanently?",message:"Every item in Trash will be permanently deleted. This cannot be undone.",confirmLabel:"Delete everything"},
+  ()=>run("all",emptyTrash).then(()=>{}));
 
  return <div className="entity-view">
   <div className="view-head trash-head">
    <div><p className="kicker">Workspace</p><h1>Trash</h1>
     <p className="subtitle">Deleted items stay recoverable until their scheduled removal date.</p></div>
-   {trashItems.rows.length>0&&<button className="danger-button" disabled={busy!==null} onClick={()=>void clear()}><Trash2/>Empty Trash</button>}
+   {trashItems.rows.length>0&&<button className="danger-button" disabled={busy!==null} onClick={clear}><Trash2/>Empty Trash</button>}
   </div>
 
   {trashItems.error&&<div className="data-notice" role="alert">
@@ -55,8 +55,9 @@ export function TrashView(){
    <div className="trash-actions">
     <button className="secondary" disabled={busy!==null} onClick={()=>void run(item.id,()=>restoreTrashItem(item.id))}><RotateCcw/>Restore</button>
     <button className="danger-button" disabled={busy!==null}
-     onClick={()=>{if(window.confirm(`Delete “${item.title}” permanently?`))void run(item.id,()=>purgeTrashItem(item.id))}}><Trash2/>Delete forever</button>
+     onClick={()=>ask({title:"Delete permanently?",message:`“${item.title}” cannot be restored after this action.`,confirmLabel:"Delete forever"},
+      ()=>run(item.id,()=>purgeTrashItem(item.id)).then(()=>{}))}><Trash2/>Delete forever</button>
    </div>
   </article>)}</div>
- </div>;
+ {confirmation}</div>;
 }
