@@ -3,20 +3,22 @@ import { Modal } from "./ui/Modal";
 import { TAG_COLORS } from "../lib/tags";
 
 export function ProjectComposer({onClose,onCreate}:{
- onClose():void;onCreate(values:{name:string;description:string|null;color:string|null}):void;
+ onClose():void;onCreate(values:{name:string;description:string|null;color:string|null}):Promise<boolean>;
 }){
  const [name,setName]=useState(""),[description,setDescription]=useState(""),[color,setColor]=useState("slate");
- const submit=()=>{const n=name.trim();if(!n)return;onCreate({name:n,description:description.trim()||null,color})};
+ const [busy,setBusy]=useState(false);
+ const submit=async(close:()=>void)=>{const n=name.trim();if(!n)return;setBusy(true);
+  const saved=await onCreate({name:n,description:description.trim()||null,color});setBusy(false);if(saved)close()};
  return <Modal kicker="Projects" title="New project" onClose={onClose}
-  footer={<>
-   <button type="button" className="secondary" onClick={onClose}>Cancel</button>
-   <button type="button" className="primary" onClick={submit} disabled={!name.trim()}>Create</button>
+  footer={close=><>
+   <button type="button" className="secondary" onClick={close}>Cancel</button>
+   <button type="button" className="primary" onClick={()=>void submit(close)} disabled={busy||!name.trim()}>{busy?"Creating…":"Create"}</button>
   </>}>
   <div className="field-grid">
    <div className="field field-wide">
     <label className="field-label" htmlFor="p-name">Name<span className="req" aria-hidden="true">*</span></label>
     <input id="p-name" className="input" autoFocus value={name} placeholder="Project name"
-     onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")submit()}}/>
+     onChange={e=>setName(e.target.value)}/>
    </div>
    <div className="field field-wide">
     <label className="field-label" htmlFor="p-desc">Description</label>
