@@ -2,17 +2,25 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useData } from "../../lib/store";
 import { fromInput, toInput } from "../../lib/format";
+import { SelectMenu } from "../ui/SelectMenu";
+import { useConfirmDialog } from "../ui/ConfirmDialog";
 
 const NODE_STATUS=["Pending","In progress","Waiting","Done"] as const;
 
 /** Paper-specific work sequence. The canonical editorial stage remains on the
  * publication itself; these nodes are the custom scientific/submission steps. */
 export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:{publicationId:string;canEdit?:boolean;canDelete?:boolean}){
- const {userId,people,publicationNodes,tables}=useData();
+ const {userId,people,projectPeople,publicationNodes,tables}=useData();
+ const {ask,confirmation}=useConfirmDialog();
  const [title,setTitle]=useState("");
  const publication=tables.publications.byId.get(publicationId)??null;
  const nodes=useMemo(()=>publicationNodes.rows.filter(n=>n.publication_id===publicationId)
   .sort((a,b)=>a.position-b.position||a.created_at.localeCompare(b.created_at)),[publicationNodes.rows,publicationId]);
+ const assignees=useMemo(()=>{
+  if(!publication?.project_id)return people.rows;
+  const ids=new Set(projectPeople.rows.filter(row=>row.project_id===publication.project_id).map(row=>row.person_id));
+  return people.rows.filter(person=>ids.has(person.id));
+ },[people.rows,projectPeople.rows,publication?.project_id]);
 
  const add=async()=>{
   const name=title.trim();if(!name)return;
@@ -30,7 +38,7 @@ export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:
   status,completed_at:status==="Done"?new Date().toISOString():null,
  });
 
- return <section className="publication-workflow field-wide" aria-labelledby="publication-workflow-heading">
+ return <><section className="publication-workflow field-wide" aria-labelledby="publication-workflow-heading">
   <div className="workflow-heading">
    <div><span className="field-label" id="publication-workflow-heading">Custom paper nodes</span>
     <p className="muted-note">Add, assign, date and reorder the work steps specific to this paper.</p></div>
@@ -44,18 +52,14 @@ export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:
      <div className="node-actions">
       <button className="icon-button" disabled={!canEdit||index===0} onClick={()=>void move(index,-1)} aria-label="Move step left"><ArrowLeft/></button>
       <button className="icon-button" disabled={!canEdit||index===nodes.length-1} onClick={()=>void move(index,1)} aria-label="Move step right"><ArrowRight/></button>
-      {canDelete&&<button className="icon-button" onClick={()=>{if(window.confirm(`Move step “${node.title}” to Trash?`))void publicationNodes.remove(node.id)}} aria-label="Move step to Trash"><Trash2/></button>}
+      {canDelete&&<button className="icon-button" onClick={()=>ask({title:"Move paper step to Trash?",message:`“${node.title}” can be restored from Trash.`,confirmLabel:"Move to Trash"},()=>publicationNodes.remove(node.id).then(()=>{}))} aria-label="Move step to Trash"><Trash2/></button>}
      </div>
     </div>
-    <select className="input input-compact" value={node.status} aria-label={`${node.title} status`} disabled={!canEdit}
-     onChange={e=>setStatus(node.id,e.target.value)}>
-     {NODE_STATUS.map(s=><option key={s}>{s}</option>)}
-    </select>
-    <select className="input input-compact" value={node.assignee_id??""} aria-label={`${node.title} assignee`} disabled={!canEdit}
-     onChange={e=>void publicationNodes.update(node.id,{assignee_id:e.target.value||null})}>
-     <option value="">Unassigned</option>
-     {people.rows.map(p=><option key={p.id} value={p.id}>{p.name}{p.role?` · ${p.role}`:""}</option>)}
-    </select>
+    <SelectMenu className="input input-compact" value={node.status} label={`${node.title} status`} disabled={!canEdit}
+     options={NODE_STATUS.map(value=>({value,label:value}))} onChange={value=>setStatus(node.id,value)}/>
+    <SelectMenu className="input input-compact" value={node.assignee_id??""} label={`${node.title} assignee`} disabled={!canEdit}
+     options={[{value:"",label:"Unassigned"},...assignees.map(p=>({value:p.id,label:p.name+(p.role?` · ${p.role}`:"")}))]}
+     onChange={value=>void publicationNodes.update(node.id,{assignee_id:value||null})}/>
     <input className="input input-compact" type="date" value={toInput(node.due_at,false)} aria-label={`${node.title} due date`} disabled={!canEdit}
      onChange={e=>void publicationNodes.update(node.id,{due_at:fromInput(e.target.value,false)})}/>
     <input className="input input-compact node-notes" defaultValue={node.notes??""} placeholder="Notes or expected output" disabled={!canEdit}
@@ -69,5 +73,5 @@ export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:
     onChange={e=>setTitle(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void add()}}}/>
    <button type="button" className="secondary" disabled={!title.trim()} onClick={()=>void add()}><Plus/>Add step</button>
   </div>}
- </section>;
+ </section>{confirmation}</>;
 }
