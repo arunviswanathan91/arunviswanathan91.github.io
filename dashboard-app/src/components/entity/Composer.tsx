@@ -4,15 +4,18 @@ import { FieldInput } from "./FieldInput";
 import { useEntityCtx } from "./ctx";
 import { isEditable } from "../../entities/types";
 import type { EntityDef, FieldDef } from "../../entities/types";
+import type { Person } from "../../lib/store";
 
 /** Starts with the handful of `create` fields and expands to the full set on request —
  *  so the quick path stays quick but nothing is unreachable at creation time. */
-export function Composer({def,seed,onClose,onSubmit,hiddenFields=[]}:{
+export function Composer({def,seed,onClose,onSubmit,hiddenFields=[],people}:{
  def:EntityDef;seed:Record<string,unknown>;onClose():void;
  onSubmit(values:Record<string,unknown>,tagIds:string[]):Promise<boolean>;
  hiddenFields?:string[];
+ people?:Person[];
 }){
  const {inputCtx}=useEntityCtx(def);
+ const scopedInputCtx=people?{...inputCtx,people}:inputCtx;
  const [values,setValues]=useState<Record<string,any>>(seed);
  const [tagIds,setTagIds]=useState<string[]>([]);
  const [expanded,setExpanded]=useState(false);
@@ -41,7 +44,7 @@ export function Composer({def,seed,onClose,onSubmit,hiddenFields=[]}:{
   <div className="field-grid">
    {shown.map((f,i)=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
     <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
-    <FieldInput field={f} value={f.kind==="tags"?tagIds:values[f.key]} ctx={inputCtx}
+    <FieldInput field={f} value={f.kind==="tags"?tagIds:values[f.key]} ctx={scopedInputCtx}
      autoFocus={i===0} onCommit={v=>set(f,v)}/>
    </div>)}
   </div>
