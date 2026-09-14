@@ -10,6 +10,8 @@ import { useData, useUi } from "../../lib/store";
 import { Composer } from "../entity/Composer";
 import { Drawer } from "../entity/Drawer";
 import { Modal } from "../ui/Modal";
+import { SelectMenu } from "../ui/SelectMenu";
+import { useConfirmDialog } from "../ui/ConfirmDialog";
 import { TagChips, TagEditor } from "../ui/TagChips";
 import type { EntityKey, Row } from "../../entities/types";
 import type { Person, Project, ProjectStage } from "../../lib/store";
@@ -18,6 +20,8 @@ type ProjectTab="overview"|"work"|"publications"|"reads"|"people";
 type ProjectEntityKey="tasks"|"publications"|"reads";
 type ComposerState={key:ProjectEntityKey;seed:Record<string,unknown>}|null;
 const TASK_MIME="application/x-science-project-task";
+const PROJECT_PHASES=["Planning","Active","Paused","Analysis","Writing","Completed","Archived"] as const;
+const options=(values:readonly string[])=>values.map(value=>({value,label:value}));
 
 const cleanTelegram=(value:string|null)=>value?.trim().replace(/^@/,"")||null;
 const safeHttp=(value:string)=>{try{const u=new URL(value);return u.protocol==="http:"||u.protocol==="https:"?u.toString():null}catch{return null}};
@@ -28,7 +32,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
  const [tab,setTab]=useState<ProjectTab>("overview");
  const [composer,setComposer]=useState<ComposerState>(null);
  const [manageStages,setManageStages]=useState(false);
- const [person,setPerson]=useState<Person|"new"|null>(null);
+ const [person,setPerson]=useState<{person:Person|"new";membershipId?:string}|null>(null);
 
  const projectTasks=useMemo(()=>data.tables.tasks.rows.filter(r=>r.project_id===projectId),[data.tables.tasks.rows,projectId]);
  const stages=useMemo(()=>data.projectStages.rows.filter(s=>s.project_id===projectId)
@@ -39,6 +43,8 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
   projectTagIds.some(tag=>data.tags.idsFor("publication",r.id).includes(tag))),
   [data.tables.publications.rows,data.tags,projectId,projectTagIds.join("|")]);
  const projectReads=useMemo(()=>data.tables.reads.rows.filter(r=>r.project_id===projectId),[data.tables.reads.rows,projectId]);
+ const projectPersonIds=useMemo(()=>new Set(data.projectPeople.rows.filter(row=>row.project_id===projectId).map(row=>row.person_id)),[data.projectPeople.rows,projectId]);
+ const projectPeople=useMemo(()=>data.people.rows.filter(person=>projectPersonIds.has(person.id)),[data.people.rows,projectPersonIds]);
 
  if(!project)return <div className="empty-state"><FolderKanban/><p>This project is unavailable or was deleted.</p>
   <button className="primary" onClick={()=>ui.setView("home")}>Return home</button></div>;
@@ -88,19 +94,21 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("publications")} onOpen={ui.openPublication}/>} 
   {tab==="reads"&&<ProjectReads project={project} rows={projectReads}
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("reads")} onOpen={id=>ui.openDrawer("reads",id)}/>} 
-  {tab==="people"&&<ProjectPeople projectId={projectId} isOwner={isOwner} onAdd={()=>setPerson("new")} onEdit={setPerson}/>} 
+  {tab==="people"&&<ProjectPeople projectId={projectId} isOwner={isOwner} onAdd={()=>setPerson({person:"new"})}
+   onEdit={(selected,membershipId)=>setPerson({person:selected,membershipId})}/>} 
 
   {manageStages&&canEdit&&<StageManager project={project} stages={stages} tasks={projectTasks} isOwner={isOwner} onClose={()=>setManageStages(false)}/>} 
-  {person&&isOwner&&<PersonEditor person={person} onClose={()=>setPerson(null)}/>} 
+  {person&&isOwner&&<PersonEditor projectId={projectId} person={person.person} membershipId={person.membershipId} onClose={()=>setPerson(null)}/>} 
   {composer&&canEdit&&<Composer def={ENTITIES[composer.key]} seed={composer.seed} hiddenFields={isOwner?[]:["project_id","tags"]}
-   onClose={()=>setComposer(null)} onSubmit={submitEntity}/>} 
+   people={projectPeople} onClose={()=>setComposer(null)} onSubmit={submitEntity}/>} 
   {drawer&&drawerRow&&<Drawer def={ENTITIES[drawer.entity]} row={drawerRow} canEdit={canEdit} canDelete={isOwner}
-   hiddenFields={isOwner?[]:["project_id","tags"]} onClose={ui.closeDrawer}/>} 
+   people={projectPeople} hiddenFields={isOwner?[]:["project_id","tags"]} onClose={ui.closeDrawer}/>} 
  </div>;
 }
 
 function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:boolean;isOwner:boolean}){
  const {projects,projectLinks,projectFields,tables,tags}=useData();
+ const {ask,confirmation}=useConfirmDialog();
  const links=projectLinks.rows.filter(l=>l.project_id===project.id).sort((a,b)=>a.position-b.position);
  const fields=projectFields.rows.filter(f=>f.project_id===project.id).sort((a,b)=>a.position-b.position);
  const documents=tables.documents.rows.filter(r=>r.project_id===project.id);
@@ -120,7 +128,7 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
   setFieldLabel("");setFieldValue("");
  };
 
- return <div className="project-overview-grid">
+ return <><div className="project-overview-grid">
   <section className="panel project-summary-panel">
    <header className="panel-head"><h2>Overview</h2><span className="muted-note">Autosaved</span></header>
    <div className="field"><label className="field-label" htmlFor="project-objective">Objective</label>
@@ -133,10 +141,8 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
      onBlur={e=>{if(e.target.value!==project.description)save({description:e.target.value.trim()||null})}}/></div>
    <div className="project-detail-grid">
     <div className="field"><label className="field-label" htmlFor="project-phase">Project phase</label>
-     <input id="project-phase" className="input" list="project-phase-options" defaultValue={project.phase??""}
-      disabled={!canEdit}
-      onBlur={e=>{const phase=e.target.value.trim()||"Planning";if(phase!==project.phase)save({phase})}}/>
-     <datalist id="project-phase-options"><option value="Planning"/><option value="Active"/><option value="Paused"/><option value="Analysis"/><option value="Writing"/><option value="Completed"/></datalist>
+     <SelectMenu id="project-phase" value={project.phase||"Planning"} label="Project phase" disabled={!canEdit}
+      options={options(PROJECT_PHASES)} onChange={phase=>{if(phase!==project.phase)save({phase})}}/>
     </div>
     <div className="field"><label className="field-label" htmlFor="project-start">Start date</label>
      <input id="project-start" className="input" type="date" value={project.start_date??""} disabled={!canEdit} onChange={e=>save({start_date:e.target.value||null})}/></div>
@@ -157,7 +163,7 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
     <div className="resource-list">
      {links.map(link=><div className="resource-row" key={link.id}>
       <a href={safeHttp(link.url)??undefined} target="_blank" rel="noopener noreferrer"><ExternalLink/><span>{link.label}</span></a>
-      {isOwner&&<button className="icon-button" onClick={()=>void projectLinks.remove(link.id)} aria-label={`Move ${link.label} to Trash`}><Trash2/></button>}
+      {isOwner&&<button className="icon-button" onClick={()=>ask({title:"Move project link to Trash?",message:`“${link.label}” can be restored from Trash.`,confirmLabel:"Move to Trash"},()=>projectLinks.remove(link.id).then(()=>{}))} aria-label={`Move ${link.label} to Trash`}><Trash2/></button>}
      </div>)}
      {!links.length&&<p className="muted-note">Add Drive folders, repositories, protocols or datasets.</p>}
     </div>
@@ -178,7 +184,7 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
       <input className="input input-compact" defaultValue={field.value??""} aria-label={`${field.label} value`}
        disabled={!canEdit}
        onBlur={e=>{const value=e.target.value.trim()||null;if(value!==field.value)void projectFields.update(field.id,{value})}}/>
-      {isOwner&&<button className="icon-button" onClick={()=>void projectFields.remove(field.id)} aria-label={`Move ${field.label} to Trash`}><Trash2/></button>}
+      {isOwner&&<button className="icon-button" onClick={()=>ask({title:"Move custom detail to Trash?",message:`“${field.label}” can be restored from Trash.`,confirmLabel:"Move to Trash"},()=>projectFields.remove(field.id).then(()=>{}))} aria-label={`Move ${field.label} to Trash`}><Trash2/></button>}
      </div>)}
     </div>
     {canEdit&&<div className="compact-add-grid">
@@ -194,14 +200,15 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
     {!documents.length&&<p className="muted-note">No project documents yet.</p>}
    </section>
   </div>
- </div>;
+ </div>{confirmation}</>;
 }
 
 function ProjectBoard({project,stages,tasks,canEdit,onAdd,onOpen,onManage}:{
  project:Project;stages:ProjectStage[];tasks:Row[];canEdit:boolean;onAdd(stageId:string|null):void;onOpen(id:string):void;onManage():void;
 }){
- const {tables,people}=useData();
- const peopleById=new Map(people.rows.map(p=>[p.id,p]));
+ const {tables,people,projectPeople}=useData();
+ const memberIds=new Set(projectPeople.rows.filter(row=>row.project_id===project.id).map(row=>row.person_id));
+ const peopleById=new Map(people.rows.filter(person=>memberIds.has(person.id)).map(p=>[p.id,p]));
  const publicationsById=new Map(tables.publications.rows.map(p=>[p.id,p]));
  const stageIds=new Set(stages.map(s=>s.id));
  const unassigned=tasks.filter(t=>!t.stage_id||!stageIds.has(t.stage_id));
@@ -232,8 +239,8 @@ function ProjectBoard({project,stages,tasks,canEdit,onAdd,onOpen,onManage}:{
         {task.due_at&&<span className="project-task-meta"><CalendarClock/>Due {formatDate(task.due_at,false)}</span>}
         {task.follow_up_at&&<span className="follow-up-meta"><Send/>Follow up {formatDate(task.follow_up_at,true)}</span>}
         <div className="project-task-actions">
-         <select className="input input-compact" value={task.stage_id??""} aria-label={`Move ${task.title}`} disabled={!canEdit}
-          onChange={e=>move(task.id,e.target.value)}><option value="">Unsorted</option>{stages.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+         <SelectMenu className="input input-compact" value={task.stage_id??""} label={`Move ${task.title}`} disabled={!canEdit}
+          options={[{value:"",label:"Unsorted"},...stages.map(s=>({value:s.id,label:s.name}))]} onChange={value=>move(task.id,value)}/>
          {assigned?.email&&<a className="icon-button" href={`mailto:${assigned.email}`} aria-label={`Email ${assigned.name}`}><Mail/></a>}
          {handle&&<a className="icon-button" href={`https://t.me/${handle}`} target="_blank" rel="noopener noreferrer" aria-label={`Open Telegram for ${assigned?.name}`}><Send/></a>}
         </div>
@@ -280,8 +287,8 @@ function ProjectReads({project,rows,canEdit,isOwner,onAdd,onOpen}:{project:Proje
  return <section className="project-workspace">
   <div className="project-section-head"><div><h2>Project Reads</h2><p className="subtitle">Links saved from the web or Telegram for {project.name}.</p></div>
    {canEdit&&<button className="primary" onClick={onAdd}><Plus/>New Read</button>}</div>
-  {isOwner&&inbox.length>0&&<div className="assign-read"><select className="input" value={existing} onChange={e=>setExisting(e.target.value)} aria-label="Choose an Inbox read">
-   <option value="">Assign an existing Inbox Read…</option>{inbox.map(r=><option key={r.id} value={r.id}>{r.title||r.url}</option>)}</select>
+  {isOwner&&inbox.length>0&&<div className="assign-read"><SelectMenu value={existing} onChange={setExisting} label="Choose an Inbox read"
+   options={[{value:"",label:"Assign an existing Inbox Read…"},...inbox.map(r=>({value:r.id,label:String(r.title||r.url)}))]}/>
    <button className="secondary" disabled={!existing} onClick={async()=>{if(await tables.reads.update(existing,{project_id:project.id}))setExisting("")}}>Assign</button></div>}
   <div className="project-read-list">
    {rows.map(read=><article className="project-read" key={read.id} onClick={e=>{if(!(e.target as HTMLElement).closest("a,button"))onOpen(read.id)}}>
@@ -293,14 +300,17 @@ function ProjectReads({project,rows,canEdit,isOwner,onAdd,onOpen}:{project:Proje
  </section>;
 }
 
-function ProjectPeople({projectId,isOwner,onAdd,onEdit}:{projectId:string;isOwner:boolean;onAdd():void;onEdit(person:Person):void}){
- const {people,tables,publicationNodes}=useData();
+function ProjectPeople({projectId,isOwner,onAdd,onEdit}:{projectId:string;isOwner:boolean;onAdd():void;onEdit(person:Person,membershipId:string):void}){
+ const {people,projectPeople,tables,publicationNodes}=useData();
  const projectTasks=tables.tasks.rows.filter(r=>r.project_id===projectId);
  const paperIds=new Set(tables.publications.rows.filter(r=>r.project_id===projectId).map(r=>r.id));
  const counts=new Map<string,number>();
  for(const task of projectTasks)if(task.assignee_id)counts.set(task.assignee_id,(counts.get(task.assignee_id)??0)+1);
  for(const node of publicationNodes.rows)if(paperIds.has(node.publication_id)&&node.assignee_id)counts.set(node.assignee_id,(counts.get(node.assignee_id)??0)+1);
- const ordered=[...people.rows].sort((a,b)=>(counts.get(b.id)??0)-(counts.get(a.id)??0)||a.name.localeCompare(b.name));
+ const memberships=projectPeople.rows.filter(row=>row.project_id===projectId);
+ const membershipByPerson=new Map(memberships.map(row=>[row.person_id,row]));
+ const ordered=memberships.map(row=>people.byId.get(row.person_id)).filter((person):person is Person=>Boolean(person))
+  .sort((a,b)=>(counts.get(b.id)??0)-(counts.get(a.id)??0)||a.name.localeCompare(b.name));
  return <section className="project-workspace">
   <div className="project-section-head"><div><h2>Private people directory</h2><p className="subtitle">These are labels and contact details only. No invitation is sent and they cannot see the workspace.</p></div>
    {isOwner&&<button className="primary" onClick={onAdd}><Plus/>Add person</button>}</div>
@@ -310,7 +320,7 @@ function ProjectPeople({projectId,isOwner,onAdd,onEdit}:{projectId:string;isOwne
     <div className="person-avatar">{person.name.slice(0,2).toUpperCase()}</div><div className="person-main"><strong>{person.name}</strong>
      <span>{[person.role,person.organization].filter(Boolean).join(" · ")||"Private contact"}</span>
      <small>{counts.get(person.id)??0} assigned item(s) in this project</small></div>
-    <div className="person-actions">{isOwner&&<button className="icon-button" onClick={()=>onEdit(person)} aria-label={`Edit ${person.name}`}><Pencil/></button>}
+    <div className="person-actions">{isOwner&&<button className="icon-button" onClick={()=>onEdit(person,membershipByPerson.get(person.id)!.id)} aria-label={`Edit ${person.name}`}><Pencil/></button>}
      {person.email&&<a className="icon-button" href={`mailto:${person.email}`} aria-label={`Email ${person.name}`}><Mail/></a>}
      {handle&&<a className="icon-button" href={`https://t.me/${handle}`} target="_blank" rel="noopener noreferrer" aria-label={`Open Telegram for ${person.name}`}><Send/></a>}</div>
    </article>})}</div>
@@ -320,6 +330,7 @@ function ProjectPeople({projectId,isOwner,onAdd,onEdit}:{projectId:string;isOwne
 
 function StageManager({project,stages,tasks,isOwner,onClose}:{project:Project;stages:ProjectStage[];tasks:Row[];isOwner:boolean;onClose():void}){
  const {projectStages}=useData();
+ const {ask,confirmation}=useConfirmDialog();
  const [name,setName]=useState(""),[category,setCategory]=useState<string>("In progress"),[color,setColor]=useState("slate");
  const add=async()=>{const title=name.trim();if(!title)return;
   const row=await projectStages.insert({user_id:project.user_id,project_id:project.id,name:title,category,color,position:(stages.at(-1)?.position??-1)+1});
@@ -328,7 +339,7 @@ function StageManager({project,stages,tasks,isOwner,onClose}:{project:Project;st
  const move=async(index:number,delta:number)=>{const stage=stages[index],other=stages[index+delta];if(!stage||!other)return;
   const position=stage.position;await projectStages.update(stage.id,{position:other.position});await projectStages.update(other.id,{position});
  };
- return <Modal kicker="Project workflow" title={`Stages for ${project.name}`} size="lg" onClose={onClose}
+ return <><Modal kicker="Project workflow" title={`Stages for ${project.name}`} size="lg" onClose={onClose}
   footer={close=><button type="button" className="primary" onClick={close}>Done</button>}>
   <p className="stage-help">Names are fully custom. The behaviour keeps the global Tasks page compatible when a card moves.</p>
   <div className="stage-list">{stages.map((stage,index)=>{
@@ -337,28 +348,29 @@ function StageManager({project,stages,tasks,isOwner,onClose}:{project:Project;st
     <span className={"project-dot tint-"+(stage.color??"slate")}/>
     <input className="input input-compact" defaultValue={stage.name} aria-label="Stage name"
      onBlur={e=>{const value=e.target.value.trim();if(value&&value!==stage.name)void projectStages.update(stage.id,{name:value})}}/>
-    <select className="input input-compact" value={stage.category} aria-label={`${stage.name} behaviour`}
-     onChange={e=>void projectStages.update(stage.id,{category:e.target.value})}>{TASK_STATUS.map(s=><option key={s}>{s}</option>)}</select>
-    <select className="input input-compact" value={stage.color??"slate"} aria-label={`${stage.name} colour`}
-     onChange={e=>void projectStages.update(stage.id,{color:e.target.value})}>{TAG_COLORS.map(c=><option key={c}>{c}</option>)}</select>
+    <SelectMenu className="input input-compact" value={stage.category} label={`${stage.name} behaviour`}
+     options={options(TASK_STATUS)} onChange={category=>void projectStages.update(stage.id,{category})}/>
+    <SelectMenu className="input input-compact" value={stage.color??"slate"} label={`${stage.name} colour`}
+     options={options(TAG_COLORS)} onChange={color=>void projectStages.update(stage.id,{color})}/>
     <span className="muted-note">{used} card{used===1?"":"s"}</span>
     <button className="icon-button" disabled={index===0} onClick={()=>void move(index,-1)} aria-label={`Move ${stage.name} left`}><ArrowLeft/></button>
     <button className="icon-button" disabled={index===stages.length-1} onClick={()=>void move(index,1)} aria-label={`Move ${stage.name} right`}><ArrowRight/></button>
     {isOwner&&<button className="icon-button" disabled={used>0} title={used?"Move its cards before deleting":"Move stage to Trash"}
-     onClick={()=>{if(window.confirm(`Move stage “${stage.name}” to Trash?`))void projectStages.remove(stage.id)}} aria-label={`Move ${stage.name} to Trash`}><Trash2/></button>}
+     onClick={()=>ask({title:"Move stage to Trash?",message:`“${stage.name}” can be restored from Trash.`,confirmLabel:"Move to Trash"},()=>projectStages.remove(stage.id).then(()=>{}))} aria-label={`Move ${stage.name} to Trash`}><Trash2/></button>}
    </div>})}</div>
   <div className="stage-add">
    <input className="input" value={name} placeholder="New stage, e.g. Wet lab" aria-label="New stage name" onChange={e=>setName(e.target.value)}
     onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void add()}}}/>
-   <select className="input" value={category} aria-label="New stage behaviour" onChange={e=>setCategory(e.target.value)}>{TASK_STATUS.map(s=><option key={s}>{s}</option>)}</select>
-   <select className="input" value={color} aria-label="New stage colour" onChange={e=>setColor(e.target.value)}>{TAG_COLORS.map(c=><option key={c}>{c}</option>)}</select>
+   <SelectMenu value={category} label="New stage behaviour" options={options(TASK_STATUS)} onChange={setCategory}/>
+   <SelectMenu value={color} label="New stage colour" options={options(TAG_COLORS)} onChange={setColor}/>
    <button type="button" className="secondary" disabled={!name.trim()} onClick={()=>void add()}><Plus/>Add stage</button>
   </div>
- </Modal>;
+ </Modal>{confirmation}</>;
 }
 
-function PersonEditor({person,onClose}:{person:Person|"new";onClose():void}){
- const {userId,people}=useData();
+function PersonEditor({projectId,person,membershipId,onClose}:{projectId:string;person:Person|"new";membershipId?:string;onClose():void}){
+ const {userId,people,projectPeople}=useData();
+ const {ask,confirmation}=useConfirmDialog();
  const current=person==="new"?null:person;
  const [values,setValues]=useState({name:current?.name??"",role:current?.role??"",organization:current?.organization??"",
   email:current?.email??"",telegram_handle:current?.telegram_handle??"",notes:current?.notes??""});
@@ -367,12 +379,19 @@ function PersonEditor({person,onClose}:{person:Person|"new";onClose():void}){
   const name=values.name.trim();if(!name)return;
   const payload={name,role:values.role.trim()||null,organization:values.organization.trim()||null,email:values.email.trim()||null,
    telegram_handle:cleanTelegram(values.telegram_handle),notes:values.notes.trim()||null};
-  const saved=current?await people.update(current.id,payload):Boolean(await people.insert({user_id:userId,...payload}));
+  let saved=false;
+  if(current)saved=await people.update(current.id,payload);
+  else{
+   const created=await people.insert({user_id:userId,...payload});
+   saved=Boolean(created&&await projectPeople.insert({user_id:userId,project_id:projectId,person_id:created.id}));
+  }
   if(saved)close();
  };
- return <Modal kicker="Private contact" title={current?`Edit ${current.name}`:"Add person"} onClose={onClose}
+ return <><Modal kicker="Private contact" title={current?`Edit ${current.name}`:"Add person"} onClose={onClose}
   footer={close=><><button type="button" className="secondary" onClick={close}>Cancel</button>
-   {current&&<button type="button" className="danger-button" onClick={async()=>{if(window.confirm(`Move ${current.name} to Trash? Assignments will become unassigned when permanently deleted.`)&&await people.remove(current.id))close()}}><Trash2/>Move to Trash</button>}
+   {current&&membershipId&&<button type="button" className="danger-button" onClick={()=>ask({title:"Remove person from this project?",
+    message:`${current.name} will be removed only from this project. Other projects and assignments are unchanged. You can restore this membership from Trash.`,confirmLabel:"Remove from project"},
+    async()=>{if(await projectPeople.remove(membershipId))close()})}><Trash2/>Remove from project</button>}
    <button type="button" className="primary" disabled={!values.name.trim()} onClick={()=>void save(close)}>Save</button></>}>
   <div className="private-note"><Users/><span>This person is a private label in your workspace. No invitation or message will be sent.</span></div>
   <div className="field-grid">
@@ -383,5 +402,5 @@ function PersonEditor({person,onClose}:{person:Person|"new";onClose():void}){
    <div className="field"><label className="field-label" htmlFor="person-telegram">Telegram handle</label><input id="person-telegram" className="input" value={values.telegram_handle} placeholder="username" onChange={e=>set("telegram_handle",e.target.value)}/></div>
    <div className="field field-wide"><label className="field-label" htmlFor="person-notes">Notes</label><textarea id="person-notes" className="input" rows={3} value={values.notes} onChange={e=>set("notes",e.target.value)}/></div>
   </div>
- </Modal>;
+ </Modal>{confirmation}</>;
 }

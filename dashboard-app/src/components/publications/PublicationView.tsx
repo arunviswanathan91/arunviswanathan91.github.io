@@ -9,6 +9,7 @@ import { GmailLinkPicker } from "../entity/GmailLinkPicker";
 import { useEntityCtx } from "../entity/ctx";
 import { PublicationLifecycle } from "./PublicationLifecycle";
 import { PublicationWorkflow } from "./PublicationWorkflow";
+import { useConfirmDialog } from "../ui/ConfirmDialog";
 import type { FieldDef } from "../../entities/types";
 
 const def=ENTITIES.publications;
@@ -22,6 +23,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
  const ui=useUi();
  const {inputCtx}=useEntityCtx(def);
  const [gmailFieldKey,setGmailFieldKey]=useState<string|null>(null);
+ const {ask,confirmation}=useConfirmDialog();
  const publication=tables.publications.byId.get(publicationId)??null;
 
  const goBack=()=>{
@@ -50,10 +52,8 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
   if(f.kind==="tags"&&def.tagEntity)void tags.setFor(def.tagEntity,publication.id,value as string[]);
   else void tables.publications.update(publication.id,{[f.key]:value});
  };
- const remove=async()=>{
-  if(!window.confirm("Move this publication to Trash?"))return;
-  if(await tables.publications.remove(publication.id))goBack();
- };
+ const remove=()=>ask({title:"Move publication to Trash?",message:"The publication and its project connection can be restored before permanent removal.",confirmLabel:"Move to Trash"},
+  async()=>{if(await tables.publications.remove(publication.id))goBack()});
 
  return <div className="publication-page">
   <header className="publication-page-head">
@@ -90,7 +90,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
     </div>
     <footer className="publication-details-foot">
      <div className="stamp-row">{stamps.map(f=>publication[f.key]?<span key={f.key}>{f.label} {formatDate(publication[f.key],true)}</span>:null)}</div>
-     {isOwner&&<button className="danger-button" onClick={()=>void remove()}><Trash2/>Move to Trash</button>}
+     {isOwner&&<button className="danger-button" onClick={remove}><Trash2/>Move to Trash</button>}
     </footer>
    </aside>
   </div>
@@ -101,5 +101,6 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
    return <GmailLinkPicker initialQuery={field.gmailSearch(publication)}
     onPick={url=>commit(field,url)} onClose={()=>setGmailFieldKey(null)}/>;
   })()}
+  {confirmation}
  </div>;
 }

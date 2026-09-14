@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fromInput, toInput } from "../../lib/format";
 import { EnumSelect } from "../ui/EnumSelect";
+import { SelectMenu } from "../ui/SelectMenu";
 import { TagChips, TagEditor } from "../ui/TagChips";
 import type { FieldDef, Row } from "../../entities/types";
 import type { Person, Project } from "../../lib/store";
@@ -42,24 +43,18 @@ export function FieldInput({field,value,onCommit,ctx,compact,autoFocus,disabled=
     <span>{field.trueLabel??field.label}</span>
    </label>;
   case "project":
-   return <select className={cls} value={value??""} aria-label={field.label} disabled={disabled}
-    onClick={e=>e.stopPropagation()} onChange={e=>onCommit(e.target.value||null)}>
-    <option value="">Inbox (no project)</option>
-    {ctx.projects.filter(p=>p.status==="Active"||p.id===value).map(p=>
-     <option key={p.id} value={p.id}>{p.name}{p.status==="Archived"?" (archived)":""}</option>)}
-   </select>;
+   return <SelectMenu className={cls} value={value??""} label={field.label} disabled={disabled}
+    options={[{value:"",label:"Inbox (no project)"},...ctx.projects.filter(p=>p.status==="Active"||p.id===value).map(p=>({
+     value:p.id,label:p.name+(p.status==="Archived"?" (archived)":"")}))]} onChange={next=>onCommit(next||null)}/>;
   case "person":
-   return <select className={cls} value={value??""} aria-label={field.label} disabled={disabled}
-    onClick={e=>e.stopPropagation()} onChange={e=>onCommit(e.target.value||null)}>
-    <option value="">Unassigned</option>
-    {ctx.people.map(p=><option key={p.id} value={p.id}>{p.name}{p.role?` · ${p.role}`:""}</option>)}
-   </select>;
+   return <SelectMenu className={cls} value={value??""} label={field.label} disabled={disabled}
+    options={[{value:"",label:"Unassigned"},...(!value||ctx.people.some(person=>person.id===value)?[]:[{value:String(value),label:"Unavailable assignee"}]),
+     ...ctx.people.map(p=>({value:p.id,label:p.name+(p.role?` · ${p.role}`:"")}))]}
+    onChange={next=>onCommit(next||null)}/>;
   case "publication":
-   return <select className={cls} value={value??""} aria-label={field.label} disabled={disabled}
-    onClick={e=>e.stopPropagation()} onChange={e=>onCommit(e.target.value||null)}>
-    <option value="">No linked paper</option>
-    {ctx.publications.map(p=><option key={p.id} value={p.id}>{String(p.title||"Untitled publication")}</option>)}
-   </select>;
+   return <SelectMenu className={cls} value={value??""} label={field.label} disabled={disabled}
+    options={[{value:"",label:"No linked paper"},...ctx.publications.map(p=>({value:p.id,label:String(p.title||"Untitled publication")}))]}
+    onChange={next=>onCommit(next||null)}/>;
   case "tags":{
    const selected:string[]=Array.isArray(value)?value:[];
    if(disabled)return <TagChips ids={selected} byId={new Map(ctx.tags.map(tag=>[tag.id,tag]))}/>;

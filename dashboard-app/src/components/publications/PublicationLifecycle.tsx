@@ -3,6 +3,7 @@ import { PUBLICATION_STAGE } from "../../entities";
 import type { Row } from "../../entities/types";
 import { formatDate } from "../../lib/format";
 import { useData, useUi } from "../../lib/store";
+import { SelectMenu } from "../ui/SelectMenu";
 
 const MAIN_PATH=["Idea","Drafting","Under Review","Revision Requested","Accepted","Published"] as const;
 
@@ -54,20 +55,17 @@ export function PublicationLifecycle({publication,canEdit=true,canReassign=true}
      {publication.venue&&<span>{publication.venue}</span>}
      <span className={directProject?"paper-project-link":"paper-project-link is-inbox"}>
       {directProject?<FolderKanban/>:<Inbox/>}
-      {canReassign?<select value={publication.project_id??""} aria-label="Assign paper to project"
-        onChange={e=>void tables.publications.update(publication.id,{project_id:e.target.value||null})}>
-        <option value="">Inbox — assign a project</option>
-        {projects.rows.filter(p=>p.status==="Active"||p.id===publication.project_id)
-         .map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-       </select>:<span>{directProject?.name??"Inbox"}</span>}
+      {canReassign?<SelectMenu className="paper-project-select" value={publication.project_id??""} label="Assign paper to project"
+        options={[{value:"",label:"Inbox — assign a project"},...projects.rows.filter(p=>p.status==="Active"||p.id===publication.project_id)
+         .map(p=>({value:p.id,label:p.name}))]}
+        onChange={projectId=>void tables.publications.update(publication.id,{project_id:projectId||null})}/>:<span>{directProject?.name??"Inbox"}</span>}
      </span>
     </div>
    </div>
    <label className="paper-stage-control"><span>Update stage</span>
-    <select value={stage} aria-label="Update publication stage" disabled={!canEdit}
-     onChange={e=>void tables.publications.update(publication.id,{stage:e.target.value})}>
-     {PUBLICATION_STAGE.map(value=><option key={value}>{value}</option>)}
-    </select>
+    <SelectMenu className="paper-stage-select" value={stage} label="Update publication stage" disabled={!canEdit}
+     options={PUBLICATION_STAGE.map(value=>({value,label:value}))}
+     onChange={value=>void tables.publications.update(publication.id,{stage:value})}/>
    </label>
   </header>
 

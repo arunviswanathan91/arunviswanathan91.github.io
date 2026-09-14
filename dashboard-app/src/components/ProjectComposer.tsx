@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "./ui/Modal";
 import { TAG_COLORS } from "../lib/tags";
+import { SelectMenu } from "./ui/SelectMenu";
 
 export function ProjectComposer({onClose,onCreate}:{
  onClose():void;onCreate(values:{name:string;description:string|null;color:string|null}):Promise<boolean>;
@@ -27,9 +28,8 @@ export function ProjectComposer({onClose,onCreate}:{
    </div>
    <div className="field">
     <label className="field-label" htmlFor="p-color">Colour</label>
-    <select id="p-color" className="input" value={color} onChange={e=>setColor(e.target.value)}>
-     {TAG_COLORS.map(c=><option key={c} value={c}>{c}</option>)}
-    </select>
+    <SelectMenu id="p-color" value={color} label="Project colour"
+     options={TAG_COLORS.map(value=>({value,label:value}))} onChange={setColor}/>
    </div>
   </div>
  </Modal>;

@@ -19,6 +19,9 @@ export interface Person extends Row{
  id:string;name:string;role:string|null;organization:string|null;email:string|null;
  telegram_handle:string|null;notes:string|null;created_at:string;updated_at:string;
 }
+export interface ProjectPerson extends Row{
+ id:string;project_id:string;person_id:string;created_at:string;updated_at:string;
+}
 export interface ProjectStage extends Row{
  id:string;project_id:string;name:string;color:string|null;position:number;category:string;created_at:string;updated_at:string;
 }
@@ -44,12 +47,12 @@ export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
 
 const PROJECT_SELECT="id,user_id,name,description,objective,status,phase,color,start_date,target_date,created_at,updated_at";
-
 interface DataValue{
  userId:string;
  tables:Record<EntityKey,TableStore>;
  projects:TableStore<Project>;
  people:TableStore<Person>;
+ projectPeople:TableStore<ProjectPerson>;
  projectStages:TableStore<ProjectStage>;
  projectLinks:TableStore<ProjectLink>;
  projectFields:TableStore<ProjectField>;
@@ -115,6 +118,7 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  const opportunities=useTable(ENTITIES.opportunities.table,ENTITIES.opportunities.select,ENTITIES.opportunities.defaultSort);
  const projects=useTable<Project>("projects",PROJECT_SELECT,{key:"name",dir:"asc"});
  const people=useTable<Person>("people","id,user_id,name,role,organization,email,telegram_handle,notes,created_at,updated_at",{key:"name",dir:"asc"});
+ const projectPeople=useTable<ProjectPerson>("project_people","id,user_id,project_id,person_id,created_at,updated_at",{key:"created_at",dir:"asc"});
  const projectStages=useTable<ProjectStage>("project_stages","id,user_id,project_id,name,color,position,category,created_at,updated_at",{key:"position",dir:"asc"});
  const projectLinks=useTable<ProjectLink>("project_links","id,user_id,project_id,label,url,kind,position,created_at,updated_at",{key:"position",dir:"asc"});
  const projectFields=useTable<ProjectField>("project_fields","id,user_id,project_id,label,value,field_type,position,created_at,updated_at",{key:"position",dir:"asc"});
@@ -150,26 +154,26 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  },[userId,refreshTelegram]);
 
  const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||opportunities.loading||
-  projects.loading||people.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||publicationStageEvents.loading||trashItems.loading||tags.loading;
+  projects.loading||people.loading||projectPeople.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||publicationStageEvents.loading||trashItems.loading||tags.loading;
 
  const notices=useMemo(()=>{
   const all:NoticeItem[]=[];
   for(const key of ENTITY_ORDER){const t=tables[key];if(t.error)all.push({key,message:t.error,dismiss:t.dismissError})}
   if(projects.error)all.push({key:"projects",message:projects.error,dismiss:projects.dismissError});
-  for(const [key,t] of [["people",people],["project stages",projectStages],["project links",projectLinks],
+  for(const [key,t] of [["people",people],["project people",projectPeople],["project stages",projectStages],["project links",projectLinks],
    ["project fields",projectFields],["publication nodes",publicationNodes]] as const)
    if(t.error)all.push({key,message:t.error,dismiss:t.dismissError});
   if(tags.error)all.push({key:"tags",message:tags.error,dismiss:tags.dismissError});
   return all;
- },[tables,projects.error,projects.dismissError,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags.error,tags.dismissError]);
+ },[tables,projects.error,projects.dismissError,people,projectPeople,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags.error,tags.dismissError]);
 
  const refreshAll=useCallback(()=>{
   for(const key of ENTITY_ORDER)void tables[key].refetch(true);
   void projects.refetch(true);
-  void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
+ void people.refetch(true);void projectPeople.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
   void projectFields.refetch(true);void publicationNodes.refetch(true);void publicationStageEvents.refetch(true);
   void tags.refetch();
- },[tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags]);
+ },[tables,projects,people,projectPeople,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags]);
 
  useEffect(()=>{
   const refresh=()=>void trashItems.refetch(true);
@@ -200,9 +204,9 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   await projects.remove(id);
  },[projects]);
 
- const dataValue=useMemo(()=>({userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,
+ const dataValue=useMemo(()=>({userId,tables,projects,people,projectPeople,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,
   trashItems,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,emptyTrash}),
-  [userId,tables,projects,people,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,trashItems,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,emptyTrash]);
+  [userId,tables,projects,people,projectPeople,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,trashItems,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,emptyTrash]);
 
  // ---- UI state ----
  const initial=initialRoute();
@@ -239,12 +243,12 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  useEffect(()=>{
   if(view==="project"||view==="publication"){
    void tasks.refetch(true);void publications.refetch(true);void documents.refetch(true);void reminders.refetch(true);void reads.refetch(true);
-   void projects.refetch(true);void people.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
+   void projects.refetch(true);void people.refetch(true);void projectPeople.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
    void projectFields.refetch(true);void publicationNodes.refetch(true);void publicationStageEvents.refetch(true);
   }else if(view==="trash")void trashItems.refetch(true);
   else if(ENTITY_ORDER.includes(view as EntityKey))void tables[view as EntityKey].refetch(true);
  },[view,scope,tasks.refetch,publications.refetch,documents.refetch,reminders.refetch,reads.refetch,projects.refetch,
-  people.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch,publicationStageEvents.refetch,trashItems.refetch]);
+  people.refetch,projectPeople.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch,publicationStageEvents.refetch,trashItems.refetch]);
 
  const setQuery=useCallback((k:EntityKey,patch:Partial<Query>)=>setQueries(v=>({...v,[k]:{...v[k],...patch}})),[]);
  useEffect(()=>{
