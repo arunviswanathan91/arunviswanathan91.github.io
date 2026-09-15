@@ -844,6 +844,8 @@ dialog::backdrop{background:var(--scrim)}
 .person-actions{display:flex;align-items:center;gap:2px}
 .private-note{display:flex;align-items:flex-start;gap:var(--s-2);padding:var(--s-3);margin-bottom:var(--s-3);border-radius:var(--r-2);background:var(--accent-soft);color:var(--text-2);font-size:var(--f-xs)}
 .private-note svg{color:var(--accent);margin-top:1px}
+.person-add-mode{margin-bottom:var(--s-3)}
+.existing-person-picker{display:grid;gap:var(--s-2);padding:var(--s-3);border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface-2)}
 
 .stage-help{margin-bottom:var(--s-3);color:var(--text-2);font-size:var(--f-xs)}
 .stage-list{display:grid;gap:6px}
