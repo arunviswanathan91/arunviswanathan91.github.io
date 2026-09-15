@@ -372,9 +372,19 @@ function PersonEditor({projectId,person,membershipId,onClose}:{projectId:string;
  const {userId,people,projectPeople}=useData();
  const {ask,confirmation}=useConfirmDialog();
  const current=person==="new"?null:person;
+ const memberIds=new Set(projectPeople.rows.filter(row=>row.project_id===projectId).map(row=>row.person_id));
+ const availablePeople=people.rows.filter(candidate=>!memberIds.has(candidate.id))
+  .sort((a,b)=>a.name.localeCompare(b.name));
+ const [addMode,setAddMode]=useState<"existing"|"new">(availablePeople.length?"existing":"new");
+ const [existingPersonId,setExistingPersonId]=useState("");
  const [values,setValues]=useState({name:current?.name??"",role:current?.role??"",organization:current?.organization??"",
   email:current?.email??"",telegram_handle:current?.telegram_handle??"",notes:current?.notes??""});
  const set=(key:keyof typeof values,value:string)=>setValues(v=>({...v,[key]:value}));
+ const addExisting=async(close:()=>void)=>{
+  if(!existingPersonId)return;
+  const saved=await projectPeople.insert({user_id:userId,project_id:projectId,person_id:existingPersonId});
+  if(saved)close();
+ };
  const save=async(close:()=>void)=>{
   const name=values.name.trim();if(!name)return;
   const payload={name,role:values.role.trim()||null,organization:values.organization.trim()||null,email:values.email.trim()||null,
@@ -385,22 +395,37 @@ function PersonEditor({projectId,person,membershipId,onClose}:{projectId:string;
    const created=await people.insert({user_id:userId,...payload});
    saved=Boolean(created&&await projectPeople.insert({user_id:userId,project_id:projectId,person_id:created.id}));
   }
-  if(saved)close();
+ if(saved)close();
  };
  return <><Modal kicker="Private contact" title={current?`Edit ${current.name}`:"Add person"} onClose={onClose}
   footer={close=><><button type="button" className="secondary" onClick={close}>Cancel</button>
    {current&&membershipId&&<button type="button" className="danger-button" onClick={()=>ask({title:"Remove person from this project?",
     message:`${current.name} will be removed only from this project. Other projects and assignments are unchanged. You can restore this membership from Trash.`,confirmLabel:"Remove from project"},
     async()=>{if(await projectPeople.remove(membershipId))close()})}><Trash2/>Remove from project</button>}
-   <button type="button" className="primary" disabled={!values.name.trim()} onClick={()=>void save(close)}>Save</button></>}>
+   {!current&&addMode==="existing"
+    ?<button type="button" className="primary" disabled={!existingPersonId} onClick={()=>void addExisting(close)}>Add to project</button>
+    :<button type="button" className="primary" disabled={!values.name.trim()} onClick={()=>void save(close)}>Save</button>}</>}>
   <div className="private-note"><Users/><span>This person is a private label in your workspace. No invitation or message will be sent.</span></div>
-  <div className="field-grid">
+  {!current&&availablePeople.length>0&&<div className="seg person-add-mode" role="tablist" aria-label="Add person method">
+   <button type="button" role="tab" aria-selected={addMode==="existing"} className={addMode==="existing"?"active":""}
+    onClick={()=>setAddMode("existing")}>Existing person</button>
+   <button type="button" role="tab" aria-selected={addMode==="new"} className={addMode==="new"?"active":""}
+    onClick={()=>setAddMode("new")}>New person</button>
+  </div>}
+  {!current&&addMode==="existing"?<div className="existing-person-picker">
+   <label className="field-label">Person from your workspace</label>
+   <SelectMenu value={existingPersonId} onChange={setExistingPersonId} label="Choose an existing person"
+    options={[{value:"",label:"Choose a person…"},...availablePeople.map(candidate=>({
+     value:candidate.id,label:[candidate.name,candidate.role,candidate.organization].filter(Boolean).join(" · ")
+    }))]}/>
+   <p className="subtitle">This links the existing contact to this project without creating a duplicate.</p>
+  </div>:<div className="field-grid">
    <div className="field field-wide"><label className="field-label" htmlFor="person-name">Name</label><input id="person-name" className="input" autoFocus value={values.name} onChange={e=>set("name",e.target.value)}/></div>
    <div className="field"><label className="field-label" htmlFor="person-role">Role</label><input id="person-role" className="input" value={values.role} placeholder="PI, collaborator…" onChange={e=>set("role",e.target.value)}/></div>
    <div className="field"><label className="field-label" htmlFor="person-org">Organisation</label><input id="person-org" className="input" value={values.organization} onChange={e=>set("organization",e.target.value)}/></div>
    <div className="field"><label className="field-label" htmlFor="person-email">Email</label><input id="person-email" className="input" type="email" value={values.email} onChange={e=>set("email",e.target.value)}/></div>
    <div className="field"><label className="field-label" htmlFor="person-telegram">Telegram handle</label><input id="person-telegram" className="input" value={values.telegram_handle} placeholder="username" onChange={e=>set("telegram_handle",e.target.value)}/></div>
    <div className="field field-wide"><label className="field-label" htmlFor="person-notes">Notes</label><textarea id="person-notes" className="input" rows={3} value={values.notes} onChange={e=>set("notes",e.target.value)}/></div>
-  </div>
+  </div>}
  </Modal>{confirmation}</>;
 }
