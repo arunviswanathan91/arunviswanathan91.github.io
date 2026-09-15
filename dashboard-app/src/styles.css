@@ -846,6 +846,18 @@ dialog::backdrop{background:var(--scrim)}
 .private-note svg{color:var(--accent);margin-top:1px}
 .person-add-mode{margin-bottom:var(--s-3)}
 .existing-person-picker{display:grid;gap:var(--s-2);padding:var(--s-3);border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface-2)}
+.person-picker-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2)}
+.person-picker-list{display:grid;gap:5px;max-height:300px;overflow-y:auto}
+.person-picker-row{
+ display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:var(--s-2);
+ padding:8px;border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface);cursor:pointer;
+}
+.person-picker-row:hover{border-color:var(--border-strong);background:var(--surface-3)}
+.person-picker-row.selected{border-color:var(--accent);background:var(--accent-soft)}
+.person-picker-row>input{width:15px;height:15px;accent-color:var(--accent)}
+.person-picker-row .person-avatar{width:30px;height:30px}
+.person-picker-copy{display:grid;gap:1px;min-width:0}.person-picker-copy strong{font-size:var(--f-sm)}
+.person-picker-copy small{overflow:hidden;color:var(--text-2);font-size:var(--f-xs);text-overflow:ellipsis;white-space:nowrap}
 
 .stage-help{margin-bottom:var(--s-3);color:var(--text-2);font-size:var(--f-xs)}
 .stage-list{display:grid;gap:6px}
