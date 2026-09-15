@@ -26,6 +26,7 @@ export function SelectMenu({value,options,onChange,label,id,className="input",di
  const menu=useRef<HTMLDivElement>(null);
  const selected=options.find(option=>option.value===value);
  const shown=selected?.label??value??"—";
+ const portalRoot=trigger.current?.closest("dialog")??document.body;
 
  const place=()=>{
   const rect=trigger.current?.getBoundingClientRect();
@@ -95,6 +96,6 @@ export function SelectMenu({value,options,onChange,label,id,className="input",di
    {options.map(option=><button type="button" role="option" aria-selected={option.value===value}
     className="select-option" key={option.value} disabled={option.disabled}
     onClick={()=>choose(option.value)}><span>{option.label}</span>{option.value===value&&<Check/>}</button>)}
-  </div>,document.body)}
+  </div>,portalRoot)}
  </>;
 }
