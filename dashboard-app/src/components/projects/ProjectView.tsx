@@ -376,15 +376,22 @@ function PersonEditor({projectId,person,membershipId,onClose}:{projectId:string;
  const availablePeople=people.rows.filter(candidate=>!memberIds.has(candidate.id))
   .sort((a,b)=>a.name.localeCompare(b.name));
  const [addMode,setAddMode]=useState<"existing"|"new">(availablePeople.length?"existing":"new");
- const [existingPersonId,setExistingPersonId]=useState("");
+ const [selectedPersonIds,setSelectedPersonIds]=useState<string[]>([]);
  const [values,setValues]=useState({name:current?.name??"",role:current?.role??"",organization:current?.organization??"",
   email:current?.email??"",telegram_handle:current?.telegram_handle??"",notes:current?.notes??""});
  const set=(key:keyof typeof values,value:string)=>setValues(v=>({...v,[key]:value}));
  const addExisting=async(close:()=>void)=>{
-  if(!existingPersonId)return;
-  const saved=await projectPeople.insert({user_id:userId,project_id:projectId,person_id:existingPersonId});
-  if(saved)close();
+  const ids=selectedPersonIds.filter(id=>availablePeople.some(candidate=>candidate.id===id));
+  if(!ids.length)return;
+  const failed:string[]=[];
+  for(const personId of ids){
+   const saved=await projectPeople.insert({user_id:userId,project_id:projectId,person_id:personId});
+   if(!saved)failed.push(personId);
+  }
+  if(failed.length)setSelectedPersonIds(failed);else close();
  };
+ const togglePerson=(personId:string)=>setSelectedPersonIds(ids=>
+  ids.includes(personId)?ids.filter(id=>id!==personId):[...ids,personId]);
  const save=async(close:()=>void)=>{
   const name=values.name.trim();if(!name)return;
   const payload={name,role:values.role.trim()||null,organization:values.organization.trim()||null,email:values.email.trim()||null,
@@ -403,7 +410,9 @@ function PersonEditor({projectId,person,membershipId,onClose}:{projectId:string;
     message:`${current.name} will be removed only from this project. Other projects and assignments are unchanged. You can restore this membership from Trash.`,confirmLabel:"Remove from project"},
     async()=>{if(await projectPeople.remove(membershipId))close()})}><Trash2/>Remove from project</button>}
    {!current&&addMode==="existing"
-    ?<button type="button" className="primary" disabled={!existingPersonId} onClick={()=>void addExisting(close)}>Add to project</button>
+    ?<button type="button" className="primary" disabled={!selectedPersonIds.length} onClick={()=>void addExisting(close)}>
+      {"Add selected"+(selectedPersonIds.length?" ("+selectedPersonIds.length+")":"")}
+     </button>
     :<button type="button" className="primary" disabled={!values.name.trim()} onClick={()=>void save(close)}>Save</button>}</>}>
   <div className="private-note"><Users/><span>This person is a private label in your workspace. No invitation or message will be sent.</span></div>
   {!current&&availablePeople.length>0&&<div className="seg person-add-mode" role="tablist" aria-label="Add person method">
@@ -413,12 +422,25 @@ function PersonEditor({projectId,person,membershipId,onClose}:{projectId:string;
     onClick={()=>setAddMode("new")}>New person</button>
   </div>}
   {!current&&addMode==="existing"?<div className="existing-person-picker">
-   <label className="field-label">Person from your workspace</label>
-   <SelectMenu value={existingPersonId} onChange={setExistingPersonId} label="Choose an existing person"
-    options={[{value:"",label:"Choose a person…"},...availablePeople.map(candidate=>({
-     value:candidate.id,label:[candidate.name,candidate.role,candidate.organization].filter(Boolean).join(" · ")
-    }))]}/>
-   <p className="subtitle">This links the existing contact to this project without creating a duplicate.</p>
+   <div className="person-picker-head"><span className="field-label">People from your workspace</span>
+    {availablePeople.length>1&&<button type="button" className="link-button" onClick={()=>
+     setSelectedPersonIds(selectedPersonIds.length===availablePeople.length?[]:availablePeople.map(candidate=>candidate.id))}>
+     {selectedPersonIds.length===availablePeople.length?"Clear":"Select all"}
+    </button>}
+   </div>
+   <div className="person-picker-list">
+    {availablePeople.map(candidate=>{
+     const checked=selectedPersonIds.includes(candidate.id);
+     return <label className={"person-picker-row"+(checked?" selected":"")} key={candidate.id}>
+      <input type="checkbox" checked={checked} onChange={()=>togglePerson(candidate.id)}/>
+      <span className="person-avatar">{candidate.name.slice(0,2).toUpperCase()}</span>
+      <span className="person-picker-copy"><strong>{candidate.name}</strong>
+       <small>{[candidate.role,candidate.organization].filter(Boolean).join(" · ")||candidate.email||"Private contact"}</small></span>
+     </label>;
+    })}
+    {!availablePeople.length&&<p className="subtitle">Everyone in your private directory is already linked to this project.</p>}
+   </div>
+   <p className="subtitle">Choose one or more people. They will be linked together without creating duplicate contacts.</p>
   </div>:<div className="field-grid">
    <div className="field field-wide"><label className="field-label" htmlFor="person-name">Name</label><input id="person-name" className="input" autoFocus value={values.name} onChange={e=>set("name",e.target.value)}/></div>
    <div className="field"><label className="field-label" htmlFor="person-role">Role</label><input id="person-role" className="input" value={values.role} placeholder="PI, collaborator…" onChange={e=>set("role",e.target.value)}/></div>
