@@ -642,7 +642,7 @@ dialog::backdrop{background:var(--scrim)}
 
 .modal{
  margin:auto;width:min(560px,calc(100vw - 2*var(--s-4)));max-height:min(88dvh,760px);
- animation:modal-enter .14s cubic-bezier(.2,.85,.25,1);
+ overflow:visible;animation:modal-enter .14s cubic-bezier(.2,.85,.25,1);
 }
 .modal::backdrop{animation:scrim-enter .14s ease-out}
 .modal.is-closing{animation:modal-leave .12s ease-in forwards}
