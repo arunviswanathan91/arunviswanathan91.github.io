@@ -11,6 +11,9 @@ import { Composer } from "./Composer";
 import { Drawer } from "./Drawer";
 import { OpportunityDiscovery } from "./OpportunityDiscovery";
 import { OpportunitySwipe } from "./OpportunitySwipe";
+import { contextFor } from "./OpportunityContext";
+import { includeResearchFit } from "../../lib/decision";
+import { SelectMenu } from "../ui/SelectMenu";
 import { useEntityCtx } from "./ctx";
 import type { EntityDef, FieldDef, QuickAction, Row } from "../../entities/types";
 
@@ -20,6 +23,7 @@ export function EntityView({def}:{def:EntityDef}){
  const ui=useUi();
  const {valueCtx,inputCtx}=useEntityCtx(def);
  const [composer,setComposer]=useState<Record<string,unknown>|null>(null);
+ const [researchFit,setResearchFit]=useState("all");
 
  const query=ui.queries[def.key];
  const scopeProjectId=ui.scope==="all"?null:ui.scope;
@@ -27,7 +31,7 @@ export function EntityView({def}:{def:EntityDef}){
 
  const rows=useMemo(()=>applyQuery(def,table.rows,query,{
   scope:ui.scope,tagsFor:(e,id)=>tags.idsFor(e,id),
- }),[def,table.rows,query,ui.scope,tags]);
+ }).filter(row=>def.key!=="opportunities"||includeResearchFit(contextFor(row).brief?.fit?.verdict,researchFit)),[def,table.rows,query,ui.scope,tags,researchFit]);
 
  const groupField=query.groupBy?fieldByKey(def,query.groupBy):null;
  const layout=query.layout==="swipe"&&def.key==="opportunities"?"swipe":query.layout==="board"&&groupField?"board":"table";
@@ -87,6 +91,10 @@ export function EntityView({def}:{def:EntityDef}){
 
   <Toolbar def={def} query={query} shown={rows.length} total={table.rows.length} tags={tags.tags}
    onChange={patch=>ui.setQuery(def.key,patch)} onNew={()=>startNew()} onRefresh={()=>void table.refetch(true)}/>
+  {def.key==="opportunities"&&<div className="research-fit-filter"><span>AI research fit</span>
+   <SelectMenu label="Filter by AI research fit" value={researchFit} onChange={setResearchFit} options={[
+    {value:"all",label:"All opportunities"},{value:"relevant",label:"Direct & transferable fit"},{value:"weak",label:"Weak research fit"},{value:"pending",label:"Not assessed yet"},
+   ]}/><small>Filtering changes this view. It does not dismiss or delete a listing.</small></div>}
 
   {!def.projectField&&ui.scope!=="all"&&
    <p className="scope-note">{def.plural} aren’t project-scoped — showing all of them.</p>}

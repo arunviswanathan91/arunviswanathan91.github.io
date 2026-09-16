@@ -15,6 +15,7 @@ import { salaryDisplay, salarySourceLabel, annualInr } from "./normalize/salary.
 import { ensureDefaultSources } from "./sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, termsForRun } from "./search/query.js";
 import { contextProviders, createContextFallback, ContextProvidersUnavailable, enrichWithFallback, type OpportunityContext } from "./enrich/context.js";
+import { assessmentPreferences } from "./enrich/assessment.js";
 import type {
  EnrichmentStats, NormalizedOpportunity, OpportunitySummary, RunCaps, RunResult, SearchProfile, SourceOutcome,
 } from "./types.js";
@@ -69,7 +70,8 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  const userId = await db.resolveUserId(opts.userId ?? env.userId ?? null);
  const profile = await db.loadProfile(userId);
- profile.terms = termsForRun(profile.terms, queryText);
+ const preferences = assessmentPreferences(profile.assessmentPreferences, profile.terms);
+ profile.terms = termsForRun(preferences.interests.length ? preferences.interests : profile.terms, queryText);
 
  // Normal runs self-heal databases seeded by an older release. Existing rows
  // are never overwritten, so user-disabled sources and cursors are preserved.
@@ -201,19 +203,20 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  // entire allowance without silently preventing Gemini from running afterward.
  const defaultContextLimit = backfill ? 25 : trigger === "schedule" ? 8 : 3;
  const requestedContext = boundedBatchSize(opts.contextBatchSize, defaultContextLimit);
- const contextLimit = Math.min(caps.maxLlmCalls, requestedContext);
+ const llmCallLimit = Math.max(0, Math.min(caps.maxLlmCalls, profile.maxLlmCalls));
+ const contextLimit = Math.min(llmCallLimit, requestedContext);
  const enrichment = emptyEnrichment(contextLimit);
  const providers = contextProviders(env);
  if (!opts.dryRun && providers.length && Date.now() < deadlineAt) {
-  const loaded = await db.loadContextCandidates(userId, contextLimit, !!opts.refreshContext);
+  const loaded = await db.loadContextCandidates(userId, contextLimit, !!opts.refreshContext, preferences);
   enrichment.candidates = loaded.candidates.length;
   enrichment.pending = loaded.total;
   const contextHttp = new Http(
    { ...DEFAULT_HTTP, timeoutMs: 60_000, maxRetries: 0 },
-   Math.max(12, contextLimit * 7 + 4),
+   Math.max(16, contextLimit * 10 + 4),
   );
   const fallback = createContextFallback<OpportunityContext>(providers, (from, to) =>
-   log.warn("switching opportunity context provider", { from, to }));
+   log.warn("switching opportunity context provider", { from, to }), llmCallLimit);
   log.info("opportunity context providers", { providers, openrouterModel: env.openrouterModel });
   for (const candidate of loaded.candidates) {
    if (Date.now() > deadlineAt) {
@@ -223,7 +226,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    }
    enrichment.attempted++;
    try {
-    const context = await enrichWithFallback(env, contextHttp, candidate, fallback);
+    const context = await enrichWithFallback(env, contextHttp, candidate, fallback, preferences);
     await db.saveOpportunityContext(candidate, context as unknown as Record<string, unknown>);
     enrichment.succeeded++;
     log.info("opportunity context saved", { id: candidate.id, provider: context.provider, model: context.model });
@@ -235,7 +238,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
     });
     if (error instanceof ContextProvidersUnavailable) {
      enrichment.skipped = loaded.candidates.length - enrichment.attempted;
-     degradations.push("AI providers unavailable; rerun later to resume pending cards");
+     degradations.push(error.message);
      break;
     }
    }
@@ -441,7 +444,7 @@ async function insertOpportunity(
   salary_display: salaryDisplay(o.salary), salary_source: salarySourceLabel(o.salary),
   url: o.url, apply_url: o.applyUrl, source_count: 1, sources_summary: o.sourceKey,
   summary: excerpt(o.descriptionText, 400),
-  description_excerpt: excerpt(o.descriptionText, 2000),
+  description_excerpt: excerpt(o.descriptionText, 12000),
   org_key: orgKey(o.organization), title_key: titleKey(o.title),
   simhash: hash === null ? null : hash.toString(),
   simhash_b0: bands[0], simhash_b1: bands[1], simhash_b2: bands[2], simhash_b3: bands[3],
@@ -494,7 +497,7 @@ async function linkSource(
   if (o.locationRaw) patch.location = o.locationRaw;
   if (o.descriptionText) {
    patch.summary = excerpt(o.descriptionText, 400);
-   patch.description_excerpt = excerpt(o.descriptionText, 2000);
+   patch.description_excerpt = excerpt(o.descriptionText, 12000);
   }
   if (o.salary) {
    patch.salary_min = o.salary.min;

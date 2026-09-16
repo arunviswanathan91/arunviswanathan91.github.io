@@ -2,7 +2,8 @@
 
 Finds postdoc and research-scientist roles overnight, scores them against a search profile, removes
 duplicates across sources, and writes ranked results into the same Supabase database the dashboard
-(`../dashboard-app/`) reads from. Runs entirely within free tiers — see [Cost](#cost) below.
+(`../dashboard-app/`) reads from. Uses bounded requests and free-provider options — actual free-tier
+eligibility depends on the configured accounts and current quotas; see [Cost](#cost) below.
 
 It shares nothing with the dashboard at runtime except the database; this is a standalone Node
 package with its own build, its own tests, and two thin entrypoints (`cli.ts` for GitHub Actions,
@@ -61,12 +62,15 @@ pins `OPENROUTER_MODEL=stealth/union-alpha`. For an existing Cloud Run deploymen
 same key through Secret Manager and redeploy the updated pipeline separately; GitHub secrets
 do not automatically propagate to Cloud Run.
 
-Union Alpha supports JSON output, not strict JSON-schema enforcement. The pipeline validates all
-seven fields locally before saving, rejects malformed/all-placeholder responses, and records
+Union Alpha supports JSON output, not strict JSON-schema enforcement. The pipeline validates the
+structured decision brief locally before saving, rejects malformed/empty responses, and records
 the provider and actual model alongside context. OpenRouter routes to an anonymous provider
 which may retain prompts and responses (not for training per its current model page). This
-integration sends only listing text and collected evidence, not personal profiles or credentials.
-No web-search plugins are enabled: this does not yet add visa research or live weather.
+integration sends listing text, collected public evidence, and the explicitly saved assessment
+preferences (research interests, nationality/residence country, household/housing and career goal).
+It does not send account email, credentials, private tasks or private documents.
+No paid web-search plugins are enabled. Visa/tax context comes from fetched official pages; climate
+is typical seasonal context, not a live weather forecast.
 See https://openrouter.ai/stealth/union-alpha for current preview terms and availability.
 
 Enrichment is stored under `opportunities.score_breakdown.context`, alongside the existing scoring
@@ -81,7 +85,61 @@ across fallbacks. It skips quota/auth/unavailable providers for the rest of that
 are unavailable, it stops the batch and preserves remaining cards as pending for a later rerun.
 This is fallback/queueing, not automatic rate-limit waiting. It rejects all-placeholder results and prints
 attempted, enriched, failed, and pending totals. Repeat it until pending reaches zero. Enable
-`refreshExisting` only when existing context should be regenerated.
+`refreshExisting` only when a current assessment should be forced to regenerate. Legacy seven-field
+summaries, assessments over 30 days old, and briefs generated for different preferences are eligible
+automatically. Backfill considers New and Shortlisted opportunities; it never changes their status.
+
+### Research & relocation decision briefs
+
+In **Opportunities → Research & relocation preferences**, select research subjects (or enter your
+own), subjects to avoid, nationality, current residence, household size, housing and career direction.
+These values live in the existing `discovery_profiles.ontology_overrides.assessment_preferences`
+JSON. The worker uses the oldest active profile consistently with the dashboard. Other profile
+settings, source configuration and collaborator permissions are preserved. No SQL migration is needed.
+
+The second AI pass produces `score_breakdown.context.brief` version 2:
+
+- Semantic research fit (direct / transferable / weak / unknown), strengths and gaps. It distinguishes
+  subject fit from a generic postdoc title and from the original deterministic search score. Broad
+  `postdoc` searches use the selected subject terms. Explicit topical searches still take precedence.
+- Actual duties, techniques and qualifications; guaranteed contract percentage, funding dates,
+  teaching and temporary-uplift risks; institution/research environment and career value.
+- City context, typical climate, transport, housing, inclusion/support and relocation checks.
+- Nationality/residence-aware visa guidance and tax/social-contribution context. These legal sections
+  require fetched official destination evidence; unsupported claims are replaced with verification
+  steps. No promise of visa eligibility, processing speed, tax exemption or a specific net salary.
+- Monthly gross pay, estimated payroll deductions, rent and essentials plus separate one-off costs.
+  Listed pay, pay-scale assumptions and model estimates are distinct. Guaranteed FTE is applied once;
+  a conflicting explicit part-time percentage invalidates the model's salary calculation.
+- Questions for the PI/HR and tailored next steps. Facts, model background and estimates are labelled,
+  with per-section citations and source read dates. References that could not be fetched are shown
+  as links to check, not as evidence read by the model.
+
+Evidence retrieval fetches a fuller vacancy page (with a stored-excerpt fallback), official country
+visa/tax/pay entry points, the institution website and full Wikipedia institution/city extracts. City
+extracts reserve space for climate and transport instead of discarding everything after the lead.
+Public evidence is cached **within each run**, including failed fetches; personal assessments are
+not shared between users. Model background is explicitly unverified. Unsupported current numbers,
+specific lab reputations and population-wide safety/racism judgments are not requested.
+
+The read-only swipe card and the opportunity details both show the brief. An AI-fit filter works in
+table, board and swipe views, with a separate unassessed option. It never dismisses a listing. The
+budget calculator uses conservative bounds, preserves unknowns, allows negative savings, and keeps
+upfront costs out of monthly savings. Edits are local to the open card, not a promise of payroll or a
+saved household budget. A 12-month comparison is explicitly hypothetical for shorter contracts.
+
+**Rollout:** merge the PR to publish the dashboard and make the new GitHub Actions worker available.
+Save preferences, then run **Nightly opportunity discovery → Run workflow → backfill**, starting with
+`batchSize=5`, `maxLlmCalls=10`, `refreshExisting=false`. Repeat pending batches; failed calls stay
+pending rather than overwriting an existing brief. Model attempts across provider fallbacks share
+the smaller of the run and profile call caps. Source retrieval and responses remain runtime-bounded;
+quotas can still stop a free-tier batch early. OpenRouter's zero price ceiling remains enforced.
+
+If interactive searches use Cloud Run, redeploy the service from **pipeline/** using the existing
+service/project/region and existing Secret Manager bindings. A GitHub merge does not redeploy that
+service. The Docker image uses the same worker code and existing API variable names; no new API key,
+database column or Supabase Edge Function deployment is required for this feature. Backfill through
+GitHub Actions can upgrade existing cards before the Cloud Run revision is replaced.
 
 ### One-time setup: register sources and the search profile
 
@@ -99,7 +157,7 @@ choices, configuration, and cursors. This keeps an older Supabase seed from sile
 
 **Adjust the profile for your own preferences** — location weighting, salary floor, blocked
 organisations, etc. — either by editing the `discovery_profiles` row directly in the Supabase table
-editor, or by extending `seed.ts`. There is deliberately no settings UI for this; it changes rarely.
+editor. Research and relocation preferences now have a dashboard editor as described above.
 
 ### Running it
 

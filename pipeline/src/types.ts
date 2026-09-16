@@ -73,6 +73,7 @@ export interface SearchProfile {
  maxLlmCalls: number;
  maxCrawlPages: number;
  maxHttpRequests: number;
+ assessmentPreferences?: import("./enrich/assessment.js").AssessmentPreferences;
 }
 
 export interface ScoreBreakdown {

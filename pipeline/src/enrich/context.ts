@@ -2,7 +2,9 @@ import type { Env } from "../config.js";
 import type { ContextCandidate } from "../db.js";
 import type { Http } from "../http.js";
 import { HttpResponseError } from "../http.js";
-import { excerpt, htmlToText } from "../normalize/text.js";
+import { excerpt } from "../normalize/text.js";
+import { assessmentInstructions, assessmentPreferences, assessmentSchema, normalizeAssessment, type AssessmentPreferences, type DecisionBrief, type Evidence } from "./assessment.js";
+import { collectDecisionEvidence, type OfficialReference } from "./evidence.js";
 
 export interface OpportunityContext {
  institution?: string;
@@ -16,12 +18,10 @@ export interface OpportunityContext {
  generated_at: string;
  provider?: string;
  model?: string;
+ brief?: DecisionBrief;
+ references?: OfficialReference[];
 }
 
-interface Evidence { label: string; url: string; text: string }
-interface WikiResponse {
- query?: { pages?: Record<string, { title?: string; extract?: string; fullurl?: string }> };
-}
 interface GroqResponse {
  model?: string;
  error?: { message?: string };
@@ -36,12 +36,12 @@ export function contextProviders(env: Env): ContextProvider[] {
   Boolean(env[`${provider}ApiKey`]?.trim()));
 }
 
-export function openrouterRequest(model: string, prompt: string) {
+export function openrouterRequest(model: string, prompt: string, decisionBrief = false) {
  return {
   model,
-  messages: [{ role: "user", content: `${prompt}\nJSON must contain exactly these string fields: ${FIELDS.join(", ")}.` }],
+  messages: [{ role: "user", content: decisionBrief ? prompt : `${prompt}\nJSON must contain exactly these string fields: ${FIELDS.join(", ")}.` }],
   response_format: { type: "json_object" },
-  max_tokens: 2048,
+  max_tokens: decisionBrief ? 4800 : 2048,
   // Fail closed if this preview becomes paid; never enable paid search plugins.
   provider: { require_parameters: true, max_price: { prompt: 0, completion: 0, request: 0 } },
  };
@@ -64,15 +64,19 @@ export class ContextProvidersUnavailable extends Error {}
 export function createContextFallback<T>(
  providers: ContextProvider[],
  onSwitch: (from: ContextProvider, to: ContextProvider) => void,
+ maxAttempts = Infinity,
 ) {
  const disabled = new Set<ContextProvider>();
  let preferred = 0;
+ let attempts = 0;
  return async (attempt: (provider: ContextProvider) => Promise<T>): Promise<T> => {
   let lastError: unknown;
   for (let offset = 0; offset < providers.length; offset++) {
    const index = (preferred + offset) % providers.length;
    const provider = providers[index]!;
    if (disabled.has(provider)) continue;
+   if (attempts >= maxAttempts) throw new ContextProvidersUnavailable("AI call cap reached; remaining assessments stay pending");
+   attempts++;
    try {
     const result = await attempt(provider);
     preferred = index;
@@ -91,13 +95,6 @@ export function createContextFallback<T>(
   throw lastError ?? new Error("No context provider succeeded");
  };
 }
-
-const safeHttpUrl = (value: string | null | undefined) => {
- try {
-  const url = new URL(value ?? "");
-  return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
- } catch { return null; }
-};
 
 const compact = (value: unknown, max = 900) => {
  const text = String(value ?? "").replace(/\s+/g, " ").trim();
@@ -138,62 +135,11 @@ export function contextPayloadFromInteraction(value: unknown): unknown {
  catch { throw new Error("Gemini returned invalid JSON in output_text"); }
 }
 
-async function wikipediaEvidence(http: Http, query: string, label: string): Promise<Evidence | null> {
- const term = query.trim();
- if (!term) return null;
- const api = "https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch="
-  + encodeURIComponent(term) + "&gsrlimit=1&prop=extracts%7Cinfo&exintro=1&explaintext=1&inprop=url&format=json&origin=*";
- const response = await http.getJson<WikiResponse>(api);
- const page = Object.values(response?.query?.pages ?? {})[0];
- const url = safeHttpUrl(page?.fullurl);
- const text = compact(page?.extract, 4500);
- if (!page || !url || text === UNKNOWN) return null;
- return { label: `${label}: ${page.title ?? term}`, url, text };
-}
-
-async function siteEvidence(http: Http, candidate: ContextCandidate): Promise<Evidence | null> {
- const url = safeHttpUrl(candidate.organization_url);
- if (!url) return null;
- try {
-  const response = await http.get(url, { accept: "text/html" });
-  if (!response.ok || !response.body) return null;
-  const text = compact(htmlToText(response.body), 4500);
-  return text === UNKNOWN ? null : { label: `${candidate.organization ?? "Institution"} website`, url, text };
- } catch { return null; }
-}
-
-async function collectEvidence(http: Http, candidate: ContextCandidate): Promise<Evidence[]> {
- const evidence: Evidence[] = [];
- const institution = candidate.organization
-  ? await wikipediaEvidence(http, candidate.organization, "Institution") : null;
- if (institution) evidence.push(institution);
- const placeName = candidate.city ?? candidate.location;
- const placeQuery = [placeName, candidate.country].filter(Boolean).join(", ");
- const place = placeQuery ? await wikipediaEvidence(http, placeQuery, "Place") : null;
- if (place && place.url !== institution?.url) evidence.push(place);
- const climate = placeQuery ? await wikipediaEvidence(http, `${placeQuery} climate`, "Climate") : null;
- if (climate && !evidence.some(item => item.url === climate.url)) evidence.push(climate);
- const transport = placeQuery ? await wikipediaEvidence(http, `${placeQuery} public transport`, "Transport") : null;
- if (transport && !evidence.some(item => item.url === transport.url)) evidence.push(transport);
- const site = await siteEvidence(http, candidate);
- if (site && !evidence.some(item => item.url === site.url)) evidence.push(site);
- return evidence;
-}
-
-function promptFor(candidate: ContextCandidate, evidence: Evidence[]) {
- const listing = [candidate.summary, candidate.description_excerpt].filter(Boolean).join("\n").slice(0, 5000);
- const facts = evidence.map((item, index) => `SOURCE ${index + 1} — ${item.label}\nURL: ${item.url}\n${item.text}`).join("\n\n");
- return `Create concise decision context for a researcher considering this opportunity.
-
-ROLE: ${candidate.role}
-ORGANISATION: ${candidate.organization ?? "Unknown"}
-LOCATION: ${candidate.location ?? ([candidate.city, candidate.country].filter(Boolean).join(", ") || "Unknown")}
-LISTING EXCERPT: ${listing || "Unavailable"}
-
-EVIDENCE:
-${facts || "No external evidence was collected."}
-
-Return only the requested JSON. Use the listing and supplied evidence. Never invent facts. External claims about the institution or place must be supported by the evidence. If the supplied material does not support a field, write exactly "${UNKNOWN}" Population must identify whether it is city or metro when the evidence does. Climate should be a short general pattern, not a forecast. Living should state practical evidence-backed advantages only. Inclusion must be careful and neutral: summarize documented inclusion, international-community, support, or safety context if present; never label a population as racist or not racist, and never infer attitudes from demographics. Keep each field below 90 words.`;
+export function decisionPrompt(candidate: ContextCandidate, evidence: Evidence[], prefs: AssessmentPreferences, provider: ContextProvider = "openrouter") {
+ // Groq free accounts have tighter token-per-minute budgets. Avoid duplicating
+ // its response schema in the prompt and keep all source IDs with shorter text.
+ const facts = evidence.map((item, index) => `SOURCE ${index + 1} (${item.kind ?? "background"}): ${item.label}\n${excerpt(item.text, provider === "groq" ? item.kind === "listing" ? 2000 : 500 : 6500)}`).join("\n\n");
+ return `${assessmentInstructions(prefs, provider === "openrouter")}\nVACANCY: ${JSON.stringify({ role: candidate.role, organisation: candidate.organization, city: candidate.city, location: candidate.location, country: candidate.country, salary: candidate.salary_display, salary_predicted: candidate.salary_is_predicted })}\nEVIDENCE:\n${facts || "No sources could be fetched; do not claim source verification."}`;
 }
 
 export async function enrichOpportunityContext(
@@ -202,27 +148,25 @@ export async function enrichOpportunityContext(
  candidate: ContextCandidate,
  provider: ContextProvider = "gemini",
  suppliedEvidence?: Evidence[],
+ prefs: AssessmentPreferences = assessmentPreferences({}),
 ): Promise<OpportunityContext> {
- const evidence = suppliedEvidence ?? await collectEvidence(http, candidate);
- const schema = {
-  type: "object",
-  properties: Object.fromEntries(FIELDS.map(field => [field, { type: "string" }])),
-  required: [...FIELDS],
-  additionalProperties: false,
- };
+ const evidence = suppliedEvidence ?? (await collectDecisionEvidence(http, candidate)).evidence;
+ const schema = assessmentSchema;
+ const prompt = decisionPrompt(candidate, evidence, prefs, provider);
  let payload: unknown;
  let model = provider === "gemini" ? env.geminiModel : provider === "groq" ? env.groqModel : env.openrouterModel;
  if (provider === "openrouter") {
   if (!env.openrouterApiKey) throw new Error("OPENROUTER_API_KEY missing");
   const response = await http.postJson<GroqResponse>(
    "https://openrouter.ai/api/v1/chat/completions",
-   openrouterRequest(env.openrouterModel, promptFor(candidate, evidence)),
+   openrouterRequest(env.openrouterModel, prompt, true),
    { authorization: `Bearer ${env.openrouterApiKey}` },
   );
   if (response?.error) throw new Error("OpenRouter returned an API error");
   const text = response?.choices?.[0]?.message?.content;
   if (!text) throw new Error("OpenRouter returned an empty response");
-  payload = parseOpenrouterContext(text);
+  try { payload = JSON.parse(text); }
+  catch { throw new Error("OpenRouter returned invalid assessment JSON"); }
   model = response?.model ?? model;
  } else if (provider === "groq") {
   if (!env.groqApiKey) throw new Error("GROQ_API_KEY missing");
@@ -230,8 +174,9 @@ export async function enrichOpportunityContext(
    "https://api.groq.com/openai/v1/chat/completions",
    {
     model: env.groqModel,
-    messages: [{ role: "user", content: promptFor(candidate, evidence) }],
+    messages: [{ role: "user", content: prompt }],
     response_format: { type: "json_schema", json_schema: { name: "opportunity_context", strict: true, schema } },
+    max_completion_tokens: 3072,
    },
    { authorization: `Bearer ${env.groqApiKey}` },
   );
@@ -245,18 +190,22 @@ export async function enrichOpportunityContext(
    "https://generativelanguage.googleapis.com/v1beta/interactions",
    {
     model: env.geminiModel,
-    input: promptFor(candidate, evidence),
+    input: prompt,
     response_format: { type: "text", mime_type: "application/json", schema },
    },
    { "x-goog-api-key": env.geminiApiKey },
   );
   payload = contextPayloadFromInteraction(response);
  }
- const context = normalizeContextPayload(payload, evidence);
- if (!context) throw new Error(`${provider} returned an unexpected structured-output shape`);
- if (!hasMeaningfulContext(context)) throw new Error(`${provider} returned fallback text for every context field`);
- context.provider = provider;
- context.model = model;
+ const brief = normalizeAssessment(payload, evidence, prefs);
+ if (!Object.values(brief.sections).some(claim => claim.text && claim.basis !== "unknown"))
+  throw new Error(`${provider} returned no useful assessment; leaving the card pending`);
+ const context: OpportunityContext = {
+  brief, provider, model, generated_at: new Date().toISOString(),
+  sources: evidence.map(({ text: _text, ...source }) => source),
+ };
+ // Keep old clients readable during a frontend/worker deployment overlap.
+ for (const field of FIELDS) context[field] = brief.sections[field].text;
  return context;
 }
 
@@ -264,7 +213,9 @@ export async function enrichOpportunityContext(
 export async function enrichWithFallback(
  env: Env, http: Http, candidate: ContextCandidate,
  fallback: ReturnType<typeof createContextFallback<OpportunityContext>>,
+ prefs: AssessmentPreferences = assessmentPreferences({}),
 ) {
- const evidence = await collectEvidence(http, candidate);
- return fallback(provider => enrichOpportunityContext(env, http, candidate, provider, evidence));
+ const { evidence, references } = await collectDecisionEvidence(http, candidate);
+ const result = await fallback(provider => enrichOpportunityContext(env, http, candidate, provider, evidence, prefs));
+ return { ...result, references };
 }
