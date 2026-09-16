@@ -8,6 +8,8 @@ export interface Env {
  firecrawlApiKey: string | null;
  geminiApiKey: string | null;
  geminiModel: string;
+ groqApiKey: string | null;
+ groqModel: string;
 }
 
 /** Fails loudly and early rather than half way through a run. */
@@ -26,6 +28,8 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   firecrawlApiKey: env.FIRECRAWL_API_KEY ?? null,
   geminiApiKey: env.GEMINI_API_KEY ?? null,
   geminiModel: env.GEMINI_MODEL ?? "gemini-3.8-flash",
+  groqApiKey: env.GROQ_API_KEY ?? null,
+  groqModel: env.GROQ_MODEL ?? "openai/gpt-oss-20b",
  };
 }
 

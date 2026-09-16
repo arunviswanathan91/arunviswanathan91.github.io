@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Env } from "./config.js";
+import { hasMeaningfulContext } from "./enrich/context.js";
 import type { SearchProfile, SourceOutcome } from "./types.js";
 import type { Candidate } from "./dedupe/cascade.js";
 
@@ -200,7 +201,8 @@ export class Db {
   const eligible = ((data ?? []) as ContextCandidate[])
    .filter(row => refreshExisting || (() => {
     const score = row.score_breakdown;
-    return row.enrichment !== "context_ready" && !(score && typeof score === "object" && score.context);
+    const context = score && typeof score === "object" ? score.context : null;
+    return !hasMeaningfulContext(context);
    })());
   return { candidates: eligible.slice(0, limit), total: eligible.length };
  }

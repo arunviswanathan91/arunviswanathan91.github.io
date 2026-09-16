@@ -18,7 +18,7 @@ import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/eu
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, termsForRun } from "../src/search/query.js";
-import { contextPayloadFromInteraction, normalizeContextPayload } from "../src/enrich/context.js";
+import { contextPayloadFromInteraction, hasMeaningfulContext, normalizeContextPayload, UNKNOWN } from "../src/enrich/context.js";
 
 type Check = { name: string; ok: boolean; detail?: string };
 const out: Check[] = [];
@@ -34,6 +34,8 @@ const eq = (name: string, a: unknown, b: unknown) =>
  eq("context enrichment fills unsupported fields safely", context?.climate, "Not enough reliable information collected.");
  eq("context enrichment preserves evidence links", context?.sources[0]?.url, "https://example.org");
  check("context enrichment rejects arrays", normalizeContextPayload([], []) === null);
+ check("all-placeholder context remains eligible for retry", !hasMeaningfulContext({ institution: UNKNOWN, place: UNKNOWN }));
+ check("one supported context field is meaningful", hasMeaningfulContext({ institution: "Test institute", place: UNKNOWN }));
  eq("interaction output_text is parsed", contextPayloadFromInteraction({ output_text: '{"place":"Test city"}' }), { place: "Test city" });
  eq("direct interaction JSON is preserved", contextPayloadFromInteraction({ place: "Test city" }), { place: "Test city" });
 }
