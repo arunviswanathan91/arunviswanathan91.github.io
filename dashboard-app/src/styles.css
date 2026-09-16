@@ -599,10 +599,22 @@ tbody tr:last-child td{border-bottom:0}
 .swipe-progress{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);color:var(--text-3);font-size:var(--f-xs)}
 kbd{padding:1px 5px;border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:5px;background:var(--surface-2);font:inherit;font-size:var(--f-2xs)}
 .swipe-card{
+ position:relative;overflow:hidden;touch-action:pan-y;
  display:grid;gap:var(--s-4);padding:clamp(18px,3vw,32px);border:1px solid var(--border-strong);
  border-radius:calc(var(--r-3) + 4px);background:var(--surface);box-shadow:var(--shadow-3);
  transform-origin:center;transition:transform .15s ease,opacity .15s ease;
 }
+.swipe-card.is-dragging{transition:none;user-select:none;cursor:grabbing}
+.swipe-drag-cue{
+ position:absolute;z-index:2;top:18px;display:flex;align-items:center;gap:6px;padding:7px 10px;
+ border:1px solid currentColor;border-radius:var(--r-2);background:var(--surface);font-size:var(--f-xs);
+ font-weight:800;text-transform:uppercase;letter-spacing:.04em;opacity:0;transform:scale(.9);transition:opacity .1s,transform .1s;
+ pointer-events:none;
+}
+.swipe-drag-cue.visible{opacity:1;transform:scale(1)}
+.swipe-drag-cue svg{width:16px;height:16px}.swipe-drag-cue.dismiss{right:18px;color:var(--tone-red-fg)}
+.swipe-drag-cue.shortlist{left:18px;color:var(--tone-green-fg)}
+.mobile-swipe-help{display:none}
 .swipe-card.swipe-left{transform:translateX(-40px) rotate(-2deg);opacity:0}
 .swipe-card.swipe-right{transform:translateX(40px) rotate(2deg);opacity:0}
 .swipe-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s-4)}
@@ -1070,6 +1082,7 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
  .trash-expiry,.trash-actions{grid-column:2}
  .trash-actions{justify-content:flex-start;flex-wrap:wrap}
  .swipe-progress,.swipe-card-head{align-items:flex-start;flex-direction:column}
+ .desktop-swipe-help{display:none}.mobile-swipe-help{display:block}
  .swipe-links{justify-content:flex-start}
  .swipe-card-body{grid-template-columns:1fr}
  .opportunity-context-grid{grid-template-columns:1fr}
@@ -1086,4 +1099,5 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
  .people-grid{grid-template-columns:1fr}
  .swipe-controls{grid-template-columns:1fr}
  .swipe-controls>.secondary{grid-column:auto}
+ .swipe-card{padding:18px 16px}
 }

@@ -50,7 +50,8 @@ npm run check           # 132 offline logic checks — no network, no database
 | `FIRECRAWL_API_KEY` | no — crawl targets work without it | Tier-3 fallback for JS-rendered career pages; free at [firecrawl.dev](https://www.firecrawl.dev), capped locally by `FIRECRAWL_MAX_PER_RUN` |
 | `GEMINI_API_KEY` | no | enables evidence-grounded institution and local-place context for swipe review |
 | `GEMINI_MODEL` | no | model override; defaults to `gemini-3.8-flash` |
-| `GROQ_API_KEY` | no | reserved for a future fallback |
+| `GROQ_API_KEY` | no | automatic structured-output fallback when Gemini is unavailable or rate-limited |
+| `GROQ_MODEL` | no | Groq model override; defaults to `openai/gpt-oss-20b` |
 
 Enrichment is stored under `opportunities.score_breakdown.context`, alongside the existing scoring
 components. It therefore works with the current Supabase schema and needs no migration. Source URLs
@@ -58,7 +59,8 @@ are stored with the summary so the dashboard can show the evidence used for each
 
 To enrich opportunities that were created before context enrichment was enabled, run the
 **Nightly opportunity discovery** workflow manually with **mode = backfill** and a batch size such
-as 25. Backfill skips every crawler, uses a separate evidence/AI request budget, and prints
+as 25. Backfill skips every crawler, uses a separate evidence/AI request budget, switches to Groq
+when Gemini reaches its quota, rejects all-placeholder results so they remain eligible, and prints
 attempted, enriched, failed, and pending totals. Repeat it until pending reaches zero. Enable
 `refreshExisting` only when existing context should be regenerated.
 

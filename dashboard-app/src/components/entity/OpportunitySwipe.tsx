@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
  ArrowLeft, ArrowRight, Building2, BusFront, CalendarDays, ExternalLink,
  MapPin, RotateCcw, ShieldCheck, Sparkles, ThermometerSun, ThumbsDown, ThumbsUp, Users,
@@ -16,12 +16,15 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
  const review=useMemo(()=>rows.filter(row=>row.status==="New"),[rows]);
  const [history,setHistory]=useState<Row[]>([]);
  const [motion,setMotion]=useState<""|"left"|"right">("");
+ const [dragX,setDragX]=useState(0);
+ const dragValue=useRef(0);
  const busy=useRef(false);
+ const pointer=useRef<{id:number;x:number;y:number;horizontal:boolean}|null>(null);
  const current=review[0]??null;
 
  const decide=async(direction:"left"|"right")=>{
   if(!current||busy.current)return;
-  busy.current=true;setMotion(direction);
+  busy.current=true;dragValue.current=0;setDragX(0);setMotion(direction);
   await new Promise(resolve=>window.setTimeout(resolve,150));
   const saved=await onDecision(current,direction==="right"?"Shortlisted":"Dismissed");
   if(saved)setHistory(items=>[...items,current]);
@@ -32,6 +35,33 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
   busy.current=true;
   if(await onUndo(previous))setHistory(items=>items.slice(0,-1));
   busy.current=false;
+ };
+
+ const pointerDown=(event:ReactPointerEvent<HTMLElement>)=>{
+  if(busy.current||event.button!==0||(event.target as HTMLElement).closest("a,button,input,select,textarea"))return;
+  pointer.current={id:event.pointerId,x:event.clientX,y:event.clientY,horizontal:false};
+ };
+ const pointerMove=(event:ReactPointerEvent<HTMLElement>)=>{
+  const start=pointer.current;
+  if(!start||start.id!==event.pointerId||busy.current)return;
+  const dx=event.clientX-start.x,dy=event.clientY-start.y;
+  if(!start.horizontal){
+   if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){pointer.current=null;dragValue.current=0;setDragX(0);return}
+   if(Math.abs(dx)<8||Math.abs(dx)<=Math.abs(dy))return;
+   start.horizontal=true;
+   event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  event.preventDefault();
+  const next=Math.max(-180,Math.min(180,dx));
+  dragValue.current=next;setDragX(next);
+ };
+ const pointerEnd=(event:ReactPointerEvent<HTMLElement>)=>{
+  const start=pointer.current;
+  pointer.current=null;
+  if(!start||start.id!==event.pointerId)return;
+  const direction=event.type==="pointerup"?(dragValue.current<=-72?"left":dragValue.current>=72?"right":null):null;
+  dragValue.current=0;setDragX(0);
+  if(direction)void decide(direction);
  };
 
  useEffect(()=>{
@@ -58,8 +88,13 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
  const sources=(context.sources??[]).filter(source=>safeUrl(source.url));
  return <section className="swipe-review" aria-label="Opportunity swipe review">
   <div className="swipe-progress"><span><strong>{review.length}</strong> New opportunities remaining</span>
-   <span>Keys: <kbd>←</kbd> dismiss · <kbd>→</kbd> shortlist · <kbd>B</kbd> back</span></div>
-  <article className={"swipe-card"+(motion?" swipe-"+motion:"")}>
+   <span className="desktop-swipe-help">Keys: <kbd>←</kbd> dismiss · <kbd>→</kbd> shortlist · <kbd>B</kbd> back</span>
+   <span className="mobile-swipe-help">Swipe left to dismiss · right to shortlist</span></div>
+  <article className={"swipe-card"+(motion?" swipe-"+motion:"")+(dragX?" is-dragging":"")}
+   style={dragX?{transform:`translateX(${dragX}px) rotate(${dragX/75}deg)`,opacity:1-Math.min(Math.abs(dragX)/500,.22)}:undefined}
+   onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}>
+   <div className={"swipe-drag-cue dismiss"+(dragX<-24?" visible":"")}><ThumbsDown/>Dismiss</div>
+   <div className={"swipe-drag-cue shortlist"+(dragX>24?" visible":"")}><ThumbsUp/>Shortlist</div>
    <header className="swipe-card-head">
     <div><span className={"badge tone-"+(score>=70?"green":score>=50?"violet":score>=30?"amber":"slate")}>{fitFor(score)} · {score}</span>
      <h2>{current.role}</h2>

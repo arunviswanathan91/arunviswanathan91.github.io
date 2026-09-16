@@ -17,6 +17,8 @@ export interface OpportunityContext {
  sources?:{label?:string;url?:string}[];
  generated_at?:string;
 }
+const UNKNOWN_CONTEXT="Not enough reliable information collected.";
+const contextFields=["institution","place","population","climate","transport","living","inclusion"] as const;
 
 export const safeUrl=(value:unknown)=>{
  try{const url=new URL(String(value??""));return url.protocol==="http:"||url.protocol==="https:"?url.toString():null}
@@ -25,7 +27,10 @@ export const safeUrl=(value:unknown)=>{
 
 export const contextFor=(row:Row):OpportunityContext=>{
  const score=row.score_breakdown;
- return score&&typeof score==="object"&&score.context&&typeof score.context==="object"?score.context as OpportunityContext:{};
+ if(!score||typeof score!=="object"||!score.context||typeof score.context!=="object")return {};
+ const context={...(score.context as OpportunityContext)};
+ for(const field of contextFields)if(context[field]?.trim()===UNKNOWN_CONTEXT)delete context[field];
+ return context;
 };
 
 export function OpportunityContextDetails({row}:{row:Row}){
