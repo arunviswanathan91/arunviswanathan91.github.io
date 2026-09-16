@@ -189,19 +189,20 @@ export class Db {
   return out;
  }
 
- async loadContextCandidates(userId: string, limit: number): Promise<ContextCandidate[]> {
-  const fetchLimit = Math.max(limit * 4, 20);
+ async loadContextCandidates(userId: string, limit: number, refreshExisting = false): Promise<{
+  candidates: ContextCandidate[]; total: number;
+ }> {
   const { data, error } = await this.client.from("opportunities")
    .select("id,role,organization,organization_url,location,city,country,url,summary,description_excerpt,score_breakdown,enrichment")
    .eq("user_id", userId).in("status", ["New", "Shortlisted"])
-   .order("match_score", { ascending: false }).limit(fetchLimit);
+   .order("match_score", { ascending: false }).limit(2000);
   if (error) throw new Error("loadContextCandidates: " + error.message);
-  return ((data ?? []) as ContextCandidate[])
-   .filter(row => {
+  const eligible = ((data ?? []) as ContextCandidate[])
+   .filter(row => refreshExisting || (() => {
     const score = row.score_breakdown;
     return row.enrichment !== "context_ready" && !(score && typeof score === "object" && score.context);
-   })
-   .slice(0, limit);
+   })());
+  return { candidates: eligible.slice(0, limit), total: eligible.length };
  }
 
  async saveOpportunityContext(candidate: ContextCandidate, context: Record<string, unknown>) {

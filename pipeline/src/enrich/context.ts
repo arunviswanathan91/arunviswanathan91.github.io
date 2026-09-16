@@ -19,10 +19,6 @@ interface Evidence { label: string; url: string; text: string }
 interface WikiResponse {
  query?: { pages?: Record<string, { title?: string; extract?: string; fullurl?: string }> };
 }
-interface GeminiResponse {
- candidates?: { content?: { parts?: { text?: string }[] } }[];
-}
-
 const UNKNOWN = "Not enough reliable information collected.";
 const FIELDS = ["institution", "place", "population", "climate", "transport", "living", "inclusion"] as const;
 
@@ -48,6 +44,19 @@ export function normalizeContextPayload(value: unknown, evidence: Evidence[]): O
  };
  for (const field of FIELDS) context[field] = compact(source[field]);
  return context;
+}
+
+/** Accept the current Interactions REST response plus SDK-shaped wrappers so a
+ * future response-envelope change fails with a useful message, not silence. */
+export function contextPayloadFromInteraction(value: unknown): unknown {
+ if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+ const response = value as Record<string, unknown>;
+ const nested = response.interaction && typeof response.interaction === "object"
+  ? response.interaction as Record<string, unknown> : null;
+ const output = response.output_text ?? response.outputText ?? nested?.output_text ?? nested?.outputText;
+ if (typeof output !== "string") return value;
+ try { return JSON.parse(output); }
+ catch { throw new Error("Gemini returned invalid JSON in output_text"); }
 }
 
 async function wikipediaEvidence(http: Http, query: string, label: string): Promise<Evidence | null> {
@@ -113,17 +122,16 @@ export async function enrichOpportunityContext(env: Env, http: Http, candidate: 
   required: [...FIELDS],
   additionalProperties: false,
  };
- const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.geminiModel)}:generateContent?key=${encodeURIComponent(env.geminiApiKey)}`;
- const response = await http.postJson<GeminiResponse>(endpoint, {
-  contents: [{ role: "user", parts: [{ text: promptFor(candidate, evidence) }] }],
-  generationConfig: {
-   temperature: 0.2,
-   responseMimeType: "application/json",
-   responseJsonSchema: schema,
+ const response = await http.postJson<Record<string, unknown>>(
+  "https://generativelanguage.googleapis.com/v1beta/interactions",
+  {
+   model: env.geminiModel,
+   input: promptFor(candidate, evidence),
+   response_format: { type: "text", mime_type: "application/json", schema },
   },
- });
- const text = response?.candidates?.[0]?.content?.parts?.map(part => part.text ?? "").join("").trim();
- if (!text) return null;
- try { return normalizeContextPayload(JSON.parse(text), evidence); }
- catch { return null; }
+  { "x-goog-api-key": env.geminiApiKey },
+ );
+ const context = normalizeContextPayload(contextPayloadFromInteraction(response), evidence);
+ if (!context) throw new Error("Gemini returned an unexpected structured-output shape");
+ return context;
 }

@@ -3,7 +3,7 @@ import { formatDigest, sendTelegram } from "./sinks/telegram.js";
 
 const DASHBOARD = "https://arunviswanathan91.github.io/dashboard/#/opportunities";
 
-function parseArgs(argv: string[]): RunOptions & { help: boolean } {
+export function parseArgs(argv: string[]): RunOptions & { help: boolean } {
  const out: RunOptions & { help: boolean } = { help: false };
  for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -13,6 +13,7 @@ function parseArgs(argv: string[]): RunOptions & { help: boolean } {
    case "--dry-run": out.dryRun = true; break;
    case "--quiet": out.quiet = true; break;
    case "--trigger": out.trigger = next() as RunOptions["trigger"]; break;
+   case "--mode": out.mode = next() as RunOptions["mode"]; break;
    case "--query": { const v = next(); out.query = v && v !== "null" ? v : null; break; }
    case "--user": out.userId = next(); break;
    case "--run-id": { const v = next(); out.runId = v && v !== "null" ? v : null; break; }
@@ -20,6 +21,8 @@ function parseArgs(argv: string[]): RunOptions & { help: boolean } {
    case "--chat-id": { const v = next(); const n = Number(v); out.chatId = isFinite(n) && n !== 0 ? n : null; break; }
    case "--max-llm": out.caps = { ...out.caps, maxLlmCalls: Number(next()) }; break;
    case "--max-http": out.caps = { ...out.caps, maxHttpRequests: Number(next()) }; break;
+   case "--context-batch": out.contextBatchSize = Number(next()); break;
+   case "--refresh-context": out.refreshContext = true; break;
    default: break;                                     // ignore the leading "run" verb
   }
  }
@@ -33,6 +36,7 @@ Discovery pipeline
 
   --dry-run           parse and score, write nothing
   --trigger <t>       schedule | telegram | manual   (default: schedule)
+  --mode <m>          discover | backfill            (default: discover)
   --query <text>      extra search terms for this run
   --chat-id <id>      Telegram chat to send the digest to
   --user <uuid>       override DISCOVERY_USER_ID
@@ -40,6 +44,8 @@ Discovery pipeline
   --claim-token <t>   atomically claim that run before executing
   --max-llm <n>       cap LLM calls
   --max-http <n>      cap HTTP requests
+  --context-batch <n> number of opportunities to enrich (1..100)
+  --refresh-context   re-enrich rows that already have context
   --quiet             suppress debug lines
 `;
 

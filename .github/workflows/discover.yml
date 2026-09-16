@@ -5,9 +5,26 @@ on:
     - cron: '30 20 * * *'   # 02:00 IST
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'Run discovery or enrich existing opportunities'
+        required: true
+        type: choice
+        default: discovery
+        options:
+          - discovery
+          - backfill
       query:
-        description: 'Extra search terms for this run'
+        description: 'Extra search terms for a discovery run'
         required: false
+      batchSize:
+        description: 'Opportunities to enrich in backfill mode (1-100)'
+        required: false
+        default: '25'
+      refreshExisting:
+        description: 'Regenerate context that already exists'
+        required: false
+        type: boolean
+        default: false
       maxLlmCalls:
         description: 'LLM call cap for this run'
         required: false
@@ -43,7 +60,7 @@ jobs:
         working-directory: pipeline
         run: npm run build
 
-      - name: Discover
+      - name: Discover or backfill
         working-directory: pipeline
         env:
           SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
@@ -58,15 +75,29 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           TRIGGER="schedule"
+          MODE="discovery"
+          BATCH="25"
+          REFRESH="false"
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then TRIGGER="telegram"; fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TRIGGER="manual"; fi
-          node dist/src/cli.js run \
-            --trigger "$TRIGGER" \
-            --query "${{ github.event.inputs.query || github.event.client_payload.query || '' }}" \
-            --chat-id "${{ github.event.client_payload.chat_id || '' }}" \
-            --run-id "${{ github.event.client_payload.run_id || '' }}" \
-            --claim-token "${{ github.event.client_payload.claim_token || '' }}" \
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TRIGGER="manual"
+            MODE="${{ github.event.inputs.mode || 'discovery' }}"
+            BATCH="${{ github.event.inputs.batchSize || '25' }}"
+            REFRESH="${{ github.event.inputs.refreshExisting || 'false' }}"
+          fi
+          ARGS=(
+            run
+            --trigger "$TRIGGER"
+            --mode "$MODE"
+            --query "${{ github.event.inputs.query || github.event.client_payload.query || '' }}"
+            --chat-id "${{ github.event.client_payload.chat_id || '' }}"
+            --run-id "${{ github.event.client_payload.run_id || '' }}"
+            --claim-token "${{ github.event.client_payload.claim_token || '' }}"
             --max-llm "${{ github.event.inputs.maxLlmCalls || '40' }}"
+            --context-batch "$BATCH"
+          )
+          if [ "$REFRESH" = "true" ]; then ARGS+=(--refresh-context); fi
+          node dist/src/cli.js "${ARGS[@]}"
 
       - name: Keep the schedule alive
         if: github.event_name == 'schedule'

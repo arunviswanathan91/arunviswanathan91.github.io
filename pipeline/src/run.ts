@@ -16,7 +16,7 @@ import { ensureDefaultSources } from "./sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, termsForRun } from "./search/query.js";
 import { enrichOpportunityContext } from "./enrich/context.js";
 import type {
- NormalizedOpportunity, OpportunitySummary, RunCaps, RunResult, SearchProfile, SourceOutcome,
+ EnrichmentStats, NormalizedOpportunity, OpportunitySummary, RunCaps, RunResult, SearchProfile, SourceOutcome,
 } from "./types.js";
 
 export interface RunOptions {
@@ -27,16 +27,29 @@ export interface RunOptions {
   *  duplicating one that's already in flight or done. */
  claimToken?: string | null;
  trigger?: "schedule" | "telegram" | "manual";
+ mode?: "discover" | "backfill";
  query?: string | null;
  chatId?: number | null;
  caps?: Partial<RunCaps>;
  dryRun?: boolean;
  quiet?: boolean;
+ contextBatchSize?: number;
+ refreshContext?: boolean;
 }
 
 const SOURCE_TIMEOUT_MS = { api: 90_000, feed: 90_000, crawl: 180_000 } as const;
 type AcceptedOpportunity = { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity> };
 interface SourceExecution { outcome: SourceOutcome; accepted: AcceptedOpportunity[] }
+
+const emptyEnrichment = (requested = 0): EnrichmentStats => ({
+ requested, candidates: 0, attempted: 0, succeeded: 0, failed: 0,
+ skipped: 0, pending: 0, requestsUsed: 0,
+});
+
+const boundedBatchSize = (value: number | undefined, fallback: number) => {
+ const parsed = Number(value);
+ return Number.isFinite(parsed) ? Math.max(1, Math.min(100, Math.floor(parsed))) : fallback;
+};
 
 /** The single orchestration path. cli.ts and server.ts only translate into this. */
 export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
@@ -44,10 +57,11 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const env = readEnv();
  const db = new Db(env);
  const trigger = opts.trigger ?? "schedule";
+ const backfill = opts.mode === "backfill";
  const queryText = opts.query?.trim() || null;
- const freshSearch = isFreshSearch(trigger);
+ const freshSearch = !backfill && isFreshSearch(trigger);
  const caps: RunCaps = {
-  ...(trigger === "schedule" ? SCHEDULE_CAPS : INTERACTIVE_CAPS),
+  ...(trigger === "schedule" || backfill ? SCHEDULE_CAPS : INTERACTIVE_CAPS),
   ...opts.caps,
  };
  const startedAt = Date.now();
@@ -59,7 +73,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  // Normal runs self-heal databases seeded by an older release. Existing rows
  // are never overwritten, so user-disabled sources and cursors are preserved.
- if (!opts.dryRun) {
+ if (!opts.dryRun && !backfill) {
   const registered = await ensureDefaultSources(db, userId);
   if (registered.length) log.info("registered new discovery sources", { sources: registered });
  }
@@ -76,10 +90,10 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   if (!claimed) {
    log.info("run already claimed or expired, skipping", { runId });
    return {
-    runId, status: "done", mode: freshSearch ? "fresh" : "incremental", query: queryText,
+    runId, status: "done", mode: backfill ? "backfill" : freshSearch ? "fresh" : "incremental", query: queryText,
     fetched: 0, evaluated: 0, filtered: 0, matched: 0, deduped: 0,
     created: 0, changed: 0, persistenceFailures: 0, filterReasons: {},
-    bySource: {}, top: [], degradations: [],
+    bySource: {}, top: [], degradations: [], enrichment: emptyEnrichment(),
    };
   }
  } else if (runId && !opts.dryRun) {
@@ -88,8 +102,11 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    .eq("id", runId).eq("status", "queued");
  }
 
- const sources = await db.loadSources(userId);
- log.info("run starting", { userId, trigger, freshSearch, query: queryText, sources: sources.length, dryRun: !!opts.dryRun });
+ const sources = backfill ? [] : await db.loadSources(userId);
+ log.info("run starting", {
+  userId, trigger, mode: backfill ? "backfill" : freshSearch ? "fresh" : "incremental",
+  query: queryText, sources: sources.length, dryRun: !!opts.dryRun,
+ });
 
  const http = new Http(DEFAULT_HTTP, caps.maxHttpRequests);
  // One shared budget for the whole run, so N crawl sources each hitting a
@@ -124,7 +141,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  // Dedup and persist. Candidates are loaded once; matches are resolved in memory
  // because at a few thousand rows that is faster than a query per item.
- const candidates: Candidate[] = opts.dryRun ? [] : await db.loadCandidates(userId);
+ const candidates: Candidate[] = opts.dryRun || backfill ? [] : await db.loadCandidates(userId);
  let created = 0, changed = 0, deduped = 0, persistenceFailures = 0;
  const summaries: OpportunitySummary[] = [];
  const summaryIds = new Set<string>();
@@ -180,52 +197,74 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  if (persistenceFailures) degradations.push(`${persistenceFailures} database insert(s) failed`);
 
- // Enrich a small, bounded set of the best undecided listings. The result is
- // stored inside the existing score_breakdown JSON, so older databases require
- // no migration and existing scoring fields remain intact.
+ // Context enrichment has a separate request budget. Crawlers can use their
+ // entire allowance without silently preventing Gemini from running afterward.
+ const defaultContextLimit = backfill ? 25 : trigger === "schedule" ? 8 : 3;
+ const requestedContext = boundedBatchSize(opts.contextBatchSize, defaultContextLimit);
+ const contextLimit = Math.min(caps.maxLlmCalls, requestedContext);
+ const enrichment = emptyEnrichment(contextLimit);
  if (!opts.dryRun && env.geminiApiKey && Date.now() < deadlineAt) {
-  const contextLimit = Math.min(caps.maxLlmCalls, trigger === "schedule" ? 8 : 3);
-  const contextCandidates = await db.loadContextCandidates(userId, contextLimit);
-  let contextReady = 0;
-  for (const candidate of contextCandidates) {
-   if (Date.now() > deadlineAt || http.budgetRemaining < 1) break;
+  const loaded = await db.loadContextCandidates(userId, contextLimit, !!opts.refreshContext);
+  enrichment.candidates = loaded.candidates.length;
+  enrichment.pending = loaded.total;
+  const contextHttp = new Http(
+   { ...DEFAULT_HTTP, timeoutMs: 60_000, maxRetries: 2 },
+   Math.max(8, contextLimit * 4),
+  );
+  for (const candidate of loaded.candidates) {
+   if (Date.now() > deadlineAt) {
+    enrichment.skipped = loaded.candidates.length - enrichment.attempted;
+    degradations.push("context enrichment runtime cap");
+    break;
+   }
+   enrichment.attempted++;
    try {
-    const context = await enrichOpportunityContext(env, http, candidate);
-    if (!context) continue;
+    const context = await enrichOpportunityContext(env, contextHttp, candidate);
     await db.saveOpportunityContext(candidate, context as unknown as Record<string, unknown>);
-    contextReady++;
+    enrichment.succeeded++;
    } catch (error) {
+    enrichment.failed++;
     log.warn("opportunity context enrichment failed", {
      id: candidate.id,
      error: error instanceof Error ? error.message : String(error),
     });
    }
   }
-  if (contextReady) log.info("opportunity context enriched", { count: contextReady });
+  enrichment.pending = Math.max(0, loaded.total - enrichment.succeeded);
+  enrichment.requestsUsed = contextHttp.requestsUsed;
+ } else if (!opts.dryRun && !env.geminiApiKey) {
+  degradations.push("context enrichment unavailable (GEMINI_API_KEY missing)");
+  log.warn("opportunity context enrichment skipped", { reason: "GEMINI_API_KEY missing" });
  }
+ if (!opts.dryRun) log.info("opportunity context enrichment summary", { ...enrichment });
 
- if (!opts.dryRun) await db.prune(userId);
+ if (enrichment.failed) degradations.push(`${enrichment.failed} context enrichment failure(s)`);
+
+ if (!opts.dryRun && !backfill) await db.prune(userId);
 
  const anyOk = Object.values(bySource).some(s => s.status === "ok" || s.status === "partial");
- const status: RunResult["status"] = anyOk ? (degradations.length ? "partial" : "done") : (sources.length ? "failed" : "done");
+ const status: RunResult["status"] = backfill
+  ? (!env.geminiApiKey || (enrichment.attempted > 0 && enrichment.succeeded === 0 && enrichment.failed > 0)
+   ? "failed" : enrichment.failed || enrichment.skipped ? "partial" : "done")
+  : anyOk ? (degradations.length ? "partial" : "done") : (sources.length ? "failed" : "done");
 
  const result: RunResult = {
-  runId, status, mode: freshSearch ? "fresh" : "incremental", query: queryText,
+  runId, status, mode: backfill ? "backfill" : freshSearch ? "fresh" : "incremental", query: queryText,
   fetched, evaluated, filtered, matched: summaries.length, deduped, created, changed,
   persistenceFailures, filterReasons,
   bySource,
   top: summaries.sort((a, b) => b.score - a.score).slice(0, 5),
-  degradations,
+  degradations, enrichment,
  };
 
  if (!opts.dryRun) await db.finishRun(runId, status, {
   mode: result.mode, query: queryText, fetched, evaluated, filtered,
   matched: result.matched, deduped, created, changed, persistenceFailures,
-  filterReasons, durationMs: Date.now() - startedAt, degradations,
+  filterReasons, durationMs: Date.now() - startedAt, degradations, enrichment,
  });
  log.info("run finished", {
   status, mode: result.mode, fetched, evaluated, filtered,
-  matched: result.matched, deduped, created, durationMs: Date.now() - startedAt,
+  matched: result.matched, deduped, created, enrichment, durationMs: Date.now() - startedAt,
  });
  return result;
 }

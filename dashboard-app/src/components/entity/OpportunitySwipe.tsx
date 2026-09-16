@@ -1,31 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
  ArrowLeft, ArrowRight, Building2, BusFront, CalendarDays, ExternalLink,
  MapPin, RotateCcw, ShieldCheck, Sparkles, ThermometerSun, ThumbsDown, ThumbsUp, Users,
 } from "lucide-react";
 import { formatDate } from "../../lib/format";
 import type { Row } from "../../entities/types";
-
-interface OpportunityContext {
- institution?:string;
- place?:string;
- population?:string;
- climate?:string;
- transport?:string;
- living?:string;
- inclusion?:string;
- sources?:{label?:string;url?:string}[];
- generated_at?:string;
-}
-
-const safeUrl=(value:unknown)=>{
- try{const url=new URL(String(value??""));return url.protocol==="http:"||url.protocol==="https:"?url.toString():null}
- catch{return null}
-};
-const contextFor=(row:Row):OpportunityContext=>{
- const score=row.score_breakdown;
- return score&&typeof score==="object"&&score.context&&typeof score.context==="object"?score.context as OpportunityContext:{};
-};
+import { ContextFact, contextFor, safeUrl } from "./OpportunityContext";
 const fitFor=(score:number)=>score>=70?"Strong":score>=50?"Good":score>=30?"Maybe":"Weak";
 
 export function OpportunitySwipe({rows,onDecision,onUndo}:{
@@ -125,9 +105,4 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
    <button className="swipe-choice swipe-like" onClick={()=>void decide("right")}><ThumbsUp/><span><small>Check later</small>Shortlist</span><ArrowRight/></button>
   </div>
  </section>;
-}
-
-function ContextFact({icon,label,value}:{icon:ReactNode;label:string;value?:string}){
- if(!value)return null;
- return <div className="context-fact"><span>{icon}{label}</span><p>{value}</p></div>;
 }

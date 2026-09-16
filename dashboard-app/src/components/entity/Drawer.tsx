@@ -10,6 +10,7 @@ import { GmailLinkPicker } from "./GmailLinkPicker";
 import { useEntityCtx } from "./ctx";
 import { PublicationLifecycle } from "../publications/PublicationLifecycle";
 import { PublicationWorkflow } from "../publications/PublicationWorkflow";
+import { OpportunityContextDetails } from "./OpportunityContext";
 import type { EntityDef, FieldDef, Row } from "../../entities/types";
 import type { Person } from "../../lib/store";
 
@@ -70,6 +71,7 @@ export function Drawer({def,row,onClose,canEdit=true,canDelete=true,hiddenFields
      </div>
     </div>)}
     {def.key==="publications"&&<PublicationWorkflow publicationId={row.id} canEdit={canEdit} canDelete={canDelete}/>} 
+    {def.key==="opportunities"&&<OpportunityContextDetails row={row}/>} 
    </div>
   </Modal>
   {gmailFieldKey&&(()=>{

@@ -131,7 +131,7 @@ export interface OpportunitySummary {
 export interface RunResult {
  runId: string | null;
  status: "done" | "partial" | "failed";
- mode: "incremental" | "fresh";
+ mode: "incremental" | "fresh" | "backfill";
  query: string | null;
  fetched: number;
  evaluated: number;
@@ -145,4 +145,16 @@ export interface RunResult {
  bySource: Record<string, SourceOutcome>;
  top: OpportunitySummary[];
  degradations: string[];
+ enrichment: EnrichmentStats;
+}
+
+export interface EnrichmentStats {
+ requested: number;
+ candidates: number;
+ attempted: number;
+ succeeded: number;
+ failed: number;
+ skipped: number;
+ pending: number;
+ requestsUsed: number;
 }

@@ -49,12 +49,18 @@ npm run check           # 132 offline logic checks — no network, no database
 | `TELEGRAM_BOT_TOKEN` | to push a digest | same bot token the dashboard's webhook uses |
 | `FIRECRAWL_API_KEY` | no — crawl targets work without it | Tier-3 fallback for JS-rendered career pages; free at [firecrawl.dev](https://www.firecrawl.dev), capped locally by `FIRECRAWL_MAX_PER_RUN` |
 | `GEMINI_API_KEY` | no | enables evidence-grounded institution and local-place context for swipe review |
-| `GEMINI_MODEL` | no | model override; defaults to `gemini-2.5-flash` |
+| `GEMINI_MODEL` | no | model override; defaults to `gemini-3.8-flash` |
 | `GROQ_API_KEY` | no | reserved for a future fallback |
 
 Enrichment is stored under `opportunities.score_breakdown.context`, alongside the existing scoring
 components. It therefore works with the current Supabase schema and needs no migration. Source URLs
 are stored with the summary so the dashboard can show the evidence used for each card.
+
+To enrich opportunities that were created before context enrichment was enabled, run the
+**Nightly opportunity discovery** workflow manually with **mode = backfill** and a batch size such
+as 25. Backfill skips every crawler, uses a separate evidence/AI request budget, and prints
+attempted, enriched, failed, and pending totals. Repeat it until pending reaches zero. Enable
+`refreshExisting` only when existing context should be regenerated.
 
 ### One-time setup: register sources and the search profile
 
@@ -176,7 +182,7 @@ works regardless.
 
 ## Testing
 
-`npm run check` runs 147 checks under plain Node — no network, no database — covering URL
+`npm run check` runs 164 checks under plain Node — no network, no database — covering URL
 canonicalization, ATS identity extraction, JSON-LD parsing, salary extraction, the dedup cascade, and
 scoring. The simhash duplicate threshold (`SIMHASH_DUPLICATE_THRESHOLD` in `src/dedupe/cascade.ts`)
 was calibrated empirically against realistic description lengths rather than taken from simhash

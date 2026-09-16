@@ -18,7 +18,7 @@ import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/eu
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, termsForRun } from "../src/search/query.js";
-import { normalizeContextPayload } from "../src/enrich/context.js";
+import { contextPayloadFromInteraction, normalizeContextPayload } from "../src/enrich/context.js";
 
 type Check = { name: string; ok: boolean; detail?: string };
 const out: Check[] = [];
@@ -34,6 +34,8 @@ const eq = (name: string, a: unknown, b: unknown) =>
  eq("context enrichment fills unsupported fields safely", context?.climate, "Not enough reliable information collected.");
  eq("context enrichment preserves evidence links", context?.sources[0]?.url, "https://example.org");
  check("context enrichment rejects arrays", normalizeContextPayload([], []) === null);
+ eq("interaction output_text is parsed", contextPayloadFromInteraction({ output_text: '{"place":"Test city"}' }), { place: "Test city" });
+ eq("direct interaction JSON is preserved", contextPayloadFromInteraction({ place: "Test city" }), { place: "Test city" });
 }
 
 // ---- URL canonicalization ----
@@ -404,11 +406,12 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
 
 // ---- telegram digest formatting ----
 {
+ const noEnrichment = { requested: 0, candidates: 0, attempted: 0, succeeded: 0, failed: 0, skipped: 0, pending: 0, requestsUsed: 0 };
  const empty = formatDigest({
   runId: "r1", status: "done", mode: "fresh", query: "cancer postdoc",
   fetched: 0, evaluated: 0, filtered: 0, matched: 0, deduped: 0,
   created: 0, changed: 0, persistenceFailures: 0, filterReasons: {},
-  bySource: {}, top: [], degradations: [],
+  bySource: {}, top: [], degradations: [], enrichment: noEnrichment,
  }, "https://example.com");
  check("empty digest is informative, not blank", empty.length > 10);
  check("fresh empty digest does not claim nothing new was published", !empty.includes("Nothing new was published"));
@@ -417,7 +420,7 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
   fetched: 25, evaluated: 25, filtered: 20, matched: 0, deduped: 5,
   created: 0, changed: 0, persistenceFailures: 0,
   filterReasons: { deadline_passed: 12, too_senior: 8 },
-  bySource: {}, top: [], degradations: ["feed:jobrxiv (failed)"],
+  bySource: {}, top: [], degradations: ["feed:jobrxiv (failed)"], enrichment: noEnrichment,
  }, "https://example.com");
  check("no-match digest exposes concrete filter counts", filteredOut.includes("deadline already passed 12"));
  check("no-match digest no longer invents a score cutoff", !filteredOut.includes("matched well enough"));
@@ -426,6 +429,7 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
   fetched: 10, evaluated: 10, filtered: 2, matched: 4, deduped: 3, created: 2, changed: 1,
   persistenceFailures: 0, filterReasons: { deadline_passed: 2 },
   bySource: {}, degradations: ["adzuna (monthly quota)"],
+  enrichment: noEnrichment,
   top: [{ id: "1", score: 82, role: "Postdoc", organization: "Test Institute", location: "Stockholm", deadline: null, salaryDisplay: "€45,000/yr", url: "https://x.com/1" }],
  }, "https://example.com/dashboard");
  check("digest includes the score", withResults.includes("82"));
@@ -433,6 +437,14 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("digest includes the dashboard link", withResults.includes("https://example.com/dashboard"));
  check("digest reports degradations", withResults.includes("quota"));
  check("fresh digest reports already-known matches", withResults.includes("already in your workspace"));
+ const backfill = formatDigest({
+  runId: "r3", status: "partial", mode: "backfill", query: null,
+  fetched: 0, evaluated: 0, filtered: 0, matched: 0, deduped: 0,
+  created: 0, changed: 0, persistenceFailures: 0, filterReasons: {}, bySource: {}, top: [],
+  degradations: ["1 context enrichment failure(s)"],
+  enrichment: { ...noEnrichment, requested: 25, candidates: 25, attempted: 25, succeeded: 24, failed: 1, pending: 10 },
+ }, "https://example.com/dashboard");
+ check("backfill digest reports enrichment counts", backfill.includes("enriched 24") && backfill.includes("pending 10"));
 }
 
 // ---- Firecrawl budget (the render call itself needs network, so only the
