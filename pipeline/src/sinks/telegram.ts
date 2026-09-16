@@ -33,6 +33,14 @@ function filterLine(r: RunResult): string | null {
 }
 
 export function formatDigest(r: RunResult, dashboardUrl: string): string {
+ if (r.mode === "backfill") {
+  const e = r.enrichment;
+  return [
+   `AI context backfill ${r.status}.`,
+   `Attempted ${e.attempted} · enriched ${e.succeeded} · failed ${e.failed} · pending ${e.pending}`,
+   dashboardUrl,
+  ].join("\n\n");
+ }
  if (!r.top.length) {
   const subject = r.query ? ` for ${quoted(r.query)}` : "";
   const nothing = r.fetched === 0

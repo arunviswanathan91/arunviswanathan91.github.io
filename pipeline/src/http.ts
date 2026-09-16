@@ -20,6 +20,13 @@ export interface FetchResult {
  notModified: boolean;
 }
 
+export class HttpResponseError extends Error {
+ constructor(public status: number, public responseBody: string) {
+  super(`HTTP ${status}${responseBody ? `: ${responseBody.slice(0, 500)}` : ""}`);
+  this.name = "HttpResponseError";
+ }
+}
+
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /**
@@ -142,8 +149,11 @@ export class Http {
      attempt++;
      continue;
     }
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+    const responseText = await res.text();
+    if (!res.ok) throw new HttpResponseError(res.status, responseText);
+    if (!responseText) throw new Error(`HTTP ${res.status}: empty JSON response`);
+    try { return JSON.parse(responseText) as T; }
+    catch { throw new Error(`HTTP ${res.status}: invalid JSON response`); }
    } catch (e) {
     if (attempt >= this.opts.maxRetries) throw e;
     await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));

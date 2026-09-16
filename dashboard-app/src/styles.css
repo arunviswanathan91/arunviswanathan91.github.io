@@ -627,6 +627,14 @@ kbd{padding:1px 5px;border:1px solid var(--border-strong);border-bottom-width:2p
 .context-pending{grid-template-columns:auto 1fr;align-items:start}
 .context-sources a{display:flex;align-items:center;gap:5px;color:var(--accent);font-size:var(--f-xs);overflow-wrap:anywhere}
 .context-sources svg{width:12px;height:12px;flex:none}
+.opportunity-context-details{display:grid;gap:var(--s-3);padding:var(--s-3);border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface-2)}
+.opportunity-context-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s-3)}
+.opportunity-context-head>div{display:flex;align-items:flex-start;gap:7px}.opportunity-context-head svg{width:16px;height:16px;color:var(--accent);margin-top:2px}
+.opportunity-context-head span{display:grid;gap:2px}.opportunity-context-head strong{font-size:var(--f-sm)}.opportunity-context-head small{color:var(--text-3);font-size:var(--f-2xs)}
+.opportunity-context-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(210px,.75fr);gap:var(--s-3)}
+.opportunity-context-copy{display:grid;gap:var(--s-3)}
+.opportunity-context-copy>div{display:grid;gap:4px}.opportunity-context-copy h3{display:flex;align-items:center;gap:5px;font-size:var(--f-xs)}
+.opportunity-context-copy h3 svg{width:14px;height:14px;color:var(--accent)}.opportunity-context-copy p{color:var(--text-2);font-size:var(--f-xs);line-height:1.55;white-space:pre-line}
 .swipe-controls{display:grid;grid-template-columns:auto minmax(180px,1fr) minmax(180px,1fr);gap:var(--s-3);align-items:stretch}
 .swipe-choice{display:flex;align-items:center;justify-content:center;gap:var(--s-3);padding:12px 16px;border:1px solid;border-radius:var(--r-3);font-weight:700}
 .swipe-choice span{display:grid;text-align:left}.swipe-choice small{font-size:var(--f-2xs);font-weight:500}
@@ -1064,6 +1072,7 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
  .swipe-progress,.swipe-card-head{align-items:flex-start;flex-direction:column}
  .swipe-links{justify-content:flex-start}
  .swipe-card-body{grid-template-columns:1fr}
+ .opportunity-context-grid{grid-template-columns:1fr}
  .swipe-controls{grid-template-columns:1fr 1fr}
  .swipe-controls>.secondary{grid-column:1/-1}
 }

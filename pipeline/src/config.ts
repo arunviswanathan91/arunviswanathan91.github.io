@@ -25,7 +25,7 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   userId: env.DISCOVERY_USER_ID ?? null,
   firecrawlApiKey: env.FIRECRAWL_API_KEY ?? null,
   geminiApiKey: env.GEMINI_API_KEY ?? null,
-  geminiModel: env.GEMINI_MODEL ?? "gemini-2.5-flash",
+  geminiModel: env.GEMINI_MODEL ?? "gemini-3.8-flash",
  };
 }
 
