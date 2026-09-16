@@ -10,6 +10,7 @@ import { BulkBar } from "./BulkBar";
 import { Composer } from "./Composer";
 import { Drawer } from "./Drawer";
 import { OpportunityDiscovery } from "./OpportunityDiscovery";
+import { OpportunitySwipe } from "./OpportunitySwipe";
 import { useEntityCtx } from "./ctx";
 import type { EntityDef, FieldDef, QuickAction, Row } from "../../entities/types";
 
@@ -29,7 +30,7 @@ export function EntityView({def}:{def:EntityDef}){
  }),[def,table.rows,query,ui.scope,tags]);
 
  const groupField=query.groupBy?fieldByKey(def,query.groupBy):null;
- const layout=query.layout==="board"&&groupField?"board":"table";
+ const layout=query.layout==="swipe"&&def.key==="opportunities"?"swipe":query.layout==="board"&&groupField?"board":"table";
  const columns=def.fields.filter(f=>f.table&&!query.hidden.includes(f.key));
  const scopeLabel=ui.scope===null?"Inbox — unassigned items":
   typeof ui.scope==="string"?projects.byId.get(ui.scope)?.name??"Selected project":null;
@@ -96,6 +97,11 @@ export function EntityView({def}:{def:EntityDef}){
      <p>{table.rows.length?`No ${def.plural.toLowerCase()} match these filters.`:`No ${def.plural.toLowerCase()} yet.`}</p>
      <button className="primary" onClick={()=>startNew()}>New {def.singular}</button>
     </div>
+   :layout==="swipe"
+    ?<OpportunitySwipe rows={rows}
+      onDecision={(row,status)=>table.update(row.id,status==="Dismissed"
+       ?{status,dismiss_reason:row.dismiss_reason||"Not relevant"}:{status})}
+      onUndo={row=>table.update(row.id,{status:"New",dismiss_reason:null})}/>
    :layout==="board"&&groupField
     ?<Board def={def} groupField={groupField} rows={rows} ctx={valueCtx}
       selection={selection} selecting={selection.length>0}

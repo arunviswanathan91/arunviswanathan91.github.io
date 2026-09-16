@@ -6,6 +6,8 @@ export interface Env {
  telegramBotToken: string | null;
  userId: string | null;
  firecrawlApiKey: string | null;
+ geminiApiKey: string | null;
+ geminiModel: string;
 }
 
 /** Fails loudly and early rather than half way through a run. */
@@ -22,6 +24,8 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   telegramBotToken: env.TELEGRAM_BOT_TOKEN ?? null,
   userId: env.DISCOVERY_USER_ID ?? null,
   firecrawlApiKey: env.FIRECRAWL_API_KEY ?? null,
+  geminiApiKey: env.GEMINI_API_KEY ?? null,
+  geminiModel: env.GEMINI_MODEL ?? "gemini-2.5-flash",
  };
 }
 

@@ -230,7 +230,7 @@ const opportunityQuickActions:QuickAction[]=[
 export const opportunities:EntityDef={
  key:"opportunities",table:"opportunities",tagEntity:"opportunity",
  select:"id,user_id,role,organization,organization_url,status,dismiss_reason,opportunity_type,"+
-  "location,region,is_remote,posted_at,deadline,last_seen_at,match_score,fit_reason,"+
+  "department,location,city,region,country,is_remote,posted_at,deadline,last_seen_at,match_score,fit_reason,score_breakdown,enrichment,"+
   "salary_display,salary_source,url,apply_url,source_count,sources_summary,summary,"+
   "next_action,notes,job_application_id,saved,created_at,updated_at",
  singular:"opportunity",plural:"Opportunities",kicker:"Career",
@@ -241,7 +241,7 @@ export const opportunities:EntityDef={
  projectField:null,
  groupBy:"status",
  defaultSort:{key:"match_score",dir:"desc"},
- defaultLayout:"board",layouts:["board","table"],
+ defaultLayout:"board",layouts:["board","table","swipe"],
  openWhen:r=>r.status==="New",
  newDefaults:({userId})=>({user_id:userId,status:"New",match_score:0,opportunity_type:"Other"}),
  quickActions:opportunityQuickActions,

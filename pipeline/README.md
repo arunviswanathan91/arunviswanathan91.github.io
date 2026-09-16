@@ -22,9 +22,10 @@ sources (feeds, Adzuna, Jooble, EURAXESS, JSON-LD crawl — optionally Firecrawl
 Nightly runs skip unchanged listings because the raw-item table's unique constraint makes an
 unchanged insert a no-op. Interactive Telegram and workspace searches deliberately work differently:
 they use a fresh source window, preserve the nightly cursor, and rescore returned listings so a new
-query can show a good opportunity that was fetched before. Nothing here calls an LLM in this phase;
-the concept-matching in `src/score/ontology.ts` (hand-curated from the dashboard site's own research
-tags) handles the first ranking pass.
+query can show a good opportunity that was fetched before. The concept-matching in
+`src/score/ontology.ts` (hand-curated from the dashboard site's own research tags) handles the first
+ranking pass. When Gemini is configured, a bounded second phase gathers institution and place
+evidence and adds structured decision context to the highest-ranked undecided listings.
 
 ## Local setup
 
@@ -47,7 +48,13 @@ npm run check           # 132 offline logic checks — no network, no database
 | `JOOBLE_API_KEY` | for the Jooble source | free key at [jooble.org/api/about](https://jooble.org/api/about) |
 | `TELEGRAM_BOT_TOKEN` | to push a digest | same bot token the dashboard's webhook uses |
 | `FIRECRAWL_API_KEY` | no — crawl targets work without it | Tier-3 fallback for JS-rendered career pages; free at [firecrawl.dev](https://www.firecrawl.dev), capped locally by `FIRECRAWL_MAX_PER_RUN` |
-| `GROQ_API_KEY`, `GEMINI_API_KEY` | not used yet | reserved for Phase 3 (LLM fallback extraction) |
+| `GEMINI_API_KEY` | no | enables evidence-grounded institution and local-place context for swipe review |
+| `GEMINI_MODEL` | no | model override; defaults to `gemini-2.5-flash` |
+| `GROQ_API_KEY` | no | reserved for a future fallback |
+
+Enrichment is stored under `opportunities.score_breakdown.context`, alongside the existing scoring
+components. It therefore works with the current Supabase schema and needs no migration. Source URLs
+are stored with the summary so the dashboard can show the evidence used for each card.
 
 ### One-time setup: register sources and the search profile
 
@@ -123,6 +130,7 @@ ADZUNA_APP_ID, ADZUNA_APP_KEY
 JOOBLE_API_KEY
 TELEGRAM_BOT_TOKEN
 FIRECRAWL_API_KEY   # optional
+GEMINI_API_KEY      # optional; enables swipe-card context enrichment
 ```
 
 And as a repository **variable**: `DISCOVERY_USER_ID` (your user id — the same one the dashboard's

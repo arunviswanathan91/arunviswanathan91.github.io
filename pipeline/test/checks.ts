@@ -18,12 +18,23 @@ import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/eu
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, termsForRun } from "../src/search/query.js";
+import { normalizeContextPayload } from "../src/enrich/context.js";
 
 type Check = { name: string; ok: boolean; detail?: string };
 const out: Check[] = [];
 const check = (name: string, ok: boolean, detail?: string) => out.push({ name, ok, detail });
 const eq = (name: string, a: unknown, b: unknown) =>
  check(name, JSON.stringify(a) === JSON.stringify(b), `got ${JSON.stringify(a)} want ${JSON.stringify(b)}`);
+
+{
+ const context = normalizeContextPayload({ institution: " Test institute ", place: "Test city" }, [
+  { label: "Source", url: "https://example.org", text: "Evidence" },
+ ]);
+ eq("context enrichment normalizes strings", context?.institution, "Test institute");
+ eq("context enrichment fills unsupported fields safely", context?.climate, "Not enough reliable information collected.");
+ eq("context enrichment preserves evidence links", context?.sources[0]?.url, "https://example.org");
+ check("context enrichment rejects arrays", normalizeContextPayload([], []) === null);
+}
 
 // ---- URL canonicalization ----
 eq("strips utm params", canonicalizeUrl("https://x.com/job/1?utm_source=fb&utm_campaign=x"), "https://x.com/job/1");

@@ -15,6 +15,21 @@ export interface SourceRow {
  disabled_until: string | null;
 }
 
+export interface ContextCandidate {
+ id: string;
+ role: string;
+ organization: string | null;
+ organization_url: string | null;
+ location: string | null;
+ city: string | null;
+ country: string | null;
+ url: string | null;
+ summary: string | null;
+ description_excerpt: string | null;
+ score_breakdown: Record<string, unknown> | null;
+ enrichment: string | null;
+}
+
 /** Thin wrapper over the service-role client: every query in one place. */
 export class Db {
  readonly client: SupabaseClient;
@@ -172,6 +187,31 @@ export class Db {
    }
   }
   return out;
+ }
+
+ async loadContextCandidates(userId: string, limit: number): Promise<ContextCandidate[]> {
+  const fetchLimit = Math.max(limit * 4, 20);
+  const { data, error } = await this.client.from("opportunities")
+   .select("id,role,organization,organization_url,location,city,country,url,summary,description_excerpt,score_breakdown,enrichment")
+   .eq("user_id", userId).in("status", ["New", "Shortlisted"])
+   .order("match_score", { ascending: false }).limit(fetchLimit);
+  if (error) throw new Error("loadContextCandidates: " + error.message);
+  return ((data ?? []) as ContextCandidate[])
+   .filter(row => {
+    const score = row.score_breakdown;
+    return row.enrichment !== "context_ready" && !(score && typeof score === "object" && score.context);
+   })
+   .slice(0, limit);
+ }
+
+ async saveOpportunityContext(candidate: ContextCandidate, context: Record<string, unknown>) {
+  const score = candidate.score_breakdown && typeof candidate.score_breakdown === "object"
+   ? candidate.score_breakdown : {};
+  const { error } = await this.client.from("opportunities").update({
+   score_breakdown: { ...score, context },
+   enrichment: "context_ready",
+  }).eq("id", candidate.id);
+  if (error) throw new Error("saveOpportunityContext: " + error.message);
  }
 
  async prune(userId: string, keep = 200) {
