@@ -24,7 +24,7 @@ unchanged insert a no-op. Interactive Telegram and workspace searches deliberate
 they use a fresh source window, preserve the nightly cursor, and rescore returned listings so a new
 query can show a good opportunity that was fetched before. The concept-matching in
 `src/score/ontology.ts` (hand-curated from the dashboard site's own research tags) handles the first
-ranking pass. When Gemini is configured, a bounded second phase gathers institution and place
+ranking pass. When an AI provider is configured, a bounded second phase gathers institution and place
 evidence and adds structured decision context to the highest-ranked undecided listings.
 
 ## Local setup
@@ -34,7 +34,7 @@ cd pipeline
 npm install
 cp .env.example .env   # fill in the values below
 npm run build
-npm run check           # 132 offline logic checks — no network, no database
+npm run check           # offline checks — no network, no database
 ```
 
 ### Environment variables
@@ -52,6 +52,22 @@ npm run check           # 132 offline logic checks — no network, no database
 | `GEMINI_MODEL` | no | model override; defaults to `gemini-3.8-flash` |
 | `GROQ_API_KEY` | no | automatic structured-output fallback when Gemini is unavailable or rate-limited |
 | `GROQ_MODEL` | no | Groq model override; defaults to `openai/gpt-oss-20b` |
+| `OPENROUTER_API_KEY` | no | third context provider after Gemini and Groq; also works alone |
+| `OPENROUTER_MODEL` | no | defaults to `stealth/union-alpha`; all OpenRouter requests enforce zero prompt/completion/request prices |
+
+For GitHub Actions, add `OPENROUTER_API_KEY` under repository Settings → Secrets and variables →
+Actions → New repository secret. Never use a `VITE_` key or put it in the frontend. The workflow
+pins `OPENROUTER_MODEL=stealth/union-alpha`. For an existing Cloud Run deployment, configure the
+same key through Secret Manager and redeploy the updated pipeline separately; GitHub secrets
+do not automatically propagate to Cloud Run.
+
+Union Alpha supports JSON output, not strict JSON-schema enforcement. The pipeline validates all
+seven fields locally before saving, rejects malformed/all-placeholder responses, and records
+the provider and actual model alongside context. OpenRouter routes to an anonymous provider
+which may retain prompts and responses (not for training per its current model page). This
+integration sends only listing text and collected evidence, not personal profiles or credentials.
+No web-search plugins are enabled: this does not yet add visa research or live weather.
+See https://openrouter.ai/stealth/union-alpha for current preview terms and availability.
 
 Enrichment is stored under `opportunities.score_breakdown.context`, alongside the existing scoring
 components. It therefore works with the current Supabase schema and needs no migration. Source URLs
@@ -59,8 +75,11 @@ are stored with the summary so the dashboard can show the evidence used for each
 
 To enrich opportunities that were created before context enrichment was enabled, run the
 **Nightly opportunity discovery** workflow manually with **mode = backfill** and a batch size such
-as 25. Backfill skips every crawler, uses a separate evidence/AI request budget, switches to Groq
-when Gemini reaches its quota, rejects all-placeholder results so they remain eligible, and prints
+as 5 for the first verification. Backfill skips every crawler, uses a separate evidence/AI request
+budget, tries Gemini → Groq → OpenRouter (configured providers only), and reuses each card's evidence
+across fallbacks. It skips quota/auth/unavailable providers for the rest of that run. If all providers
+are unavailable, it stops the batch and preserves remaining cards as pending for a later rerun.
+This is fallback/queueing, not automatic rate-limit waiting. It rejects all-placeholder results and prints
 attempted, enriched, failed, and pending totals. Repeat it until pending reaches zero. Enable
 `refreshExisting` only when existing context should be regenerated.
 

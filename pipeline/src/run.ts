@@ -1,5 +1,5 @@
 import { Db, type SourceRow } from "./db.js";
-import { Http, DEFAULT_HTTP, HttpResponseError } from "./http.js";
+import { Http, DEFAULT_HTTP } from "./http.js";
 import { RunLogger } from "./log.js";
 import { readEnv, FIRECRAWL_MAX_PER_RUN, SCHEDULE_CAPS, INTERACTIVE_CAPS } from "./config.js";
 import { makeRenderer } from "./sources/firecrawl.js";
@@ -14,7 +14,7 @@ import { locKey } from "./normalize/location.js";
 import { salaryDisplay, salarySourceLabel, annualInr } from "./normalize/salary.js";
 import { ensureDefaultSources } from "./sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, termsForRun } from "./search/query.js";
-import { enrichOpportunityContext } from "./enrich/context.js";
+import { contextProviders, createContextFallback, ContextProvidersUnavailable, enrichWithFallback, type OpportunityContext } from "./enrich/context.js";
 import type {
  EnrichmentStats, NormalizedOpportunity, OpportunitySummary, RunCaps, RunResult, SearchProfile, SourceOutcome,
 } from "./types.js";
@@ -203,7 +203,8 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const requestedContext = boundedBatchSize(opts.contextBatchSize, defaultContextLimit);
  const contextLimit = Math.min(caps.maxLlmCalls, requestedContext);
  const enrichment = emptyEnrichment(contextLimit);
- if (!opts.dryRun && (env.geminiApiKey || env.groqApiKey) && Date.now() < deadlineAt) {
+ const providers = contextProviders(env);
+ if (!opts.dryRun && providers.length && Date.now() < deadlineAt) {
   const loaded = await db.loadContextCandidates(userId, contextLimit, !!opts.refreshContext);
   enrichment.candidates = loaded.candidates.length;
   enrichment.pending = loaded.total;
@@ -211,7 +212,9 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    { ...DEFAULT_HTTP, timeoutMs: 60_000, maxRetries: 0 },
    Math.max(12, contextLimit * 7 + 4),
   );
-  let contextProvider = env.geminiApiKey ? "gemini" as const : "groq" as const;
+  const fallback = createContextFallback<OpportunityContext>(providers, (from, to) =>
+   log.warn("switching opportunity context provider", { from, to }));
+  log.info("opportunity context providers", { providers, openrouterModel: env.openrouterModel });
   for (const candidate of loaded.candidates) {
    if (Date.now() > deadlineAt) {
     enrichment.skipped = loaded.candidates.length - enrichment.attempted;
@@ -220,33 +223,27 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    }
    enrichment.attempted++;
    try {
-    let context;
-    try {
-     context = await enrichOpportunityContext(env, contextHttp, candidate, contextProvider);
-    } catch (primaryError) {
-     if (contextProvider === "gemini" && env.groqApiKey) {
-      const quotaLimited = primaryError instanceof HttpResponseError && primaryError.status === 429;
-      log.warn("switching opportunity context provider to Groq", {
-       reason: quotaLimited ? "Gemini quota reached" : primaryError instanceof Error ? primaryError.message : String(primaryError),
-      });
-      contextProvider = "groq";
-      context = await enrichOpportunityContext(env, contextHttp, candidate, contextProvider);
-     } else throw primaryError;
-    }
+    const context = await enrichWithFallback(env, contextHttp, candidate, fallback);
     await db.saveOpportunityContext(candidate, context as unknown as Record<string, unknown>);
     enrichment.succeeded++;
+    log.info("opportunity context saved", { id: candidate.id, provider: context.provider, model: context.model });
    } catch (error) {
     enrichment.failed++;
     log.warn("opportunity context enrichment failed", {
      id: candidate.id,
      error: error instanceof Error ? error.message : String(error),
     });
+    if (error instanceof ContextProvidersUnavailable) {
+     enrichment.skipped = loaded.candidates.length - enrichment.attempted;
+     degradations.push("AI providers unavailable; rerun later to resume pending cards");
+     break;
+    }
    }
   }
   enrichment.pending = Math.max(0, loaded.total - enrichment.succeeded);
   enrichment.requestsUsed = contextHttp.requestsUsed;
- } else if (!opts.dryRun && !env.geminiApiKey && !env.groqApiKey) {
-  degradations.push("context enrichment unavailable (GEMINI_API_KEY and GROQ_API_KEY missing)");
+ } else if (!opts.dryRun && !providers.length) {
+  degradations.push("context enrichment unavailable (GEMINI_API_KEY, GROQ_API_KEY and OPENROUTER_API_KEY missing)");
   log.warn("opportunity context enrichment skipped", { reason: "no AI provider key configured" });
  }
  if (!opts.dryRun) log.info("opportunity context enrichment summary", { ...enrichment });
@@ -257,7 +254,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  const anyOk = Object.values(bySource).some(s => s.status === "ok" || s.status === "partial");
  const status: RunResult["status"] = backfill
-  ? ((!env.geminiApiKey && !env.groqApiKey) || (enrichment.attempted > 0 && enrichment.succeeded === 0 && enrichment.failed > 0)
+  ? ((!providers.length) || (enrichment.attempted > 0 && enrichment.succeeded === 0 && enrichment.failed > 0)
    ? "failed" : enrichment.failed || enrichment.skipped ? "partial" : "done")
   : anyOk ? (degradations.length ? "partial" : "done") : (sources.length ? "failed" : "done");
 

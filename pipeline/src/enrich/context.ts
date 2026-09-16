@@ -1,6 +1,7 @@
 import type { Env } from "../config.js";
 import type { ContextCandidate } from "../db.js";
 import type { Http } from "../http.js";
+import { HttpResponseError } from "../http.js";
 import { excerpt, htmlToText } from "../normalize/text.js";
 
 export interface OpportunityContext {
@@ -13,6 +14,8 @@ export interface OpportunityContext {
  inclusion?: string;
  sources: { label: string; url: string }[];
  generated_at: string;
+ provider?: string;
+ model?: string;
 }
 
 interface Evidence { label: string; url: string; text: string }
@@ -20,11 +23,74 @@ interface WikiResponse {
  query?: { pages?: Record<string, { title?: string; extract?: string; fullurl?: string }> };
 }
 interface GroqResponse {
+ model?: string;
+ error?: { message?: string };
  choices?: { message?: { content?: string } }[];
 }
 export const UNKNOWN = "Not enough reliable information collected.";
 const FIELDS = ["institution", "place", "population", "climate", "transport", "living", "inclusion"] as const;
-export type ContextProvider = "gemini" | "groq";
+export type ContextProvider = "gemini" | "groq" | "openrouter";
+
+export function contextProviders(env: Env): ContextProvider[] {
+ return (["gemini", "groq", "openrouter"] as const).filter(provider =>
+  Boolean(env[`${provider}ApiKey`]?.trim()));
+}
+
+export function openrouterRequest(model: string, prompt: string) {
+ return {
+  model,
+  messages: [{ role: "user", content: `${prompt}\nJSON must contain exactly these string fields: ${FIELDS.join(", ")}.` }],
+  response_format: { type: "json_object" },
+  max_tokens: 2048,
+  // Fail closed if this preview becomes paid; never enable paid search plugins.
+  provider: { require_parameters: true, max_price: { prompt: 0, completion: 0, request: 0 } },
+ };
+}
+
+export function parseOpenrouterContext(text: string): Record<string, string> {
+ const payload: unknown = JSON.parse(text);
+ if (!payload || typeof payload !== "object" || Array.isArray(payload))
+  throw new Error("OpenRouter returned a non-object context");
+ const value = payload as Record<string, unknown>;
+ if (Object.keys(value).length !== FIELDS.length || FIELDS.some(field =>
+  typeof value[field] !== "string" || !(value[field] as string).trim()))
+  throw new Error("OpenRouter context must contain exactly seven nonempty string fields");
+ return value as Record<string, string>;
+}
+
+/** A failed provider is skipped for the rest of this run. The next provider
+ * retries the same card. Stop the batch if every provider is unavailable. */
+export class ContextProvidersUnavailable extends Error {}
+export function createContextFallback<T>(
+ providers: ContextProvider[],
+ onSwitch: (from: ContextProvider, to: ContextProvider) => void,
+) {
+ const disabled = new Set<ContextProvider>();
+ let preferred = 0;
+ return async (attempt: (provider: ContextProvider) => Promise<T>): Promise<T> => {
+  let lastError: unknown;
+  for (let offset = 0; offset < providers.length; offset++) {
+   const index = (preferred + offset) % providers.length;
+   const provider = providers[index]!;
+   if (disabled.has(provider)) continue;
+   try {
+    const result = await attempt(provider);
+    preferred = index;
+    return result;
+   } catch (error) {
+    lastError = error;
+    if (error instanceof HttpResponseError && [401, 402, 403, 429, 503].includes(error.status))
+     disabled.add(provider);
+    const next = Array.from({ length: providers.length - offset - 1 }, (_, i) =>
+     providers[(preferred + offset + i + 1) % providers.length]!).find(p => !disabled.has(p));
+    if (next) onSwitch(provider, next);
+   }
+  }
+  if (disabled.size === providers.length)
+   throw new ContextProvidersUnavailable("All configured AI providers are unavailable; remaining context stays pending");
+  throw lastError ?? new Error("No context provider succeeded");
+ };
+}
 
 const safeHttpUrl = (value: string | null | undefined) => {
  try {
@@ -135,8 +201,9 @@ export async function enrichOpportunityContext(
  http: Http,
  candidate: ContextCandidate,
  provider: ContextProvider = "gemini",
+ suppliedEvidence?: Evidence[],
 ): Promise<OpportunityContext> {
- const evidence = await collectEvidence(http, candidate);
+ const evidence = suppliedEvidence ?? await collectEvidence(http, candidate);
  const schema = {
   type: "object",
   properties: Object.fromEntries(FIELDS.map(field => [field, { type: "string" }])),
@@ -144,7 +211,20 @@ export async function enrichOpportunityContext(
   additionalProperties: false,
  };
  let payload: unknown;
- if (provider === "groq") {
+ let model = provider === "gemini" ? env.geminiModel : provider === "groq" ? env.groqModel : env.openrouterModel;
+ if (provider === "openrouter") {
+  if (!env.openrouterApiKey) throw new Error("OPENROUTER_API_KEY missing");
+  const response = await http.postJson<GroqResponse>(
+   "https://openrouter.ai/api/v1/chat/completions",
+   openrouterRequest(env.openrouterModel, promptFor(candidate, evidence)),
+   { authorization: `Bearer ${env.openrouterApiKey}` },
+  );
+  if (response?.error) throw new Error("OpenRouter returned an API error");
+  const text = response?.choices?.[0]?.message?.content;
+  if (!text) throw new Error("OpenRouter returned an empty response");
+  payload = parseOpenrouterContext(text);
+  model = response?.model ?? model;
+ } else if (provider === "groq") {
   if (!env.groqApiKey) throw new Error("GROQ_API_KEY missing");
   const response = await http.postJson<GroqResponse>(
    "https://api.groq.com/openai/v1/chat/completions",
@@ -175,5 +255,16 @@ export async function enrichOpportunityContext(
  const context = normalizeContextPayload(payload, evidence);
  if (!context) throw new Error(`${provider} returned an unexpected structured-output shape`);
  if (!hasMeaningfulContext(context)) throw new Error(`${provider} returned fallback text for every context field`);
+ context.provider = provider;
+ context.model = model;
  return context;
+}
+
+/** Fetch evidence once per card, even when more than one model is tried. */
+export async function enrichWithFallback(
+ env: Env, http: Http, candidate: ContextCandidate,
+ fallback: ReturnType<typeof createContextFallback<OpportunityContext>>,
+) {
+ const evidence = await collectEvidence(http, candidate);
+ return fallback(provider => enrichOpportunityContext(env, http, candidate, provider, evidence));
 }

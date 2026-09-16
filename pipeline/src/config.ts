@@ -10,6 +10,8 @@ export interface Env {
  geminiModel: string;
  groqApiKey: string | null;
  groqModel: string;
+ openrouterApiKey: string | null;
+ openrouterModel: string;
 }
 
 /** Fails loudly and early rather than half way through a run. */
@@ -30,6 +32,8 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   geminiModel: env.GEMINI_MODEL ?? "gemini-3.8-flash",
   groqApiKey: env.GROQ_API_KEY ?? null,
   groqModel: env.GROQ_MODEL ?? "openai/gpt-oss-20b",
+  openrouterApiKey: env.OPENROUTER_API_KEY?.trim() || null,
+  openrouterModel: env.OPENROUTER_MODEL?.trim() || "stealth/union-alpha",
  };
 }
 
