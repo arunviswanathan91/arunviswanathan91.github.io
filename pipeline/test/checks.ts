@@ -19,6 +19,10 @@ import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, termsForRun } from "../src/search/query.js";
 import { contextPayloadFromInteraction, hasMeaningfulContext, normalizeContextPayload, UNKNOWN } from "../src/enrich/context.js";
+import { contextProviders, createContextFallback, ContextProvidersUnavailable, openrouterRequest, parseOpenrouterContext, enrichOpportunityContext } from "../src/enrich/context.js";
+import { readEnv } from "../src/config.js";
+import { Http, HttpResponseError } from "../src/http.js";
+import type { ContextCandidate } from "../src/db.js";
 
 type Check = { name: string; ok: boolean; detail?: string };
 const out: Check[] = [];
@@ -41,6 +45,71 @@ const eq = (name: string, a: unknown, b: unknown) =>
 }
 
 // ---- URL canonicalization ----
+{
+ const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
+ const env = readEnv({ ...base, OPENROUTER_API_KEY: " test-key " });
+ eq("OpenRouter defaults to requested Union Alpha model", env.openrouterModel, "stealth/union-alpha");
+ eq("OpenRouter key whitespace is trimmed", env.openrouterApiKey, "test-key");
+ eq("OpenRouter works without Gemini or Groq", contextProviders(env), ["openrouter"]);
+ eq("blank AI keys are disabled", contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: " ", GEMINI_API_KEY: "", GROQ_API_KEY: "" })), []);
+ eq("existing providers precede OpenRouter", contextProviders(readEnv({ ...base, GEMINI_API_KEY: "a", GROQ_API_KEY: "b", OPENROUTER_API_KEY: "c" })), ["gemini", "groq", "openrouter"]);
+ const request = openrouterRequest(env.openrouterModel, "ROLE: Researcher");
+ eq("Union Alpha uses JSON mode, not unsupported schema mode", request.response_format, { type: "json_object" });
+ eq("OpenRouter price ceiling is zero", request.provider.max_price, { prompt: 0, completion: 0, request: 0 });
+ check("OpenRouter does not enable paid search or model fallback", !("plugins" in request) && !("models" in request));
+ check("prompt enumerates required fields", request.messages[0]!.content.includes("institution, place, population, climate, transport, living, inclusion"));
+ const payload = { institution: "Research institute", place: UNKNOWN, population: UNKNOWN, climate: UNKNOWN, transport: UNKNOWN, living: UNKNOWN, inclusion: UNKNOWN };
+ eq("valid OpenRouter JSON is accepted", parseOpenrouterContext(JSON.stringify(payload)), payload);
+ for (const [name, value] of Object.entries({ missing: {}, array: [], wrongType: { ...payload, climate: 20 }, blank: { ...payload, climate: " " }, extra: { ...payload, invented: "x" } })) {
+  let rejected = false;
+  try { parseOpenrouterContext(JSON.stringify(value)); } catch { rejected = true; }
+  check(`invalid OpenRouter payload rejected: ${name}`, rejected);
+ }
+ let invalidJson = false;
+ try { parseOpenrouterContext("not JSON"); } catch { invalidJson = true; }
+ check("invalid OpenRouter JSON rejected", invalidJson);
+
+ const candidate: ContextCandidate = { id: "test", role: "Researcher", organization: null, organization_url: null, location: null, city: null, country: null, url: null, summary: "Listing", description_excerpt: null, score_breakdown: null, enrichment: null };
+ let postedUrl = "";
+ let postedBody: unknown;
+ const stub = { postJson: async (url: string, body: unknown) => {
+  postedUrl = url; postedBody = body;
+  return { model: "stealth/union-alpha", choices: [{ message: { content: JSON.stringify(payload) } }] };
+ } } as unknown as Http;
+ const result = await enrichOpportunityContext(env, stub, candidate, "openrouter", []);
+ eq("OpenRouter request uses official chat endpoint", postedUrl, "https://openrouter.ai/api/v1/chat/completions");
+ check("OpenRouter integration sends requested model", (postedBody as { model: string }).model === "stealth/union-alpha");
+ eq("saved context records provider and model", [result.provider, result.model], ["openrouter", "stealth/union-alpha"]);
+ let placeholdersRejected = false;
+ const placeholders = { postJson: async () => ({ choices: [{ message: { content: JSON.stringify(Object.fromEntries(Object.keys(payload).map(key => [key, UNKNOWN]))) } }] }) } as unknown as Http;
+ try { await enrichOpportunityContext(env, placeholders, candidate, "openrouter", []); } catch { placeholdersRejected = true; }
+ check("all-placeholder OpenRouter response never saved", placeholdersRejected);
+
+ const attempted: string[] = [];
+ const switches: string[] = [];
+ const fallback = createContextFallback<string>(["gemini", "groq", "openrouter"], (a,b) => switches.push(`${a}:${b}`));
+ eq("quota failures reach OpenRouter for the same card", await fallback(async provider => {
+  attempted.push(provider);
+  if (provider !== "openrouter") throw new HttpResponseError(429, "Quota reached");
+  return "saved";
+ }), "saved");
+ eq("fallback provider order", attempted, ["gemini", "groq", "openrouter"]);
+ eq("fallback transitions are observable", switches, ["gemini:groq", "groq:openrouter"]);
+ attempted.length = 0;
+ await fallback(async provider => { attempted.push(provider); return "saved"; });
+ eq("next card skips exhausted providers", attempted, ["openrouter"]);
+ let unavailable = false;
+ try { await fallback(async () => { throw new HttpResponseError(429, "OpenRouter quota reached"); }); }
+ catch (error) { unavailable = error instanceof ContextProvidersUnavailable; }
+ check("all providers exhausted stops batch with pending data intact", unavailable);
+ let retriedDisabled = false;
+ try { await fallback(async () => { retriedDisabled = true; return "bad"; }); } catch { /* expected */ }
+ check("exhausted providers are not repeatedly called", !retriedDisabled);
+ const malformed = createContextFallback<string>(["openrouter"], () => {});
+ try { await malformed(async () => { throw new Error("Malformed card response"); }); } catch { /* expected */ }
+ eq("card-specific parse error does not disable provider", await malformed(async () => "next card"), "next card");
+}
+
 eq("strips utm params", canonicalizeUrl("https://x.com/job/1?utm_source=fb&utm_campaign=x"), "https://x.com/job/1");
 eq("drops www", canonicalizeUrl("https://www.x.com/job/1"), "https://x.com/job/1");
 eq("sorts remaining params", canonicalizeUrl("https://x.com/j?b=2&a=1"), "https://x.com/j?a=1&b=2");
