@@ -9,6 +9,14 @@ import type { EntityDef, FieldDef, QuickAction, Row, SortSpec } from "../../enti
 
 /** Enum/bool/project cells render their editor directly, so "inline editing" needs no edit mode. */
 const INLINE=new Set(["enum","bool","project"]);
+const columnWidth=(field:FieldDef)=>{
+ const weighted=(field.table??1)*80;
+ if(field.kind==="enum")return Math.max(weighted,field.free?168:116);
+ if(field.kind==="date")return Math.max(weighted,112);
+ if(field.kind==="url")return Math.max(weighted,104);
+ if(field.kind==="bool")return Math.max(weighted,92);
+ return Math.max(weighted,96);
+};
 
 export function Table({def,columns,rows,ctx,inputCtx,sort,selection,onSort,onToggle,onOpen,onCommit,onToggleAll,onQuickAction}:{
  def:EntityDef;columns:FieldDef[];rows:Row[];ctx:ValueCtx;inputCtx:InputCtx;sort:SortSpec;
@@ -24,7 +32,8 @@ export function Table({def,columns,rows,ctx,inputCtx,sort,selection,onSort,onTog
     <th className="col-check"><input type="checkbox" checked={allChecked} onChange={onToggleAll} aria-label="Select all"/></th>
     {columns.map(f=>{
      const active=sort.key===f.key;
-     return <th key={f.key} style={{width:(f.table??1)*80}}
+     const width=columnWidth(f);
+     return <th key={f.key} style={{width,minWidth:width}}
       aria-sort={active?(sort.dir==="asc"?"ascending":"descending"):"none"}>
       {f.sort?<button className="th-sort" onClick={()=>onSort(f.key)}>
        {f.label}{active&&(sort.dir==="asc"?<ChevronUp/>:<ChevronDown/>)}
@@ -40,7 +49,7 @@ export function Table({def,columns,rows,ctx,inputCtx,sort,selection,onSort,onTog
       <input type="checkbox" checked={selection.includes(row.id)} onChange={()=>onToggle(row.id)}
        aria-label={`Select ${String(row[def.titleField]??"row")}`}/>
      </td>
-     {columns.map(f=><td key={f.key}>
+     {columns.map(f=><td key={f.key} style={{minWidth:columnWidth(f)}}>
       {INLINE.has(f.kind)&&isEditable(f)
        ?<FieldInput field={f} value={f.kind==="tags"?ctx.tagIds(row.id):row[f.key]} ctx={inputCtx} compact
          onCommit={v=>onCommit(row,f,v)}/>

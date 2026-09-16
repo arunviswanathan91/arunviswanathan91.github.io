@@ -14,6 +14,7 @@ import { locKey } from "./normalize/location.js";
 import { salaryDisplay, salarySourceLabel, annualInr } from "./normalize/salary.js";
 import { ensureDefaultSources } from "./sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, termsForRun } from "./search/query.js";
+import { enrichOpportunityContext } from "./enrich/context.js";
 import type {
  NormalizedOpportunity, OpportunitySummary, RunCaps, RunResult, SearchProfile, SourceOutcome,
 } from "./types.js";
@@ -178,6 +179,30 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  }
 
  if (persistenceFailures) degradations.push(`${persistenceFailures} database insert(s) failed`);
+
+ // Enrich a small, bounded set of the best undecided listings. The result is
+ // stored inside the existing score_breakdown JSON, so older databases require
+ // no migration and existing scoring fields remain intact.
+ if (!opts.dryRun && env.geminiApiKey && Date.now() < deadlineAt) {
+  const contextLimit = Math.min(caps.maxLlmCalls, trigger === "schedule" ? 8 : 3);
+  const contextCandidates = await db.loadContextCandidates(userId, contextLimit);
+  let contextReady = 0;
+  for (const candidate of contextCandidates) {
+   if (Date.now() > deadlineAt || http.budgetRemaining < 1) break;
+   try {
+    const context = await enrichOpportunityContext(env, http, candidate);
+    if (!context) continue;
+    await db.saveOpportunityContext(candidate, context as unknown as Record<string, unknown>);
+    contextReady++;
+   } catch (error) {
+    log.warn("opportunity context enrichment failed", {
+     id: candidate.id,
+     error: error instanceof Error ? error.message : String(error),
+    });
+   }
+  }
+  if (contextReady) log.info("opportunity context enriched", { count: contextReady });
+ }
 
  if (!opts.dryRun) await db.prune(userId);
 
@@ -401,9 +426,15 @@ async function linkSource(
   .select("id", { count: "exact", head: true }).eq("opportunity_id", opportunityId);
 
  const now = new Date().toISOString();
+ const { data: current } = await db.client.from("opportunities")
+  .select("deadline,score_breakdown").eq("id", opportunityId).maybeSingle();
+ const existingScore = current?.score_breakdown && typeof current.score_breakdown === "object"
+  ? current.score_breakdown as Record<string, unknown> : {};
+ const existingContext = existingScore.context;
  const patch: Record<string, unknown> = {
   last_seen_at: now, source_count: count ?? 1,
-  match_score: score.score, fit_reason: score.reason, score_breakdown: score.breakdown,
+  match_score: score.score, fit_reason: score.reason,
+  score_breakdown: { ...score.breakdown, ...(existingContext ? { context: existingContext } : {}) },
   ...(runId ? { run_id: runId } : {}),
  };
  // Same-listing matches can safely refresh presentation fields. This also
@@ -428,8 +459,7 @@ async function linkSource(
   }
  }
  if (o.deadline) {
-  const { data: cur } = await db.client.from("opportunities").select("deadline").eq("id", opportunityId).maybeSingle();
-  const existing = cur?.deadline ? new Date(cur.deadline).getTime() : 0;
+  const existing = current?.deadline ? new Date(current.deadline).getTime() : 0;
   if (new Date(o.deadline).getTime() > existing) {
    patch.deadline = o.deadline;
    patch.last_changed_at = now;

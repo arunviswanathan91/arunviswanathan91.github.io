@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowUpDown, Columns3, LayoutGrid, Plus, RefreshCw, Search, SlidersHorizontal, Table2, X } from "lucide-react";
+import { ArrowUpDown, Columns3, GalleryHorizontalEnd, LayoutGrid, Plus, RefreshCw, Search, SlidersHorizontal, Table2, X } from "lucide-react";
 import { Popover } from "../ui/Popover";
 import { activeFilterCount, clearFilters, DATE_BUCKETS } from "../../lib/query";
 import { useUi } from "../../lib/store";
@@ -95,9 +95,13 @@ export function Toolbar({def,query,shown,total,tags,onChange,onNew,onRefresh}:{
    <span className="count-note">{shown===total?`${total}`:`${shown} of ${total}`}</span>
    <button className="icon-button" onClick={onRefresh} aria-label="Refresh"><RefreshCw/></button>
    {def.layouts.length>1&&<div className="seg" role="group" aria-label="Layout">
-    {def.layouts.map(l=><button key={l} className={query.layout===l?"active":""} aria-pressed={query.layout===l}
-     onClick={()=>onChange({layout:l as Layout})} aria-label={l==="board"?"Board view":"Table view"}
-     title={l==="board"?"Board":"Table"}>{l==="board"?<LayoutGrid/>:<Table2/>}</button>)}
+    {def.layouts.map(l=>{
+     const label=l==="board"?"Board":l==="table"?"Table":"Swipe review";
+     return <button key={l} className={query.layout===l?"active":""} aria-pressed={query.layout===l}
+      onClick={()=>onChange({layout:l as Layout})} aria-label={label+" view"} title={label}>
+      {l==="board"?<LayoutGrid/>:l==="table"?<Table2/>:<GalleryHorizontalEnd/>}
+     </button>;
+    })}
    </div>}
    <button className="primary" onClick={onNew}><Plus/>New</button>
   </div>
