@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { CheckCircle2, LoaderCircle, RotateCcw, Search, TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -19,6 +19,8 @@ interface RunStats {
  fetched?: number;
  evaluated?: number;
  filtered?: number;
+ degradations?: string[];
+ enrichment?: {requested?:number;attempted?:number;succeeded?:number;failed?:number;pending?:number};
 }
 interface RunRow {
  status: "queued" | "running" | "done" | "partial" | "failed";
@@ -37,6 +39,8 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
  const [message, setMessage] = useState("Search job and postdoc sources using your profile filters.");
  const timer = useRef<number | null>(null);
  const generation = useRef(0);
+ const preferenceSaver = useRef<(()=>Promise<boolean>)|null>(null);
+ const registerPreferenceSaver=useCallback((save:()=>Promise<boolean>)=>{preferenceSaver.current=save},[]);
  const {ask,confirmation}=useConfirmDialog();
 
  useEffect(() => () => {
@@ -81,9 +85,15 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
    const matched = Number(stats.matched ?? 0);
    const created = Number(stats.created ?? 0);
    const checked = Number(stats.evaluated ?? stats.fetched ?? 0);
+   const enriched=Number(stats.enrichment?.succeeded??0);
+   const pending=Number(stats.enrichment?.pending??0);
+   const contextUnavailable=stats.degradations?.some(item=>item.includes("context enrichment unavailable"));
+   const contextNote=contextUnavailable?" · AI context unavailable on the worker"
+    :enriched?` · ${enriched} AI brief${enriched===1?"":"s"}${pending?` · ${pending} pending`:""}`
+    :pending?` · ${pending} AI brief${pending===1?"":"s"} pending`:"";
    setPhase("done");
    setMessage(matched
-    ? `Found ${matched} match${matched === 1 ? "" : "es"} · ${created} new${row.status === "partial" ? " · some sources had issues" : ""}.`
+    ? `Found ${matched} match${matched === 1 ? "" : "es"} from ${checked} checked · ${created} new${contextNote}${row.status === "partial" && !contextUnavailable ? " · some sources had issues" : ""}.`
     : `No matching results in ${checked} checked listing${checked === 1 ? "" : "s"}${row.status === "partial" ? "; some sources had issues" : ""}.`);
    onComplete();
   };
@@ -100,9 +110,16 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
    return;
   }
 
+  setPhase("starting");
+  setMessage("Saving research and relocation preferences…");
+  if (preferenceSaver.current && !await preferenceSaver.current()) {
+   setPhase("failed");
+   setMessage("Your research and relocation preferences could not be saved. Review that section, then try the search again.");
+   return;
+  }
+
   if (timer.current !== null) window.clearTimeout(timer.current);
   const current = ++generation.current;
-  setPhase("starting");
   setMessage("Starting a protected workspace search…");
   const { data, error } = await supabase.functions.invoke<StartResponse>("opportunity-discover", {
    body: { query: requested },
@@ -165,7 +182,7 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
    </button>
   </form>
   <p className="discovery-status" role="status" aria-live="polite">{message}</p>
-  <AssessmentPreferences disabled={active(phase)}/>
+  <AssessmentPreferences disabled={active(phase)} registerSave={registerPreferenceSaver}/>
   {confirmation}
  </section>;
 }

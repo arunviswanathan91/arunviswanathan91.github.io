@@ -38,7 +38,11 @@ Deno.serve(async (req) => {
  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
  const discoveryUrl = Deno.env.get("DISCOVERY_URL");
  const sharedSecret = Deno.env.get("DISCOVERY_SHARED_SECRET");
- if (!supabaseUrl || !serviceKey || !discoveryUrl || !sharedSecret) {
+ const dispatchToken = Deno.env.get("GITHUB_DISPATCH_TOKEN");
+ const dispatchRepo = Deno.env.get("GITHUB_REPOSITORY_SLUG");
+ const hasCloudRun = Boolean(discoveryUrl && sharedSecret);
+ const hasGitHub = Boolean(dispatchToken && dispatchRepo);
+ if (!supabaseUrl || !serviceKey || (!hasCloudRun && !hasGitHub)) {
   return json({ error: "Discovery is not configured on this deployment." }, 503);
  }
  const db = createClient(supabaseUrl, serviceKey, {
@@ -74,10 +78,40 @@ Deno.serve(async (req) => {
  if (insertError || !run) return json({ error: "Could not create the discovery run." }, 500);
 
  const execute = async () => {
+  // Dashboard searches prefer Actions because its runtime already receives the
+  // configured OpenRouter/Groq/Gemini repository secrets. Cloud Run remains a
+  // fallback for installations that configure AI keys there directly.
+  if (hasGitHub) {
+   try {
+    const response = await fetch(`https://api.github.com/repos/${dispatchRepo}/dispatches`, {
+     method: "POST",
+     headers: {
+      authorization: `Bearer ${dispatchToken}`,
+      accept: "application/vnd.github+json",
+      "content-type": "application/json",
+      "user-agent": "opportunity-discover",
+     },
+     body: JSON.stringify({
+      event_type: "discover",
+      client_payload: { trigger: "manual", query, run_id: run.id, claim_token: claimToken },
+     }),
+    });
+    if (response.ok) return;
+    if (!hasCloudRun) {
+     await failRun(db, run.id, `GitHub discovery dispatch returned HTTP ${response.status}.`);
+     return;
+    }
+   } catch (error) {
+    if (!hasCloudRun) {
+     await failRun(db, run.id, error instanceof Error ? error.message : "GitHub discovery dispatch failed.");
+     return;
+    }
+   }
+  }
   try {
-   const response = await fetch(discoveryUrl, {
+   const response = await fetch(discoveryUrl!, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-discovery-secret": sharedSecret },
+    headers: { "content-type": "application/json", "x-discovery-secret": sharedSecret! },
     body: JSON.stringify({ run_id: run.id, claim_token: claimToken }),
    });
    if (!response.ok) await failRun(db, run.id, `Discovery worker returned HTTP ${response.status}.`);
@@ -86,8 +120,7 @@ Deno.serve(async (req) => {
   }
  };
 
- // Cloud Run must keep its request open while it searches, but this browser
- // endpoint returns immediately. The workspace follows progress from the run row.
+ // The browser returns immediately and follows progress from the run row.
  EdgeRuntime.waitUntil(execute());
  return json({ run_id: run.id, status: "queued", query }, 202);
 });

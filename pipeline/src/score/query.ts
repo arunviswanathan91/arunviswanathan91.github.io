@@ -13,6 +13,8 @@ const RESEARCH_SCIENTIST = /\bresearch scientist\b/i;
 const INDUSTRY = /\b(industry|industrial|r\s*&\s*d)\b/i;
 const FACULTY = /\b(faculty|professor|lecturer)\b/i;
 const FELLOWSHIP = /\bfellowship\b/i;
+const SCANDINAVIA = new Set(["SE","NO","DK","FI"]);
+const EUROPE = new Set(["DE","NL","SE","CH","GB","FR","BE","DK","NO","FI","AT","IE","ES","IT","PT","PL","CZ"]);
 
 const normalize = (value: string) => value
  .normalize("NFKD")
@@ -33,6 +35,19 @@ const token = (value: string) => {
 
 const tokens = (value: string) => normalize(value).split(/\s+/).filter(Boolean).map(token);
 const topicTokens = (value: string) => [...new Set(tokens(value).filter(t => !STOP_WORDS.has(t)))];
+
+function locationIntent(query: string, o: NormalizedOpportunity): {matches:boolean;label:string} {
+ const q=normalize(query),city=normalize(o.city??"");
+ if (/\b(scandinavia|scandinavian|nordic)\b/.test(q)) return {matches:!!o.country&&SCANDINAVIA.has(o.country),label:"Scandinavia"};
+ if (/\beurope(an)?\b/.test(q)) return {matches:!!o.country&&EUROPE.has(o.country),label:"Europe"};
+ if (/\b(india|indian)\b/.test(q)) return {matches:o.country==="IN",label:"India"};
+ if (/\b(usa|united states|america|american)\b/.test(q)) return {matches:o.country==="US",label:"United States"};
+ if (/\b(canada|canadian)\b/.test(q)) return {matches:o.country==="CA",label:"Canada"};
+ if (/\bkerala\b/.test(q)) return {matches:o.region==="Kerala",label:"Kerala"};
+ if (/\b(bangalore|bengaluru)\b/.test(q)) return {matches:city==="bangalore"||o.region==="Bengaluru",label:"Bengaluru"};
+ if (/\bremote\b/.test(q)) return {matches:o.isRemote,label:"remote"};
+ return {matches:true,label:""};
+}
 
 function roleIntent(query: string): { label: string; allowed: OpportunityKind[] } | null {
  if (POSTDOC.test(query)) return { label: "postdoc", allowed: ["Postdoc", "Fellowship"] };
@@ -70,6 +85,7 @@ export function queryRelevance(o: NormalizedOpportunity, query: string | null | 
  const role = roleIntent(requested);
  const roleOk = !role || role.allowed.includes(o.opportunityType) ||
   (role.label === "postdoc" && POSTDOC.test(`${o.title} ${o.descriptionText.slice(0, 2500)}`));
+ const location=locationIntent(requested,o);
 
  const wanted = topicTokens(requested);
  const title = new Set(tokens(o.title));
@@ -88,12 +104,12 @@ export function queryRelevance(o: NormalizedOpportunity, query: string | null | 
   .filter((v): v is string => !!v);
 
  const topicOk = wanted.length === 0 || lexicalHits.length > 0 || conceptHits.length > 0;
- if (!roleOk || !topicOk) {
+ if (!roleOk || !topicOk || !location.matches) {
   return {
    keep: false, value: 0,
    hits: [...lexicalHits, ...conceptHits.map(id => `concept:${id}`)],
    labels: conceptLabels,
-   note: !roleOk ? `requested ${role!.label} role not found` : "no query topic overlap",
+   note: !roleOk ? `requested ${role!.label} role not found` : !location.matches ? `outside requested ${location.label}` : "no query topic overlap",
   };
  }
 

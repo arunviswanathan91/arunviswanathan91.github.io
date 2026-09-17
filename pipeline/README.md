@@ -49,11 +49,11 @@ npm run check           # offline checks — no network, no database
 | `JOOBLE_API_KEY` | for the Jooble source | free key at [jooble.org/api/about](https://jooble.org/api/about) |
 | `TELEGRAM_BOT_TOKEN` | to push a digest | same bot token the dashboard's webhook uses |
 | `FIRECRAWL_API_KEY` | no — crawl targets work without it | Tier-3 fallback for JS-rendered career pages; free at [firecrawl.dev](https://www.firecrawl.dev), capped locally by `FIRECRAWL_MAX_PER_RUN` |
-| `GEMINI_API_KEY` | no | enables evidence-grounded institution and local-place context for swipe review |
+| `GEMINI_API_KEY` | no | final automatic fallback for evidence-grounded decision briefs |
 | `GEMINI_MODEL` | no | model override; defaults to `gemini-3.8-flash` |
-| `GROQ_API_KEY` | no | automatic structured-output fallback when Gemini is unavailable or rate-limited |
+| `GROQ_API_KEY` | no | automatic structured-output fallback when OpenRouter is unavailable or busy |
 | `GROQ_MODEL` | no | Groq model override; defaults to `openai/gpt-oss-20b` |
-| `OPENROUTER_API_KEY` | no | third context provider after Gemini and Groq; also works alone |
+| `OPENROUTER_API_KEY` | no | primary context provider; Groq and Gemini are automatic fallbacks |
 | `OPENROUTER_MODEL` | no | defaults to `stealth/union-alpha`; all OpenRouter requests enforce zero prompt/completion/request prices |
 
 For GitHub Actions, add `OPENROUTER_API_KEY` under repository Settings → Secrets and variables →
@@ -80,7 +80,7 @@ are stored with the summary so the dashboard can show the evidence used for each
 To enrich opportunities that were created before context enrichment was enabled, run the
 **Nightly opportunity discovery** workflow manually with **mode = backfill** and a batch size such
 as 5 for the first verification. Backfill skips every crawler, uses a separate evidence/AI request
-budget, tries Gemini → Groq → OpenRouter (configured providers only), and reuses each card's evidence
+budget, tries OpenRouter → Groq → Gemini (configured providers only), and reuses each card's evidence
 across fallbacks. It skips quota/auth/unavailable providers for the rest of that run. If all providers
 are unavailable, it stops the batch and preserves remaining cards as pending for a later rerun.
 This is fallback/queueing, not automatic rate-limit waiting. It rejects all-placeholder results and prints
@@ -231,8 +231,10 @@ GITHUB_DISPATCH_TOKEN=<the PAT>
 GITHUB_REPOSITORY_SLUG=<your-username>/<this-repo-name>
 ```
 
-`/discover` will then reply in 45–90 seconds (an Actions run has to start from cold) rather than
-instantly, which is a fine trade for not running a second piece of infrastructure.
+The dashboard and `/discover` can then use the Actions runtime, including the AI provider secrets
+already configured for the nightly workflow. An Actions run may take 45–90 seconds to start from
+cold, but this avoids maintaining a second copy of those secrets in Cloud Run. The dashboard falls
+back to Cloud Run when GitHub dispatch is not configured.
 
 **Cloud Run (optional, Phase 3):** for a sub-5-second `/discover` reply, build and deploy
 `Dockerfile` to Cloud Run, then set `DISCOVERY_URL` and `DISCOVERY_SHARED_SECRET` as Edge Function

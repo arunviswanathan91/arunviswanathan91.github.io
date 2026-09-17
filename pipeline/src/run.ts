@@ -200,8 +200,10 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  if (persistenceFailures) degradations.push(`${persistenceFailures} database insert(s) failed`);
 
  // Context enrichment has a separate request budget. Crawlers can use their
- // entire allowance without silently preventing Gemini from running afterward.
- const defaultContextLimit = backfill ? 25 : trigger === "schedule" ? 8 : 3;
+ // entire allowance without silently preventing an AI provider afterward.
+ // A person waiting in Swipe mode expects every result from a normal-sized
+ // interactive search to receive its brief, not only the first three cards.
+ const defaultContextLimit = backfill ? 25 : trigger === "schedule" ? 8 : 12;
  const requestedContext = boundedBatchSize(opts.contextBatchSize, defaultContextLimit);
  const llmCallLimit = Math.max(0, Math.min(caps.maxLlmCalls, profile.maxLlmCalls));
  const contextLimit = Math.min(llmCallLimit, requestedContext);

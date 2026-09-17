@@ -2,7 +2,7 @@ import type { OpportunityKind } from "../types.js";
 
 /** Titles that are never worth surfacing for a PhD-level search. */
 export const JUNK_TITLE =
- /\b(intern(ship)?|trainee|apprentice|summer (student|school)|master'?s? (thesis|student)|bachelor|b\.?tech project|lab (assistant|technician)|data entry|field (worker|officer)|sales executive|business development|customer support|delivery)\b/i;
+ /\b(intern(ship)?|trainee|apprentice|summer (student|school)|master'?s? (thesis|student)|bachelor|b\.?tech project|lab (assistant|technician)|data entry|field (worker|officer)|sales executive|business development|customer support|delivery|research update|career options with|weekly (job|career) roundup|jobs? roundup|newsletter)\b/i;
 
 const RULES: [RegExp, OpportunityKind][] = [
  [/\b(post[- ]?doc(toral)?|postdoctoral (fellow|researcher|associate|scientist)|pdra?)\b/i, "Postdoc"],
