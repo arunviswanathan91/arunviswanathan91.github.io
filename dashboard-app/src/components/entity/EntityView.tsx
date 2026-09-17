@@ -79,7 +79,7 @@ export function EntityView({def}:{def:EntityDef}){
    </div>
   </div>
 
-  {def.key==="opportunities"&&<OpportunityDiscovery onComplete={()=>void table.refetch(true)}/>}
+  {def.key==="opportunities"&&<OpportunityDiscovery currentCount={table.rows.length} onComplete={()=>void table.refetch(true)}/>}
 
   {def.projectField&&ui.scope!=="all"&&<section className="scope-banner" aria-label="Active project filter">
    <div className="scope-banner-copy">

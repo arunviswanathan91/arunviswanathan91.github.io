@@ -156,7 +156,7 @@ export class Db {
   const { data, error } = await this.client
    .from("opportunities")
    .select("id,org_key,title_key,role,city,country,is_remote,posted_at,simhash,deadline,status")
-   .eq("user_id", userId).neq("status", "Dismissed").limit(2000);
+   .eq("user_id", userId).is("deleted_at", null).neq("status", "Dismissed").limit(2000);
   if (error) throw new Error("loadCandidates: " + error.message);
 
   const { data: srcs } = await this.client
@@ -198,7 +198,7 @@ export class Db {
  }> {
   const { data, error } = await this.client.from("opportunities")
    .select("id,role,organization,organization_url,location,city,country,url,summary,description_excerpt,score_breakdown,enrichment,salary_display,salary_is_predicted")
-   .eq("user_id", userId).in("status", ["New", "Shortlisted"])
+   .eq("user_id", userId).is("deleted_at", null).in("status", ["New", "Shortlisted"])
    .order("match_score", { ascending: false }).limit(2000);
   if (error) throw new Error("loadContextCandidates: " + error.message);
   const eligible = ((data ?? []) as ContextCandidate[])

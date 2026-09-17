@@ -434,6 +434,7 @@ main{min-width:0;display:flex;flex-direction:column}
 .discovery-heading{display:flex;align-items:flex-start;gap:var(--s-2)}
 .discovery-heading h2{font-size:var(--f-sm);font-weight:700}
 .discovery-heading p{color:var(--text-2);font-size:var(--f-xs)}
+.discovery-restart{margin-left:auto;flex:none}
 .discovery-icon{display:grid;place-items:center;color:var(--accent);padding-top:2px}
 .discovery-form{display:flex;align-items:center;gap:var(--s-2)}
 .discovery-form .input{flex:1;min-width:0;background:var(--surface)}
@@ -597,6 +598,8 @@ tbody tr:last-child td{border-bottom:0}
    ========================================================================= */
 .swipe-review{display:grid;gap:var(--s-3);max-width:1040px;margin:0 auto;padding:var(--s-2) 0 var(--s-5)}
 .swipe-progress{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);color:var(--text-3);font-size:var(--f-xs)}
+.swipe-progress-actions{display:flex;align-items:center;justify-content:flex-end;gap:var(--s-3);flex-wrap:wrap}
+.swipe-shuffle{padding:6px 9px}.swipe-shuffle svg{width:14px;height:14px}.swipe-shuffle kbd{margin-left:2px}
 kbd{padding:1px 5px;border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:5px;background:var(--surface-2);font:inherit;font-size:var(--f-2xs)}
 .swipe-card{
  position:relative;overflow:hidden;touch-action:pan-y;
@@ -860,6 +863,23 @@ dialog::backdrop{background:var(--scrim)}
  align-items:center;gap:var(--s-3);padding:var(--s-3);border:1px solid var(--border);
  border-radius:var(--r-3);background:var(--surface);
 }
+.trash-batch{border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface);overflow:hidden}
+.trash-batch-head{
+ display:grid;grid-template-columns:auto minmax(190px,1fr) minmax(150px,.45fr) auto;
+ align-items:center;gap:var(--s-3);padding:var(--s-3);
+}
+.trash-batch-items{border-top:1px solid var(--border);background:var(--surface-2)}
+.trash-batch-items summary{
+ display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);padding:10px var(--s-3);
+ color:var(--text-2);font-size:var(--f-xs);font-weight:650;cursor:pointer;list-style:none;
+}
+.trash-batch-items summary::-webkit-details-marker{display:none}
+.trash-batch-items summary svg{width:15px;height:15px;transition:transform .15s ease}
+.trash-batch-items[open] summary svg{transform:rotate(180deg)}
+.trash-batch-items>div{display:grid;max-height:300px;overflow:auto;border-top:1px solid var(--border)}
+.trash-batch-item{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;padding:8px var(--s-3);font-size:var(--f-xs)}
+.trash-batch-item+.trash-batch-item{border-top:1px solid var(--border)}
+.trash-batch-item>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .trash-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:var(--r-2);background:var(--surface-2);color:var(--text-3)}
 .trash-copy{display:grid;gap:3px;min-width:0}.trash-copy>div{display:flex;align-items:center;gap:7px;min-width:0}
 .trash-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.trash-copy small{color:var(--text-3);font-size:var(--f-2xs)}
@@ -1121,6 +1141,7 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
  .card-check{display:block}
  .discovery-form{align-items:stretch;flex-direction:column}
  .discovery-form .primary{width:100%}
+ .discovery-heading{flex-wrap:wrap}.discovery-restart{margin-left:0;width:100%}
  .project-head,.project-section-head{flex-direction:column;align-items:stretch}
  .publication-page-head{align-items:flex-start;flex-direction:column}
  .scope-banner{align-items:stretch;flex-direction:column}
@@ -1134,9 +1155,11 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
  .trash-head{align-items:stretch;flex-direction:column}
  .trash-head .danger-button{align-self:flex-start}
  .trash-row{grid-template-columns:auto minmax(0,1fr)}
+ .trash-batch-head{grid-template-columns:auto minmax(0,1fr)}
  .trash-expiry,.trash-actions{grid-column:2}
  .trash-actions{justify-content:flex-start;flex-wrap:wrap}
  .swipe-progress,.swipe-card-head{align-items:flex-start;flex-direction:column}
+ .swipe-progress-actions{justify-content:flex-start}
  .desktop-swipe-help{display:none}.mobile-swipe-help{display:block}
  .swipe-links{justify-content:flex-start}
  .swipe-card-body{grid-template-columns:1fr}

@@ -37,8 +37,30 @@ create table if not exists public.trash_items (
   unique(source_table,record_id)
 );
 
+-- Bulk operations (currently Opportunity discovery restarts) keep their
+-- individual recoverable records, while presenting them as one dated group in
+-- the dashboard. Ordinary deletions continue to have a null batch_id.
+create table if not exists public.trash_batches (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  batch_type text not null,
+  title text not null,
+  item_count integer not null default 0 check (item_count>=0),
+  metadata jsonb not null default '{}'::jsonb,
+  deleted_at timestamptz not null default now(),
+  purge_at timestamptz not null
+);
+alter table public.trash_items add column if not exists batch_id uuid;
+do $$ begin
+  alter table public.trash_items add constraint trash_items_batch_id_fkey
+    foreign key(batch_id) references public.trash_batches(id) on delete set null;
+exception when duplicate_object then null; end $$;
+
 create index if not exists trash_items_user_deleted_idx on public.trash_items(user_id,deleted_at desc);
 create index if not exists trash_items_purge_idx on public.trash_items(purge_at);
+create index if not exists trash_items_batch_idx on public.trash_items(batch_id,deleted_at);
+create index if not exists trash_batches_user_deleted_idx on public.trash_batches(user_id,deleted_at desc);
+create index if not exists trash_batches_purge_idx on public.trash_batches(purge_at);
 create index if not exists projects_active_idx on public.projects(user_id,name) where deleted_at is null;
 create index if not exists tasks_active_idx on public.tasks(user_id,created_at desc) where deleted_at is null;
 create index if not exists publications_active_idx on public.publications(user_id,created_at desc) where deleted_at is null;
@@ -47,10 +69,16 @@ create index if not exists reads_active_idx on public.reads(user_id,created_at d
 create index if not exists opportunities_active_idx on public.opportunities(user_id,created_at desc) where deleted_at is null;
 
 alter table public.trash_items enable row level security;
+alter table public.trash_batches enable row level security;
 revoke all on public.trash_items from anon;
+revoke all on public.trash_batches from anon;
 grant select on public.trash_items to authenticated;
+grant select on public.trash_batches to authenticated;
 drop policy if exists "owners read trash" on public.trash_items;
 create policy "owners read trash" on public.trash_items for select to authenticated
+  using (auth.uid()=user_id);
+drop policy if exists "owners read trash batches" on public.trash_batches;
+create policy "owners read trash batches" on public.trash_batches for select to authenticated
   using (auth.uid()=user_id);
 
 -- Only the record owner can put something in Trash. Project collaborators keep
@@ -133,7 +161,7 @@ create or replace function public.restore_trash_item(p_trash_id uuid)
 returns void
 language plpgsql security definer set search_path=public
 as $$
-declare v_item public.trash_items%rowtype;
+declare v_item public.trash_items%rowtype;v_remaining integer;
 begin
   select * into v_item from public.trash_items where id=p_trash_id and user_id=auth.uid() for update;
   if not found then raise exception 'Trash item not found or restore is not permitted'; end if;
@@ -155,6 +183,11 @@ begin
       where id=v_item.record_id and user_id=v_item.user_id;
   end if;
   delete from public.trash_items where id=v_item.id;
+  if v_item.batch_id is not null then
+    select count(*) into v_remaining from public.trash_items where batch_id=v_item.batch_id;
+    if v_remaining=0 then delete from public.trash_batches where id=v_item.batch_id;
+    else update public.trash_batches set item_count=v_remaining where id=v_item.batch_id; end if;
+  end if;
 end;
 $$;
 
@@ -162,7 +195,7 @@ create or replace function public.delete_trash_item(p_trash_id uuid)
 returns void
 language plpgsql security definer set search_path=public
 as $$
-declare v_item public.trash_items%rowtype;
+declare v_item public.trash_items%rowtype;v_remaining integer;
 begin
   select * into v_item from public.trash_items where id=p_trash_id for update;
   if not found then return; end if;
@@ -172,6 +205,47 @@ begin
   execute format('delete from public.%I where id=$1 and user_id=$2',v_item.source_table)
     using v_item.record_id,v_item.user_id;
   delete from public.trash_items where id=v_item.id;
+  if v_item.batch_id is not null then
+    select count(*) into v_remaining from public.trash_items where batch_id=v_item.batch_id;
+    if v_remaining=0 then delete from public.trash_batches where id=v_item.batch_id;
+    else update public.trash_batches set item_count=v_remaining where id=v_item.batch_id; end if;
+  end if;
+end;
+$$;
+
+create or replace function public.restore_trash_batch(p_batch_id uuid)
+returns integer
+language plpgsql security definer set search_path=public
+as $$
+declare v_batch public.trash_batches%rowtype;v_item record;v_count integer:=0;
+begin
+  select * into v_batch from public.trash_batches
+    where id=p_batch_id and user_id=auth.uid() for update;
+  if not found then raise exception 'Trash group not found or restore is not permitted'; end if;
+  for v_item in select id from public.trash_items where batch_id=v_batch.id order by deleted_at loop
+    perform public.restore_trash_item(v_item.id);v_count:=v_count+1;
+  end loop;
+  delete from public.trash_batches where id=v_batch.id;
+  return v_count;
+end;
+$$;
+
+create or replace function public.delete_trash_batch(p_batch_id uuid)
+returns integer
+language plpgsql security definer set search_path=public
+as $$
+declare v_batch public.trash_batches%rowtype;v_item record;v_count integer:=0;
+begin
+  select * into v_batch from public.trash_batches where id=p_batch_id for update;
+  if not found then return 0; end if;
+  if coalesce(auth.role(),'')<>'service_role' and v_batch.user_id is distinct from auth.uid() then
+    raise exception 'Permanent deletion is not permitted';
+  end if;
+  for v_item in select id from public.trash_items where batch_id=v_batch.id order by deleted_at loop
+    perform public.delete_trash_item(v_item.id);v_count:=v_count+1;
+  end loop;
+  delete from public.trash_batches where id=v_batch.id;
+  return v_count;
 end;
 $$;
 
@@ -215,6 +289,8 @@ begin
   if new.trash_retention_days is distinct from old.trash_retention_days then
     update public.trash_items set purge_at=deleted_at+make_interval(days=>new.trash_retention_days)
       where user_id=new.id;
+    update public.trash_batches set purge_at=deleted_at+make_interval(days=>new.trash_retention_days)
+      where user_id=new.id;
   end if;
   return new;
 end;
@@ -226,10 +302,14 @@ create trigger profiles_update_trash_retention after update of trash_retention_d
 revoke all on function public.move_to_trash(text,uuid) from public,anon;
 revoke all on function public.restore_trash_item(uuid) from public,anon;
 revoke all on function public.delete_trash_item(uuid) from public,anon;
+revoke all on function public.restore_trash_batch(uuid) from public,anon;
+revoke all on function public.delete_trash_batch(uuid) from public,anon;
 revoke all on function public.empty_trash() from public,anon;
 revoke all on function public.purge_expired_trash() from public,anon;
 grant execute on function public.move_to_trash(text,uuid) to authenticated;
 grant execute on function public.restore_trash_item(uuid) to authenticated;
 grant execute on function public.delete_trash_item(uuid) to authenticated,service_role;
+grant execute on function public.restore_trash_batch(uuid) to authenticated;
+grant execute on function public.delete_trash_batch(uuid) to authenticated,service_role;
 grant execute on function public.empty_trash() to authenticated;
 grant execute on function public.purge_expired_trash() to authenticated,service_role;
