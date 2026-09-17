@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
  ArrowLeft, ArrowRight, Building2, BusFront, CalendarDays, ExternalLink,
- MapPin, RotateCcw, ShieldCheck, Sparkles, ThermometerSun, ThumbsDown, ThumbsUp, Users,
+ MapPin, RotateCcw, ShieldCheck, Shuffle, Sparkles, ThermometerSun, ThumbsDown, ThumbsUp, Users,
 } from "lucide-react";
 import { formatDate } from "../../lib/format";
+import { shuffleIds } from "../../lib/shuffle";
 import type { Row } from "../../entities/types";
 import { ContextFact, contextFor, safeUrl } from "./OpportunityContext";
 import { DecisionBriefView } from "./DecisionBrief";
@@ -14,7 +15,14 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
  onDecision(row:Row,status:"Shortlisted"|"Dismissed"):Promise<boolean>;
  onUndo(row:Row):Promise<boolean>;
 }){
- const review=useMemo(()=>rows.filter(row=>row.status==="New"),[rows]);
+ const available=useMemo(()=>rows.filter(row=>row.status==="New"),[rows]);
+ const [order,setOrder]=useState<string[]>([]);
+ const review=useMemo(()=>{
+  if(!order.length)return available;
+  const byId=new Map(available.map(row=>[row.id,row]));
+  const ordered=order.flatMap(id=>{const row=byId.get(id);if(!row)return [];byId.delete(id);return [row]});
+  return [...ordered,...byId.values()];
+ },[available,order]);
  const [history,setHistory]=useState<Row[]>([]);
  const [motion,setMotion]=useState<""|"left"|"right">("");
  const [dragX,setDragX]=useState(0);
@@ -34,8 +42,15 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
  const undo=async()=>{
   const previous=history.at(-1);if(!previous||busy.current)return;
   busy.current=true;
-  if(await onUndo(previous))setHistory(items=>items.slice(0,-1));
+  if(await onUndo(previous)){
+   setHistory(items=>items.slice(0,-1));
+   setOrder(ids=>[previous.id,...ids.filter(id=>id!==previous.id)]);
+  }
   busy.current=false;
+ };
+ const shuffle=()=>{
+  if(review.length<2||busy.current)return;
+  setOrder(shuffleIds(review.map(row=>row.id)));
  };
 
  const pointerDown=(event:ReactPointerEvent<HTMLElement>)=>{
@@ -74,10 +89,11 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
    if(event.key==="ArrowLeft"||pressed==="a"){event.preventDefault();void decide("left")}
    else if(event.key==="ArrowRight"||pressed==="d"||pressed==="f"){event.preventDefault();void decide("right")}
    else if(pressed==="b"||event.key==="Backspace"){event.preventDefault();void undo()}
+   else if(pressed==="s"){event.preventDefault();shuffle()}
   };
   window.addEventListener("keydown",key);
   return()=>window.removeEventListener("keydown",key);
- },[current,history]);
+ },[current,history,review]);
 
  if(!current)return <section className="swipe-finished">
   <Sparkles/><h2>Review complete</h2><p>No New opportunities remain in this view.</p>
@@ -90,8 +106,11 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
  const sources=(context.sources??[]).filter(source=>safeUrl(source.url));
  return <section className="swipe-review" aria-label="Opportunity swipe review">
   <div className="swipe-progress"><span><strong>{review.length}</strong> New opportunities remaining</span>
-   <span className="desktop-swipe-help">Keys: <kbd>←</kbd> dismiss · <kbd>→</kbd> shortlist · <kbd>B</kbd> back</span>
-   <span className="mobile-swipe-help">Swipe left to dismiss · right to shortlist</span></div>
+   <div className="swipe-progress-actions">
+    <button className="secondary swipe-shuffle" disabled={review.length<2} onClick={shuffle}><Shuffle/>Shuffle <kbd>S</kbd></button>
+    <span className="desktop-swipe-help">Keys: <kbd>←</kbd> dismiss · <kbd>→</kbd> shortlist · <kbd>B</kbd> back</span>
+    <span className="mobile-swipe-help">Swipe left to dismiss · right to shortlist</span>
+   </div></div>
   <article className={"swipe-card"+(motion?" swipe-"+motion:"")+(dragX?" is-dragging":"")}
    style={dragX?{transform:`translateX(${dragX}px) rotate(${dragX/75}deg)`,opacity:1-Math.min(Math.abs(dragX)/500,.22)}:undefined}
    onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}>

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "check": "node --experimental-strip-types --test test/decision.test.ts && npm run build",
+    "check": "node --experimental-strip-types --test test/*.test.ts && npm run build",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview"

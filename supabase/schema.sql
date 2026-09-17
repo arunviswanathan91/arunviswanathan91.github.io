@@ -1063,11 +1063,11 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_expired int; v_deleted int; v_capped int;
 begin
   update opportunities set status='Expired'
-   where user_id=p_user_id and status='New' and deadline is not null and deadline < now();
+   where user_id=p_user_id and deleted_at is null and status='New' and deadline is not null and deadline < now();
   get diagnostics v_expired = row_count;
 
   delete from opportunities o
-   where o.user_id=p_user_id and o.status in ('New','Expired') and o.job_application_id is null
+   where o.user_id=p_user_id and o.deleted_at is null and o.status in ('New','Expired') and o.job_application_id is null
      and not exists (select 1 from opportunity_feedback f where f.opportunity_id=o.id)
      and not exists (select 1 from item_tags t where t.entity_type='opportunity' and t.entity_id=o.id)
      and (o.last_seen_at < now() - interval '60 days'
@@ -1076,7 +1076,7 @@ begin
 
   delete from opportunities where id in (
     select id from opportunities
-     where user_id=p_user_id and status='New' and job_application_id is null
+     where user_id=p_user_id and deleted_at is null and status='New' and job_application_id is null
      order by match_score desc, last_seen_at desc offset p_keep);
   get diagnostics v_capped = row_count;
 

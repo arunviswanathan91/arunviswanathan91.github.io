@@ -59,22 +59,26 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local environment. T
 2. To share one project with signed-in collaborators, run `supabase/project-collaboration.sql` after
    the base schema. It is rerunnable and gives `editor` members add/edit/move access while keeping
    every delete, project reassignment, tag mutation and private-people mutation owner-only.
-3. In Database → Extensions, enable `pg_cron` and `pg_net` (needed for reminder push notifications).
-4. Store `CRON_SWEEP_SECRET` (a random string you generate) in Supabase Vault, e.g. `select vault.create_secret('<value>', 'cron_sweep_secret');`.
-5. Deploy the Edge Functions and set their secrets:
+3. Run `supabase/trash.sql`, then `supabase/opportunity-reset.sql`. These rerunnable migrations add
+   recoverable 14/30-day deletion, dated restart groups, and the atomic Opportunity discovery reset.
+   The reset archives dashboard cards but deliberately keeps the search profile, ranking feedback,
+   AI cache and quota ledger.
+4. In Database → Extensions, enable `pg_cron` and `pg_net` (needed for reminder push notifications).
+5. Store `CRON_SWEEP_SECRET` (a random string you generate) in Supabase Vault, e.g. `select vault.create_secret('<value>', 'cron_sweep_secret');`.
+6. Deploy the Edge Functions and set their secrets:
    ```bash
    supabase functions deploy telegram-webhook
    supabase functions deploy telegram-reminder-sweep
    supabase secrets set TELEGRAM_BOT_TOKEN=... SUPABASE_SERVICE_ROLE_KEY=... TELEGRAM_WEBHOOK_SECRET=... CRON_SWEEP_SECRET=...
    ```
    Never commit these values.
-6. Register the webhook with Telegram (via BotFather-issued token):
+7. Register the webhook with Telegram (via BotFather-issued token):
    ```bash
    curl -X POST https://api.telegram.org/bot<TOKEN>/setWebhook \
      -d url=https://<project-ref>.functions.supabase.co/telegram-webhook \
      -d secret_token=<TELEGRAM_WEBHOOK_SECRET>
    ```
-7. Schedule the reminder sweep to run every minute:
+8. Schedule the reminder sweep to run every minute:
    ```sql
    select cron.schedule(
      'telegram-reminder-sweep',

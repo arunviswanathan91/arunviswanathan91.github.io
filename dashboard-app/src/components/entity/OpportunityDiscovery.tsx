@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { CheckCircle2, LoaderCircle, Search, TriangleAlert } from "lucide-react";
+import { CheckCircle2, LoaderCircle, RotateCcw, Search, TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { AssessmentPreferences } from "./AssessmentPreferences";
+import { useConfirmDialog } from "../ui/ConfirmDialog";
 
 type Phase = "idle" | "starting" | "queued" | "running" | "done" | "failed";
 interface StartResponse {
@@ -25,15 +26,18 @@ interface RunRow {
  stats: RunStats | null;
  error: string | null;
 }
+interface RestartResponse {archived?:number;batch_id?:string|null;runs_cleared?:number}
 
 const active = (phase: Phase) => phase === "starting" || phase === "queued" || phase === "running";
 
-export function OpportunityDiscovery({ onComplete }: { onComplete(): void }) {
+export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(): void; currentCount:number }) {
  const [query, setQuery] = useState("");
  const [phase, setPhase] = useState<Phase>("idle");
+ const [restarting,setRestarting]=useState(false);
  const [message, setMessage] = useState("Search job and postdoc sources using your profile filters.");
  const timer = useRef<number | null>(null);
  const generation = useRef(0);
+ const {ask,confirmation}=useConfirmDialog();
 
  useEffect(() => () => {
   generation.current++;
@@ -118,14 +122,37 @@ export function OpportunityDiscovery({ onComplete }: { onComplete(): void }) {
   follow(data.run_id, current, Date.now());
  };
 
+ const restart=()=>ask({
+  title:"Restart Opportunity discovery?",
+  message:`This will move ${currentCount} current opportunit${currentCount===1?"y":"ies"} into one recoverable Trash group and clear crawler history so unchanged listings can be discovered again. Your search profile, ranking feedback, AI cache and quota limits will be kept.`,
+  confirmLabel:"Archive and restart",
+ },async()=>{
+  if(!supabase)return;
+  generation.current++;
+  if(timer.current!==null)window.clearTimeout(timer.current);
+  setRestarting(true);setMessage("Archiving the current discovery set…");
+  const {data,error}=await supabase.rpc("restart_opportunity_discovery");
+  if(error){setPhase("failed");setMessage(error.message);setRestarting(false);return}
+  const result=(data??{}) as RestartResponse;
+  const archived=Number(result.archived??0);
+  setQuery("");setPhase("idle");setRestarting(false);
+  setMessage(archived
+   ?`Archived ${archived} opportunit${archived===1?"y":"ies"} as one Trash group. Enter a query to start a clean search.`
+   :"Discovery history was reset. Enter a query to start a clean search.");
+  onComplete();window.dispatchEvent(new CustomEvent("dash:trash-changed"));
+ });
+
  const Icon = phase === "done" ? CheckCircle2 : phase === "failed" ? TriangleAlert : active(phase) ? LoaderCircle : Search;
  return <section className={`discovery-search discovery-${phase}`}>
-  <div className="discovery-heading">
+ <div className="discovery-heading">
    <span className="discovery-icon"><Icon className={active(phase) ? "spin" : ""}/></span>
    <div>
     <h2>Find opportunities</h2>
     <p>Search live job and postdoc sources. New matches are added to this workspace.</p>
    </div>
+   <button type="button" className="secondary discovery-restart" disabled={active(phase)||restarting} onClick={restart}>
+    {restarting?<LoaderCircle className="spin"/>:<RotateCcw/>}{restarting?"Restarting":"Restart discovery"}
+   </button>
   </div>
   <form onSubmit={submit} className="discovery-form">
    <input className="input" value={query} maxLength={180} disabled={active(phase)}
@@ -139,5 +166,6 @@ export function OpportunityDiscovery({ onComplete }: { onComplete(): void }) {
   </form>
   <p className="discovery-status" role="status" aria-live="polite">{message}</p>
   <AssessmentPreferences disabled={active(phase)}/>
+  {confirmation}
  </section>;
 }

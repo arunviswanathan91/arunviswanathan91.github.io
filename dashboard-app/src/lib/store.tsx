@@ -40,7 +40,11 @@ export interface PublicationStageEvent extends Row{
 }
 export interface TrashItem extends Row{
  id:string;user_id:string;source_table:string;record_id:string;item_type:string;
- title:string;deleted_at:string;purge_at:string;
+ title:string;batch_id:string|null;deleted_at:string;purge_at:string;
+}
+export interface TrashBatch extends Row{
+ id:string;user_id:string;batch_type:string;title:string;item_count:number;
+ metadata:Record<string,unknown>;deleted_at:string;purge_at:string;
 }
 export type ViewKey=EntityKey|"home"|"project"|"publication"|"settings"|"trash";
 export type Theme="system"|"light"|"dark";
@@ -59,6 +63,7 @@ interface DataValue{
  publicationNodes:TableStore<PublicationNode>;
  publicationStageEvents:TableStore<PublicationStageEvent>;
  trashItems:TableStore<TrashItem>;
+ trashBatches:TableStore<TrashBatch>;
  tags:TagStore;
  loading:boolean;
  notices:NoticeItem[];
@@ -68,6 +73,8 @@ interface DataValue{
  deleteProject(id:string):Promise<void>;
  restoreTrashItem(id:string):Promise<string|null>;
  purgeTrashItem(id:string):Promise<string|null>;
+ restoreTrashBatch(id:string):Promise<string|null>;
+ purgeTrashBatch(id:string):Promise<string|null>;
  emptyTrash():Promise<string|null>;
 }
 interface UiValue{
@@ -124,7 +131,8 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  const projectFields=useTable<ProjectField>("project_fields","id,user_id,project_id,label,value,field_type,position,created_at,updated_at",{key:"position",dir:"asc"});
  const publicationNodes=useTable<PublicationNode>("publication_nodes","id,user_id,publication_id,title,status,assignee_id,due_at,position,notes,completed_at,created_at,updated_at",{key:"position",dir:"asc"});
  const publicationStageEvents=useTable<PublicationStageEvent>("publication_stage_events","id,user_id,publication_id,from_stage,to_stage,created_at",{key:"created_at",dir:"desc"});
- const trashItems=useTable<TrashItem>("trash_items","id,user_id,source_table,record_id,item_type,title,deleted_at,purge_at",{key:"deleted_at",dir:"desc"},{softDelete:false});
+ const trashItems=useTable<TrashItem>("trash_items","id,user_id,source_table,record_id,item_type,title,batch_id,deleted_at,purge_at",{key:"deleted_at",dir:"desc"},{softDelete:false});
+ const trashBatches=useTable<TrashBatch>("trash_batches","id,user_id,batch_type,title,item_count,metadata,deleted_at,purge_at",{key:"deleted_at",dir:"desc"},{softDelete:false});
  const tags=useTags(userId);
 
  const tables=useMemo(()=>({tasks,publications,documents,jobs,reminders,reads,opportunities}),
@@ -154,7 +162,7 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  },[userId,refreshTelegram]);
 
  const loading=tasks.loading||publications.loading||documents.loading||jobs.loading||reminders.loading||reads.loading||opportunities.loading||
-  projects.loading||people.loading||projectPeople.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||publicationStageEvents.loading||trashItems.loading||tags.loading;
+  projects.loading||people.loading||projectPeople.loading||projectStages.loading||projectLinks.loading||projectFields.loading||publicationNodes.loading||publicationStageEvents.loading||trashItems.loading||trashBatches.loading||tags.loading;
 
  const notices=useMemo(()=>{
   const all:NoticeItem[]=[];
@@ -176,10 +184,10 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
  },[tables,projects,people,projectPeople,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,tags]);
 
  useEffect(()=>{
-  const refresh=()=>void trashItems.refetch(true);
+  const refresh=()=>{void trashItems.refetch(true);void trashBatches.refetch(true)};
   window.addEventListener("dash:trash-changed",refresh);
   return()=>window.removeEventListener("dash:trash-changed",refresh);
- },[trashItems.refetch]);
+ },[trashItems.refetch,trashBatches.refetch]);
 
  const restoreTrashItem=useCallback(async(id:string)=>{
   if(!supabase)return "Supabase is not configured.";
@@ -193,20 +201,32 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
   if(error)return error.message;
   await trashItems.refetch(true);return null;
  },[trashItems]);
+ const restoreTrashBatch=useCallback(async(id:string)=>{
+  if(!supabase)return "Supabase is not configured.";
+  const {error}=await supabase.rpc("restore_trash_batch",{p_batch_id:id});
+  if(error)return error.message;
+  await Promise.all([trashItems.refetch(true),trashBatches.refetch(true)]);refreshAll();return null;
+ },[trashItems,trashBatches,refreshAll]);
+ const purgeTrashBatch=useCallback(async(id:string)=>{
+  if(!supabase)return "Supabase is not configured.";
+  const {error}=await supabase.rpc("delete_trash_batch",{p_batch_id:id});
+  if(error)return error.message;
+  await Promise.all([trashItems.refetch(true),trashBatches.refetch(true)]);return null;
+ },[trashItems,trashBatches]);
  const emptyTrash=useCallback(async()=>{
   if(!supabase)return "Supabase is not configured.";
   const {error}=await supabase.rpc("empty_trash");
   if(error)return error.message;
-  await trashItems.refetch(true);return null;
- },[trashItems]);
+  await Promise.all([trashItems.refetch(true),trashBatches.refetch(true)]);return null;
+ },[trashItems,trashBatches]);
 
  const deleteProject=useCallback(async(id:string)=>{
   await projects.remove(id);
  },[projects]);
 
  const dataValue=useMemo(()=>({userId,tables,projects,people,projectPeople,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,
-  trashItems,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,emptyTrash}),
-  [userId,tables,projects,people,projectPeople,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,trashItems,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,emptyTrash]);
+  trashItems,trashBatches,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,restoreTrashBatch,purgeTrashBatch,emptyTrash}),
+  [userId,tables,projects,people,projectPeople,projectStages,projectLinks,projectFields,publicationNodes,publicationStageEvents,trashItems,trashBatches,tags,loading,notices,refreshAll,chatId,refreshTelegram,deleteProject,restoreTrashItem,purgeTrashItem,restoreTrashBatch,purgeTrashBatch,emptyTrash]);
 
  // ---- UI state ----
  const initial=initialRoute();
@@ -245,10 +265,10 @@ export function StoreProvider({userId,children}:{userId:string;children:ReactNod
    void tasks.refetch(true);void publications.refetch(true);void documents.refetch(true);void reminders.refetch(true);void reads.refetch(true);
    void projects.refetch(true);void people.refetch(true);void projectPeople.refetch(true);void projectStages.refetch(true);void projectLinks.refetch(true);
    void projectFields.refetch(true);void publicationNodes.refetch(true);void publicationStageEvents.refetch(true);
-  }else if(view==="trash")void trashItems.refetch(true);
+  }else if(view==="trash"){void trashItems.refetch(true);void trashBatches.refetch(true)}
   else if(ENTITY_ORDER.includes(view as EntityKey))void tables[view as EntityKey].refetch(true);
  },[view,scope,tasks.refetch,publications.refetch,documents.refetch,reminders.refetch,reads.refetch,projects.refetch,
-  people.refetch,projectPeople.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch,publicationStageEvents.refetch,trashItems.refetch]);
+  people.refetch,projectPeople.refetch,projectStages.refetch,projectLinks.refetch,projectFields.refetch,publicationNodes.refetch,publicationStageEvents.refetch,trashItems.refetch,trashBatches.refetch]);
 
  const setQuery=useCallback((k:EntityKey,patch:Partial<Query>)=>setQueries(v=>({...v,[k]:{...v[k],...patch}})),[]);
  useEffect(()=>{
