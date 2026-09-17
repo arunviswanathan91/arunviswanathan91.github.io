@@ -63,7 +63,9 @@ export class Db {
    types: d.types?.length ? d.types : ["Postdoc", "Research scientist", "Industry R&D", "Fellowship"],
    homeCity: d.home_city ?? "Thiruvananthapuram",
    indiaCities: d.india_cities ?? [],
-   countries: d.countries?.length ? d.countries : ["IN"],
+   // An empty list is valid for a remote-only search. Never infer search
+   // geography from home city, citizenship or current residence.
+   countries: Array.isArray(d.countries) ? d.countries : ["DE","NL","SE","NO","DK","FI","CH","GB","FR","BE","AT","IE"],
    remoteOk: d.remote_ok ?? true,
    facultyOk: d.faculty_ok ?? false,
    yearsExperience: d.years_experience ?? 0,

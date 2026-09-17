@@ -1,10 +1,7 @@
 import { queryRelevance } from "./query.js";
 import { annualInr } from "../normalize/salary.js";
-import { isKerala, isMetro, normalizeCity } from "../normalize/location.js";
 import { isSeniorLeadership, JUNK_TITLE, requiredPostPhdYears } from "../normalize/type.js";
 import type { NormalizedOpportunity, Scored, SearchProfile } from "../types.js";
-
-const ABROAD_ALLOW = new Set(["DE","NL","SE","CH","GB","US","SG","AU","CA","FR","BE","DK","NO","FI","AT","IE","JP"]);
 
 export interface FilterVerdict { keep: boolean; reason?: string }
 
@@ -24,9 +21,8 @@ export function hardFilter(o: NormalizedOpportunity, p: SearchProfile): FilterVe
  if (o.opportunityType === "Faculty" && !p.facultyOk) return { keep: false, reason: "faculty_excluded" };
 
  const locationOk =
-  o.isRemote ||
-  (o.country === "IN") ||
-  (o.country !== null && (p.countries.includes(o.country) || ABROAD_ALLOW.has(o.country))) ||
+  (o.isRemote && p.remoteOk) ||
+  (!o.isRemote && o.country !== null && (p.countries.includes("*") || p.countries.includes(o.country))) ||
   o.country === null;                       // unknown location is not a rejection
  if (!locationOk) return { keep: false, reason: "location_excluded" };
 
@@ -53,31 +49,14 @@ const ROLE_POINTS: Record<string, number> = {
  "Staff scientist": 12, "Other": 8, "Faculty": 6,
 };
 
-const SCANDINAVIA = new Set(["SE", "NO", "DK", "FI"]);
-const EUROPE_PREFERRED = new Set(["DE", "NL", "CH", "GB", "FR", "BE", "AT", "IE"]);
-
 /**
- * Scored by location alone, not by opportunity type: a genuine postdoc in
- * Europe is frequently advertised under a plain "job"/"scientist" title, so
- * gating on the (unreliable) type classification would miss exactly the
- * postings this is meant to surface. Scandinavia is weighted highest per an
- * explicit preference; India is scored well across the board since a role
- * there is visa-free, while a Scandinavian/European posting is the one
- * worth crossing a border for.
+ * All explicitly selected destinations are equal. Citizenship, residence and
+ * home city must never increase a country's search or ranking weight.
  */
 function locationScore(o: NormalizedOpportunity, p: SearchProfile): { value: number; note: string } {
- const city = normalizeCity(o.city);
- const home = normalizeCity(p.homeCity);
-
- if (o.country && SCANDINAVIA.has(o.country)) return { value: 15, note: o.locationRaw ?? o.country };
- if (city && home && city === home) return { value: 14, note: o.city! };
- if (isKerala(o.city)) return { value: 14, note: o.city! };
- if (o.country && EUROPE_PREFERRED.has(o.country)) return { value: 13, note: o.locationRaw ?? o.country };
- if (o.country === "IN") return { value: 13, note: o.locationRaw ?? "India" };
  if (o.isRemote) return { value: 12, note: "remote" };
- if (isMetro(o.city)) return { value: 12, note: o.city! };
- if (o.country && p.countries.includes(o.country)) return { value: 9, note: o.locationRaw ?? o.country };
- if (o.country) return { value: 6, note: o.locationRaw ?? o.country };
+ if (o.country && (p.countries.includes("*") || p.countries.includes(o.country))) return { value: 15, note: o.locationRaw ?? o.country };
+ if (o.country) return { value: 0, note: `${o.locationRaw ?? o.country}, outside selected destinations` };
  return { value: 6, note: "location not stated" };
 }
 

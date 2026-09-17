@@ -363,7 +363,7 @@ eq("org key on null is null", orgKey(null), null);
 const profile: SearchProfile = {
  id: null, userId: "u1", terms: ["pancreatic cancer postdoc"],
  types: ["Postdoc", "Research scientist", "Industry R&D", "Fellowship"],
- homeCity: "Thiruvananthapuram", indiaCities: [], countries: ["IN"],
+ homeCity: "Thiruvananthapuram", indiaCities: [], countries: ["SE"],
  remoteOk: true, facultyOk: false, yearsExperience: 0,
  salaryFloorInr: 1200000, rejectBelowFloor: true, blockedOrgs: ["blockedcorp"],
  maxLlmCalls: 40, maxCrawlPages: 120, maxHttpRequests: 250,
@@ -384,6 +384,11 @@ function makeOpp(over: Partial<NormalizedOpportunity>): NormalizedOpportunity {
 }
 
 check("hard filter keeps a normal fresh posting", hardFilter(makeOpp({}), profile).keep);
+eq("Indian domicile does not make India a search destination", hardFilter(makeOpp({ country:"IN",city:"Chennai",locationRaw:"Chennai, India" }), profile).reason, "location_excluded");
+check("an explicitly selected India destination is allowed",hardFilter(makeOpp({country:"IN"}),{...profile,countries:["IN"]}).keep);
+check("worldwide accepts a country without treating domicile as preference",hardFilter(makeOpp({country:"AU"}),{...profile,countries:["*"]}).keep);
+check("remote roles are allowed only when selected",hardFilter(makeOpp({country:"US",isRemote:true}),profile).keep);
+eq("remote roles can be disabled independently",hardFilter(makeOpp({country:"US",isRemote:true}),{...profile,remoteOk:false}).reason,"location_excluded");
 eq("hard filter rejects a passed deadline", hardFilter(makeOpp({ deadline: "2020-01-01T00:00:00Z" }), profile).reason, "deadline_passed");
 eq("hard filter rejects junk titles", hardFilter(makeOpp({ title: "Marketing Internship" }), profile).reason, "junk_title");
 eq("hard filter rejects blocked org", hardFilter(makeOpp({ organization: "BlockedCorp Inc" }), profile).reason, "blocked_org");
@@ -414,6 +419,8 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("Europe query rejects an otherwise relevant US postdoc", !queryRelevance(makeOpp({
   title: "Cancer Biology Postdoctoral Fellow", descriptionText: "Cancer research", city: "New York", country: "US", region: "North America",
  }), "cancer biology postdoc in Europe").keep);
+ check("Japan query accepts a Japanese result",queryRelevance(makeOpp({country:"JP",city:"Tokyo",locationRaw:"Tokyo, Japan"}),"cancer biology postdoc in Japan").keep);
+ check("Asia query rejects a European result",!queryRelevance(makeOpp({country:"DE",city:"Berlin",locationRaw:"Berlin, Germany"}),"cancer biology postdoc in Asia").keep);
  check("exact query match ranks above a broad cancer match",
   scoreOpportunity(exact, profile, 0, "pancreatic cancer postdoc").score >
   scoreOpportunity(related, profile, 0, "pancreatic cancer postdoc").score);
@@ -447,12 +454,12 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
 }
 
 {
- const scandi = scoreOpportunity(makeOpp({ country: "SE", city: "Stockholm" }), profile);
- const india = scoreOpportunity(makeOpp({ country: "IN", city: "Bengaluru", title: "Research Scientist", opportunityType: "Research scientist" }), profile);
- const elsewhere = scoreOpportunity(makeOpp({ country: "JP", city: "Tokyo" }), profile);
- check("Scandinavia scores at least as well as India (explicit preference)", scandi.breakdown.location.value >= india.breakdown.location.value);
- check("Scandinavia scores higher than a non-preferred abroad country", scandi.breakdown.location.value > elsewhere.breakdown.location.value);
- check("a job-titled postdoc-equivalent in India still gets solid location credit", india.breakdown.location.value >= 12);
+ const selected={...profile,countries:["SE","JP","AU"]};
+ const scandi = scoreOpportunity(makeOpp({ country: "SE", city: "Stockholm" }), selected);
+ const japan = scoreOpportunity(makeOpp({ country: "JP", city: "Tokyo" }), selected);
+ const india = scoreOpportunity(makeOpp({ country: "IN", city: "Bengaluru" }), selected);
+ eq("all selected destination countries receive equal location weight",scandi.breakdown.location.value,japan.breakdown.location.value);
+ check("an unselected country receives no location preference",india.breakdown.location.value<japan.breakdown.location.value);
  check("score is within 0..100", scandi.score >= 0 && scandi.score <= 100);
  check("fit_reason is a non-empty deterministic string", scandi.reason.length > 20 && scandi.reason.includes("Topic"));
  check("fit label matches score band", (scandi.score >= 70) === (scandi.fit === "Strong") || scandi.fit !== "Strong" || scandi.score >= 70);

@@ -678,7 +678,7 @@ create table if not exists discovery_profiles (
   types text[] not null default '{Postdoc,Research scientist,Fellowship}',
   home_city text not null default 'Thiruvananthapuram',
   india_cities text[] not null default '{Thiruvananthapuram,Kochi,Bengaluru,Hyderabad,Chennai,Pune,Mumbai,New Delhi}',
-  countries text[] not null default '{IN}',
+  countries text[] not null default '{DE,NL,SE,NO,DK,FI,CH,GB,FR,BE,AT,IE,ES,IT,PT,PL,CZ}',
   remote_ok boolean not null default true,
   faculty_ok boolean not null default false,
   years_experience integer not null default 0,

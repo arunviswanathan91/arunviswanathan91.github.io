@@ -56,6 +56,10 @@ npm run check           # offline checks — no network, no database
 | `OPENROUTER_API_KEY` | no | primary context provider; Groq and Gemini are automatic fallbacks |
 | `OPENROUTER_MODEL` | no | defaults to `stealth/union-alpha`; all OpenRouter requests enforce zero prompt/completion/request prices |
 
+Search geography comes only from `discovery_profiles.countries` (edited by the dashboard's
+**Search destinations** control) plus the separate remote toggle. Nationality, current residence,
+home city and home currency are assessment inputs only; they never add or boost a search country.
+
 For GitHub Actions, add `OPENROUTER_API_KEY` under repository Settings → Secrets and variables →
 Actions → New repository secret. Never use a `VITE_` key or put it in the frontend. The workflow
 pins `OPENROUTER_MODEL=stealth/union-alpha`. For an existing Cloud Run deployment, configure the
