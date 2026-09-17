@@ -105,7 +105,7 @@ const decisionPayload = () => ({
  eq("OpenRouter key whitespace is trimmed", env.openrouterApiKey, "test-key");
  eq("OpenRouter works without Gemini or Groq", contextProviders(env), ["openrouter"]);
  eq("blank AI keys are disabled", contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: " ", GEMINI_API_KEY: "", GROQ_API_KEY: "" })), []);
- eq("existing providers precede OpenRouter", contextProviders(readEnv({ ...base, GEMINI_API_KEY: "a", GROQ_API_KEY: "b", OPENROUTER_API_KEY: "c" })), ["gemini", "groq", "openrouter"]);
+ eq("OpenRouter is primary with Groq and Gemini fallbacks", contextProviders(readEnv({ ...base, GEMINI_API_KEY: "a", GROQ_API_KEY: "b", OPENROUTER_API_KEY: "c" })), ["openrouter", "groq", "gemini"]);
  const request = openrouterRequest(env.openrouterModel, "ROLE: Researcher");
  eq("Union Alpha uses JSON mode, not unsupported schema mode", request.response_format, { type: "json_object" });
  eq("OpenRouter price ceiling is zero", request.provider.max_price, { prompt: 0, completion: 0, request: 0 });
@@ -133,7 +133,7 @@ const decisionPayload = () => ({
  eq("OpenRouter request uses official chat endpoint", postedUrl, "https://openrouter.ai/api/v1/chat/completions");
  check("OpenRouter integration sends requested model", (postedBody as { model: string }).model === "stealth/union-alpha");
  eq("saved context records provider and model", [result.provider, result.model], ["openrouter", "stealth/union-alpha"]);
- eq("provider output becomes a versioned decision brief",result.brief?.version,2);
+ eq("provider output becomes a versioned decision brief",result.brief?.version,3);
  eq("rich request retains zero price ceiling",(postedBody as ReturnType<typeof openrouterRequest>).provider.max_price,{prompt:0,completion:0,request:0});
  let placeholdersRejected = false;
  const placeholders = { postJson: async () => ({ choices: [{ message: { content: JSON.stringify(Object.fromEntries(Object.keys(payload).map(key => [key, UNKNOWN]))) } }] }) } as unknown as Http;
@@ -214,6 +214,8 @@ eq("region europe", regionOf(null, "DE", false), "Europe");
 eq("locKey remote wins", locKey("Paris", "FR", true), "REMOTE");
 eq("locKey falls back to country", locKey(null, "SE", false), "SE");
 eq("parseLocation splits city+country", parseLocation("Bengaluru, Karnataka, India"), { city: "Bengaluru", country: "IN" });
+eq("US state supplies a missing country", parseLocation("New York, New York"), { city: "New York", country: "US" });
+eq("Indian city supplies a missing country", parseLocation("Chennai"), { city: "Chennai", country: "IN" });
 check("looksRemote detects wfh", looksRemote("This is a fully remote position"));
 check("looksRemote false for onsite", !looksRemote("This is an onsite position in Munich"));
 
@@ -224,6 +226,7 @@ eq("classifies research scientist", classifyType("Research Scientist, Immuno-Onc
 eq("classifies fellowship", classifyType("Early Career Fellowship Programme", ""), "Fellowship");
 eq("unclassified falls back to Other", classifyType("Something Unrelated Entirely", ""), "Other");
 check("junk title regex catches intern", JUNK_TITLE.test("Summer Internship in Marketing"));
+check("junk title regex catches vacancy roundups", JUNK_TITLE.test("Research Update: Career options with ResearchersJob"));
 check("junk title regex spares postdoc", !JUNK_TITLE.test("Postdoctoral Fellow"));
 eq("extracts required years", requiredPostPhdYears("Requires 5+ years post-doctoral experience"), 5);
 eq("no years mentioned is null", requiredPostPhdYears("A great opportunity for early career researchers"), null);
@@ -408,6 +411,9 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("explicit query keeps a broader cancer postdoc as a related result", queryRelevance(related, "pancreatic cancer postdoc").keep);
  check("explicit query rejects an unrelated laser postdoc", !queryRelevance(laser, "pancreatic cancer postdoc").keep);
  check("explicit query rejects an unrelated astronomy postdoc", !queryRelevance(galaxy, "pancreatic cancer postdoc").keep);
+ check("Europe query rejects an otherwise relevant US postdoc", !queryRelevance(makeOpp({
+  title: "Cancer Biology Postdoctoral Fellow", descriptionText: "Cancer research", city: "New York", country: "US", region: "North America",
+ }), "cancer biology postdoc in Europe").keep);
  check("exact query match ranks above a broad cancer match",
   scoreOpportunity(exact, profile, 0, "pancreatic cancer postdoc").score >
   scoreOpportunity(related, profile, 0, "pancreatic cancer postdoc").score);

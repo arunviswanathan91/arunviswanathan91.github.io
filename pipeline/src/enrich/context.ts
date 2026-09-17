@@ -32,7 +32,9 @@ const FIELDS = ["institution", "place", "population", "climate", "transport", "l
 export type ContextProvider = "gemini" | "groq" | "openrouter";
 
 export function contextProviders(env: Env): ContextProvider[] {
- return (["gemini", "groq", "openrouter"] as const).filter(provider =>
+ // OpenRouter's zero-price Union Alpha route is the primary decision-brief
+ // provider. Groq and Gemini remain fallbacks when it is busy or unavailable.
+ return (["openrouter", "groq", "gemini"] as const).filter(provider =>
   Boolean(env[`${provider}ApiKey`]?.trim()));
 }
 

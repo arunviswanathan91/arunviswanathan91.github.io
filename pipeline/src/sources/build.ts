@@ -49,7 +49,7 @@ export function buildOpportunity(input: BuildInput): NormalizedOpportunity | nul
  const description = (input.description ?? "").trim();
  const canon = canonicalizeUrl(input.url);
 
- const parsedLoc = parseLocation(input.locationRaw ?? null);
+ const parsedLoc = parseLocation(input.locationRaw ?? input.city ?? null);
  const city = input.city ?? parsedLoc.city;
  const country = normalizeCountry(input.country ?? null) ?? parsedLoc.country;
  const isRemote = input.isRemote ?? looksRemote(title + " " + description.slice(0, 2000));

@@ -63,6 +63,16 @@ jobs:
       - name: Discover or backfill
         working-directory: pipeline
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ github.event.inputs.mode || 'discovery' }}
+          INPUT_QUERY: ${{ github.event.inputs.query || github.event.client_payload.query || '' }}
+          INPUT_CHAT_ID: ${{ github.event.client_payload.chat_id || '' }}
+          INPUT_RUN_ID: ${{ github.event.client_payload.run_id || '' }}
+          INPUT_CLAIM_TOKEN: ${{ github.event.client_payload.claim_token || '' }}
+          INPUT_TRIGGER: ${{ github.event.client_payload.trigger || '' }}
+          INPUT_BATCH: ${{ github.event.inputs.batchSize || '25' }}
+          INPUT_REFRESH: ${{ github.event.inputs.refreshExisting || 'false' }}
+          INPUT_MAX_LLM: ${{ github.event.inputs.maxLlmCalls || '40' }}
           SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DISCOVERY_USER_ID: ${{ vars.DISCOVERY_USER_ID }}
@@ -80,22 +90,22 @@ jobs:
           MODE="discovery"
           BATCH="25"
           REFRESH="false"
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then TRIGGER="telegram"; fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then TRIGGER="${INPUT_TRIGGER:-telegram}"; fi
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             TRIGGER="manual"
-            MODE="${{ github.event.inputs.mode || 'discovery' }}"
-            BATCH="${{ github.event.inputs.batchSize || '25' }}"
-            REFRESH="${{ github.event.inputs.refreshExisting || 'false' }}"
+            MODE="$INPUT_MODE"
+            BATCH="$INPUT_BATCH"
+            REFRESH="$INPUT_REFRESH"
           fi
           ARGS=(
             run
             --trigger "$TRIGGER"
             --mode "$MODE"
-            --query "${{ github.event.inputs.query || github.event.client_payload.query || '' }}"
-            --chat-id "${{ github.event.client_payload.chat_id || '' }}"
-            --run-id "${{ github.event.client_payload.run_id || '' }}"
-            --claim-token "${{ github.event.client_payload.claim_token || '' }}"
-            --max-llm "${{ github.event.inputs.maxLlmCalls || '40' }}"
+            --query "$INPUT_QUERY"
+            --chat-id "$INPUT_CHAT_ID"
+            --run-id "$INPUT_RUN_ID"
+            --claim-token "$INPUT_CLAIM_TOKEN"
+            --max-llm "$INPUT_MAX_LLM"
             --context-batch "$BATCH"
           )
           if [ "$REFRESH" = "true" ]; then ARGS+=(--refresh-context); fi

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useData } from "../../lib/store";
@@ -9,7 +9,7 @@ const subjects = ["Cancer biology", "Cancer immunology", "Computational biology"
 const empty: Preferences = { interests: [], avoid: [], nationality: "", residence: "", household: 1, housing: "shared", careerGoal: "" };
 const split = (text: string) => [...new Set(text.split(/[,;\n]/).map(s => s.trim()).filter(Boolean))].slice(0, 12);
 
-export function AssessmentPreferences({disabled=false}:{disabled?:boolean}) {
+export function AssessmentPreferences({disabled=false,registerSave}:{disabled?:boolean;registerSave?:(save:()=>Promise<boolean>)=>void}) {
  const { userId } = useData();
  const [prefs, setPrefs] = useState<Preferences>(empty);
  const [topics, setTopics] = useState("");
@@ -36,11 +36,10 @@ export function AssessmentPreferences({disabled=false}:{disabled?:boolean}) {
   })();
   return () => { current = false; };
  }, [userId]);
- const save = async (event: FormEvent) => {
-  event.preventDefault();
-  if (!supabase || loading || loadError || saving || disabled) return;
+ const persist = useCallback(async () => {
+  if (!supabase || loading || loadError || saving || disabled) return false;
   const interests = split(topics);
-  if (!interests.length) { setMessage("Choose at least one research interest."); return; }
+  if (!interests.length) { setMessage("Choose at least one research interest."); return false; }
   setSaving(true); setMessage("");
   try {
    // Re-read immediately before saving so unrelated ontology settings survive.
@@ -55,9 +54,12 @@ export function AssessmentPreferences({disabled=false}:{disabled?:boolean}) {
    if (result.error) throw result.error;
    setPrefs(value);
    setMessage("Saved. New searches and the next AI context backfill will use these preferences. Existing briefs show the preferences used when they were generated.");
-  } catch (error) { setMessage(error instanceof Error ? error.message : "Preferences could not be saved. Please try again."); }
+   return true;
+  } catch (error) { setMessage(error instanceof Error ? error.message : "Preferences could not be saved. Please try again."); return false; }
   finally { setSaving(false); }
- };
+ },[avoid,disabled,loadError,loading,prefs,saving,topics,userId]);
+ useEffect(()=>{registerSave?.(persist)},[persist,registerSave]);
+ const save = (event: FormEvent) => { event.preventDefault(); void persist(); };
  const selected = split(topics);
  return <details className="assessment-preferences">
   <summary><SlidersHorizontal/>Research & relocation preferences</summary>
@@ -79,7 +81,7 @@ export function AssessmentPreferences({disabled=false}:{disabled?:boolean}) {
      <div className="field"><span>Housing assumption</span><SelectMenu label="Housing assumption" value={prefs.housing} options={[{value:"shared",label:"Shared accommodation"},{value:"private",label:"Private accommodation"}]} onChange={housing=>setPrefs({...prefs,housing:housing as Preferences["housing"]})}/></div>
     </div>
     <label className="field">Career direction<textarea className="input" value={prefs.careerGoal} maxLength={400} onChange={e => setPrefs({...prefs,careerGoal:e.target.value})} placeholder="e.g. Build translational cancer research skills, then move into industry"/></label>
-    <p className="muted-note">These preferences are sent to the configured AI provider with public vacancy information. No account email or credentials are included. Destination countries still follow your discovery profile.</p>
+    <p className="muted-note">These preferences are sent to the configured AI provider with public vacancy information. No account email or credentials are included. Destination countries still follow your discovery profile. Current values are also saved automatically before a dashboard search starts.</p>
     <button className="primary" type="submit">{saving ? "Saving…" : loading ? "Loading…" : "Save preferences"}</button>
    </fieldset>
    {message && <p role="status">{message}</p>}
