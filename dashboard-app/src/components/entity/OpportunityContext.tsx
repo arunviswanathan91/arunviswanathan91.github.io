@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import { formatDate } from "../../lib/format";
 import type { Row } from "../../entities/types";
+import type { DecisionBrief } from "../../lib/decision";
+import { DecisionBriefView } from "./DecisionBrief";
 
 export interface OpportunityContext {
  institution?:string;
@@ -14,8 +16,10 @@ export interface OpportunityContext {
  transport?:string;
  living?:string;
  inclusion?:string;
- sources?:{label?:string;url?:string}[];
+ sources?:{label?:string;url?:string;checked_at?:string}[];
  generated_at?:string;
+ brief?:DecisionBrief;
+ references?:{label:string;url:string;kind:string}[];
 }
 const UNKNOWN_CONTEXT="Not enough reliable information collected.";
 const contextFields=["institution","place","population","climate","transport","living","inclusion"] as const;
@@ -35,6 +39,7 @@ export const contextFor=(row:Row):OpportunityContext=>{
 
 export function OpportunityContextDetails({row}:{row:Row}){
  const context=contextFor(row);
+ if(context.brief?.version===2)return <div className="field-wide"><DecisionBriefView key={row.id} context={context}/></div>;
  const sources=(context.sources??[]).filter(source=>safeUrl(source.url));
  const ready=Boolean(context.institution||context.place||context.living||context.inclusion);
  return <section className="opportunity-context-details field-wide" aria-label="AI decision context">

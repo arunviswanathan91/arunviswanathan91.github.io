@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Env } from "./config.js";
-import { hasMeaningfulContext } from "./enrich/context.js";
+import { assessmentPreferences, needsAssessment } from "./enrich/assessment.js";
 import type { SearchProfile, SourceOutcome } from "./types.js";
 import type { Candidate } from "./dedupe/cascade.js";
 
@@ -29,6 +29,8 @@ export interface ContextCandidate {
  description_excerpt: string | null;
  score_breakdown: Record<string, unknown> | null;
  enrichment: string | null;
+ salary_display?: string | null;
+ salary_is_predicted?: boolean | null;
 }
 
 /** Thin wrapper over the service-role client: every query in one place. */
@@ -52,7 +54,7 @@ export class Db {
  async loadProfile(userId: string): Promise<SearchProfile> {
   const { data } = await this.client
    .from("discovery_profiles").select("*")
-   .eq("user_id", userId).eq("active", true).limit(1).maybeSingle();
+   .eq("user_id", userId).eq("active", true).order("created_at").limit(1).maybeSingle();
   const d = (data ?? {}) as Record<string, any>;
   return {
    id: d.id ?? null,
@@ -71,6 +73,7 @@ export class Db {
    maxLlmCalls: d.max_llm_calls ?? 40,
    maxCrawlPages: d.max_crawl_pages ?? 120,
    maxHttpRequests: d.max_http_requests ?? 250,
+   assessmentPreferences: assessmentPreferences(d.ontology_overrides?.assessment_preferences, d.terms ?? []),
   };
  }
 
@@ -190,11 +193,11 @@ export class Db {
   return out;
  }
 
- async loadContextCandidates(userId: string, limit: number, refreshExisting = false): Promise<{
+ async loadContextCandidates(userId: string, limit: number, refreshExisting = false, prefs = assessmentPreferences({})): Promise<{
   candidates: ContextCandidate[]; total: number;
  }> {
   const { data, error } = await this.client.from("opportunities")
-   .select("id,role,organization,organization_url,location,city,country,url,summary,description_excerpt,score_breakdown,enrichment")
+   .select("id,role,organization,organization_url,location,city,country,url,summary,description_excerpt,score_breakdown,enrichment,salary_display,salary_is_predicted")
    .eq("user_id", userId).in("status", ["New", "Shortlisted"])
    .order("match_score", { ascending: false }).limit(2000);
   if (error) throw new Error("loadContextCandidates: " + error.message);
@@ -202,7 +205,7 @@ export class Db {
    .filter(row => refreshExisting || (() => {
     const score = row.score_breakdown;
     const context = score && typeof score === "object" ? score.context : null;
-    return !hasMeaningfulContext(context);
+    return needsAssessment(context, prefs);
    })());
   return { candidates: eligible.slice(0, limit), total: eligible.length };
  }

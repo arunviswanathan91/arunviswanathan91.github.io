@@ -655,6 +655,61 @@ kbd{padding:1px 5px;border:1px solid var(--border-strong);border-bottom-width:2p
 .swipe-finished{display:grid;justify-items:center;gap:var(--s-3);padding:var(--s-7);border:1px dashed var(--border-strong);border-radius:var(--r-3);text-align:center;color:var(--text-2)}
 .swipe-finished>svg{width:30px;height:30px;color:var(--accent)}
 
+/* Research preferences and decision briefs use the same tokens in every theme. */
+.assessment-preferences{border-top:1px solid var(--accent-border);padding-top:12px;margin-top:12px;font-size:var(--f-xs)}
+.assessment-preferences summary,.decision-brief summary{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:650;list-style:none}
+.assessment-preferences summary::after,.decision-brief summary::after{content:"+";margin-left:auto;color:var(--text-3);font-size:18px}
+.assessment-preferences[open]>summary::after,.decision-brief details[open]>summary::after{content:"−"}
+.assessment-preferences summary svg{width:16px;height:16px}
+.assessment-preferences form,.assessment-preferences fieldset{display:grid;gap:12px;min-width:0}
+.assessment-preferences form{margin-top:14px;max-width:960px}.assessment-preferences fieldset{border:0;padding:0}
+.assessment-preferences legend{font-weight:600;margin-bottom:8px}.assessment-preferences p{color:var(--text-2);line-height:1.5}
+.assessment-preferences .primary{justify-self:start}.assessment-preferences textarea{min-height:65px}
+.assessment-subjects{display:flex;flex-wrap:wrap;gap:6px}.assessment-subjects button{padding:6px 10px;border:1px solid var(--border-strong);background:var(--surface);border-radius:20px;font-size:var(--f-xs);color:var(--text-2)}
+.assessment-subjects button.selected{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.research-fit-filter{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:var(--f-xs);margin:0 0 14px}
+.research-fit-filter .select-trigger{width:230px;max-width:100%}.research-fit-filter small{color:var(--text-3)}
+.swipe-brief-body{padding:var(--s-4)}
+.decision-brief{display:grid;gap:16px;min-width:0;font-size:var(--f-xs);line-height:1.6;color:var(--text)}
+.decision-brief p,.decision-brief li{color:var(--text-2);overflow-wrap:anywhere}.decision-brief p{white-space:pre-line}
+.decision-brief h3{font-size:var(--f-md);line-height:1.3}.decision-brief h4{font-size:var(--f-xs);margin:0;line-height:1.4}
+.decision-brief ul,.decision-brief ol{margin:8px 0;padding-left:19px}.decision-brief li+li{margin-top:6px}
+.brief-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brief-heading>div{display:flex;align-items:center;gap:9px}.brief-heading span{display:grid}.brief-heading strong{font-size:var(--f-md)}
+.brief-heading small{color:var(--text-3)}.brief-heading svg,.brief-block-heading>svg{width:20px;height:20px;flex:none;color:var(--accent)}
+.brief-block-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.brief-block-heading small{margin-left:auto;color:var(--text-3)}
+.brief-fit{padding:16px;border:1px solid var(--accent-border);background:var(--accent-soft);border-radius:var(--r-3)}
+.brief-fit.fit-weak{background:var(--tone-amber-bg);border-color:var(--border-strong)}.brief-fit>p{margin-top:9px}
+.brief-fit-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:12px}
+.brief-claims{display:grid;gap:18px}.brief-essentials{grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr))}
+.brief-claim-heading{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.claim-basis{font-size:10px;font-weight:600;line-height:1.5;border:1px solid var(--border);border-radius:12px;padding:1px 7px;color:var(--text-3)}
+.claim-basis.basis-general,.claim-basis.basis-estimate{color:var(--tone-amber-fg);background:var(--tone-amber-bg)}
+.brief-citations{display:inline-flex;gap:4px;font-size:var(--f-2xs)}.brief-citations a{color:var(--accent)}
+.brief-budget,.brief-group{border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface-2);padding:16px;min-width:0}
+.brief-budget{display:grid;gap:13px}.brief-budget .brief-block-heading p{color:var(--text-3);font-size:var(--f-2xs);margin-top:2px}
+.brief-budget-assumption{font-size:var(--f-xs)}.budget-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.budget-results>div{display:grid;gap:6px;border:1px solid var(--border);border-radius:var(--r-2);padding:13px;background:var(--surface)}
+.budget-results span{color:var(--text-2);font-weight:600}.budget-results strong{font-size:clamp(16px,1.5vw,22px);line-height:1.4;overflow-wrap:anywhere}
+.budget-results small{color:var(--text-3);font-size:var(--f-2xs)}.budget-results .budget-saving strong{color:var(--accent)}
+.budget-results .budget-shortfall strong,.budget-error{color:var(--tone-red-fg)}
+.decision-brief details>summary{color:var(--text);font-size:var(--f-sm)}.decision-brief details[open]>summary{margin-bottom:14px}
+.brief-group summary svg{width:17px;height:17px;color:var(--accent)}
+.budget-input-heading,.budget-input-row{display:grid;grid-template-columns:minmax(110px,1.4fr) minmax(70px,1fr) minmax(70px,1fr);gap:8px;align-items:center}
+.budget-input-heading{margin-top:12px;color:var(--text-3);font-size:var(--f-2xs)}.budget-input-row{padding:10px 0;border-bottom:1px solid var(--border)}
+.budget-input-row>div{display:grid;gap:3px;min-width:0}.budget-input-row small{font-size:var(--f-2xs);color:var(--text-3)}
+.budget-input-row p{grid-column:1/-1;font-size:var(--f-2xs)}.budget-input-row .input{min-width:0;width:100%;padding:8px}
+.budget-inputs button{margin-top:12px}.brief-sources{font-size:var(--f-2xs)}.brief-sources h4{margin-top:14px;margin-bottom:7px}
+.brief-sources a{color:var(--accent);display:inline-flex;align-items:center;gap:4px;overflow-wrap:anywhere}.brief-sources>a{display:flex;margin:5px 0}
+.brief-sources a svg{height:13px;width:13px;flex:none}.brief-sources small{color:var(--text-3)}
+@media(max-width:600px){
+ .swipe-brief-body{padding:12px}.brief-budget,.brief-group,.brief-fit{padding:12px}
+ .brief-fit-columns,.budget-results,.assessment-preferences .field-grid{grid-template-columns:1fr}
+ .research-fit-filter small{flex-basis:100%}.brief-heading{align-items:flex-start}
+ .budget-input-heading,.budget-input-row{grid-template-columns:minmax(105px,1.4fr) minmax(58px,1fr) minmax(58px,1fr);gap:6px}
+ .budget-input-row strong{font-size:11px}.budget-input-row .input{padding:7px 4px}
+}
+
 /* ============================================================================
    Bulk bar
    ========================================================================= */

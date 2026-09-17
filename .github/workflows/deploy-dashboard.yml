@@ -23,12 +23,17 @@ jobs:
       - name: Install dashboard
         working-directory: dashboard-app
         run: npm install
-      - name: Build dashboard
+      - name: Check and build dashboard
         working-directory: dashboard-app
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-        run: npm run build
+        run: npm run check
+      - name: Check discovery assessments
+        working-directory: pipeline
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
       - name: Assemble Pages artifact
         run: |
           # Allowlist, not a denylist: only what's named here is published, so a

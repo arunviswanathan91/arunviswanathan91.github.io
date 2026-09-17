@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { CheckCircle2, LoaderCircle, Search, TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { AssessmentPreferences } from "./AssessmentPreferences";
 
 type Phase = "idle" | "starting" | "queued" | "running" | "done" | "failed";
 interface StartResponse {
@@ -137,5 +138,6 @@ export function OpportunityDiscovery({ onComplete }: { onComplete(): void }) {
    </button>
   </form>
   <p className="discovery-status" role="status" aria-live="polite">{message}</p>
+  <AssessmentPreferences disabled={active(phase)}/>
  </section>;
 }

@@ -13,6 +13,10 @@ export function termsForRun(profileTerms: string[], query: string | null | undef
  if (!requested) return profileTerms;
 
  const topic = clean(requested.replace(POSTDOC_ROLE, " "));
+ // A role-only search still means postdocs in the user's selected subjects.
+ if (!topic && HAS_POSTDOC_ROLE.test(requested) && profileTerms.length) {
+  return [...new Set(profileTerms.map(term => clean(`${term.replace(POSTDOC_ROLE, " ")} postdoc`)))].slice(0, 6);
+ }
  const variants = [requested];
  if (topic && HAS_POSTDOC_ROLE.test(requested)) {
   variants.push(`${topic} postdoctoral`, `${topic} research fellow`);

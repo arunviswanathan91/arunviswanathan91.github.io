@@ -6,6 +6,7 @@ import {
 import { formatDate } from "../../lib/format";
 import type { Row } from "../../entities/types";
 import { ContextFact, contextFor, safeUrl } from "./OpportunityContext";
+import { DecisionBriefView } from "./DecisionBrief";
 const fitFor=(score:number)=>score>=70?"Strong":score>=50?"Good":score>=30?"Maybe":"Weak";
 
 export function OpportunitySwipe({rows,onDecision,onUndo}:{
@@ -38,7 +39,7 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
  };
 
  const pointerDown=(event:ReactPointerEvent<HTMLElement>)=>{
-  if(busy.current||event.button!==0||(event.target as HTMLElement).closest("a,button,input,select,textarea"))return;
+  if(busy.current||event.button!==0||(event.target as HTMLElement).closest("a,button,input,select,textarea,summary,[data-no-swipe]"))return;
   pointer.current={id:event.pointerId,x:event.clientX,y:event.clientY,horizontal:false};
  };
  const pointerMove=(event:ReactPointerEvent<HTMLElement>)=>{
@@ -67,7 +68,8 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
  useEffect(()=>{
   const key=(event:KeyboardEvent)=>{
    const target=event.target as HTMLElement|null;
-   if(target?.closest("input,textarea,select,[contenteditable=true]"))return;
+   if(target?.closest("input,textarea,select,a,summary,[data-no-swipe],[role=listbox],[contenteditable=true]")
+    ||(target?.closest("button")&&!target.closest(".swipe-controls"))||document.querySelector("dialog[open]"))return;
    const pressed=event.key.toLowerCase();
    if(event.key==="ArrowLeft"||pressed==="a"){event.preventDefault();void decide("left")}
    else if(event.key==="ArrowRight"||pressed==="d"||pressed==="f"){event.preventDefault();void decide("right")}
@@ -96,7 +98,7 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
    <div className={"swipe-drag-cue dismiss"+(dragX<-24?" visible":"")}><ThumbsDown/>Dismiss</div>
    <div className={"swipe-drag-cue shortlist"+(dragX>24?" visible":"")}><ThumbsUp/>Shortlist</div>
    <header className="swipe-card-head">
-    <div><span className={"badge tone-"+(score>=70?"green":score>=50?"violet":score>=30?"amber":"slate")}>{fitFor(score)} · {score}</span>
+    <div><span className={"badge tone-"+(score>=70?"green":score>=50?"violet":score>=30?"amber":"slate")}>{fitFor(score)} · search score {score}</span>
      <h2>{current.role}</h2>
      <p>{current.organization||"Organisation not specified"}{current.department?" · "+current.department:""}</p></div>
     <div className="swipe-links">
@@ -111,7 +113,7 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
     <span>{current.opportunity_type||"Research role"}</span>
     {current.salary_display&&<span>{current.salary_display}</span>}
    </div>
-   <div className="swipe-card-body">
+   {context.brief?.version===2?<div className="swipe-brief-body"><DecisionBriefView key={current.id} context={context}/></div>:<div className="swipe-card-body">
     <section className="swipe-main-copy">
      {current.summary&&<div><h3>Role overview</h3><p>{current.summary}</p></div>}
      {current.fit_reason&&<div><h3>Why it matched</h3><p>{current.fit_reason}</p></div>}
@@ -132,7 +134,7 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
        target="_blank" rel="noopener noreferrer"><ExternalLink/>{source.label||new URL(String(source.url)).hostname}</a>)}
      </div>}
     </aside>
-   </div>
+   </div>}
   </article>
   <div className="swipe-controls">
    <button className="secondary" disabled={!history.length} onClick={()=>void undo()}><RotateCcw/>Back <kbd>B</kbd></button>

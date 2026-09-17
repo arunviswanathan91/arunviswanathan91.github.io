@@ -23,12 +23,65 @@ import { contextProviders, createContextFallback, ContextProvidersUnavailable, o
 import { readEnv } from "../src/config.js";
 import { Http, HttpResponseError } from "../src/http.js";
 import type { ContextCandidate } from "../src/db.js";
+import { assessmentInstructions, assessmentPreferences, assessmentKey, needsAssessment, normalizeAssessment, SECTION_KEYS, type Evidence } from "../src/enrich/assessment.js";
+import { collectDecisionEvidence, relevantExcerpt, safeEvidenceUrl } from "../src/enrich/evidence.js";
 
 type Check = { name: string; ok: boolean; detail?: string };
 const out: Check[] = [];
 const check = (name: string, ok: boolean, detail?: string) => out.push({ name, ok, detail });
 const eq = (name: string, a: unknown, b: unknown) =>
  check(name, JSON.stringify(a) === JSON.stringify(b), `got ${JSON.stringify(a)} want ${JSON.stringify(b)}`);
+
+const decisionPayload = () => ({
+ fit: { verdict: "weak", reason: "Bacterial flagella do not directly match the selected cancer research topics.", strengths: ["Microscopy methods may transfer."], gaps: ["No tumour biology focus stated."] },
+ sections: Object.fromEntries(SECTION_KEYS.map(key => [key, { text: key === "role" ? "Bacterial molecular microbiology research." : "", basis: key === "role" ? "listing" : "unknown", source_ids: key === "role" ? [1] : [] }])),
+ money: { currency: "EUR", gross: { low: 2500, high: 3000, basis: "estimate", source_ids: [], note: "Guaranteed 50% FTE; illustrative estimate only" }, deductions: { low: 500, high: 900, basis: "estimate", source_ids: [], note: "Estimated employee deductions" }, rent: null, essentials: null, upfront: null, contract_percent: 50, salary_basis: "typical_estimate", assumptions: ["One person, shared housing; no temporary increase included"] },
+ questions: ["What pay step and guaranteed FTE will be in the contract?"], next_steps: ["Ask HR to confirm the contract and sponsorship route."] ,
+});
+
+{
+ const prefs = assessmentPreferences({ interests: ["Cancer biology"], nationality: "India", residence: "India", household: 1 });
+ const evidence: Evidence[] = [{ label: "Vacancy", url: "https://example.org/job", kind: "listing", text: "Research fellow with 50 % part-time employment; increase by 50% expected temporarily." }];
+ const result = normalizeAssessment(decisionPayload(), evidence, prefs);
+ eq("decision assessment keeps semantic fit distinct from role score", result.fit.verdict, "weak");
+ eq("guaranteed part-time FTE is kept", result.money.contract_percent, 50);
+ eq("unknown rent stays unknown", result.money.rent, null);
+ eq("preferences fingerprint stored with each brief", result.profile_key, assessmentKey(prefs));
+ check("legacy summaries become eligible for richer assessment", needsAssessment({ institution: "Old summary" }, prefs));
+ check("matching fresh assessment is not regenerated", !needsAssessment({ brief: result, generated_at: new Date().toISOString() }, prefs));
+ check("changed nationality invalidates prior assessment", needsAssessment({ brief: result, generated_at: new Date().toISOString() }, { ...prefs, nationality: "Canada" }));
+ check("dated assessment becomes eligible again", needsAssessment({ brief: result, generated_at: "2020-01-01T00:00:00Z" }, prefs));
+ const badVisa = decisionPayload();
+ badVisa.sections.visa = { text: "Guaranteed permit and tax exemption", basis: "source", source_ids: [1, 999] };
+ const guarded = normalizeAssessment(badVisa, evidence, prefs);
+ eq("visa cannot cite an advert or invented source", guarded.sections.visa.source_ids, []);
+ eq("unsourced legal claims are withheld", guarded.sections.visa.basis, "unknown");
+ const official: Evidence = { label: "Official visa", url: "https://www.make-it-in-germany.com", kind: "visa", text: "Official information" };
+ badVisa.sections.visa = { text: "Confirm eligibility for the researcher route.", basis: "source", source_ids: [2] };
+ eq("official visa reference is retained", normalizeAssessment(badVisa, [...evidence, official], prefs).sections.visa.source_ids, [2]);
+ eq("visa not personalised without nationality", normalizeAssessment(badVisa, [...evidence, official], {...prefs,nationality:""}).sections.visa.basis, "unknown");
+ const fullTime = decisionPayload(); fullTime.money.contract_percent = 100;
+ const safePartTime = normalizeAssessment(fullTime, evidence, prefs);
+ eq("temporary uplift cannot become the guaranteed percentage", safePartTime.money.contract_percent, 50);
+ eq("conflicting salary assumptions do not produce misleading savings", safePartTime.money.gross, null);
+ const invalidMoney = decisionPayload(); invalidMoney.money.gross = {low:5000, high:4000, basis:"estimate",source_ids:[],note:""};
+ eq("reversed money range rejected", normalizeAssessment(invalidMoney,evidence,prefs).money.gross,null);
+ invalidMoney.money.currency = "not a currency";
+ eq("unknown currency cannot mix numeric estimates",normalizeAssessment(invalidMoney,evidence,prefs).money.deductions,null);
+ const prompt = assessmentInstructions(prefs);
+ check("prompt requests analysis beyond summarisation", prompt.includes("semantic research fit") && prompt.includes("typical_estimate") && prompt.includes("nationality"));
+ check("prompt protects guaranteed FTE and missing costs", prompt.includes("Apply guaranteed FTE ONCE") && prompt.includes("Never zero missing taxes"));
+ eq("unsafe evidence URL rejected",safeEvidenceUrl("http://127.0.0.1/admin"),null);
+ eq("credentials are never sent in a source URL",safeEvidenceUrl("https://user:pass@example.org"),null);
+ const longCity = "A very long introductory paragraph about an important historic city. ".repeat(20)+"\nThe climate has distinct summer and winter patterns, which vary across the region.\nPublic transport includes a metro system and trams serving different parts of the city.";
+ check("full city extract retains later climate and transport",relevantExcerpt(longCity,1000).includes("climate") && relevantExcerpt(longCity,1000).includes("metro"));
+ let fetched = 0;
+ const fakeHttp = { get: async () => { fetched++; return {ok:true,body:"<main><p>Official information about research, contract requirements and payroll taxes; confirm the applicable category with the relevant authority before applying.</p></main>",headers:{}}; } } as unknown as Http;
+ const candidate = { id:"test", role:"Researcher", country:"DE", url:null, organization:null,organization_url:null,location:null,city:null,summary:"Stored advert",description_excerpt:null,enrichment:null,score_breakdown:null };
+ await collectDecisionEvidence(fakeHttp,candidate);
+ await collectDecisionEvidence(fakeHttp,candidate);
+ eq("country evidence fetched once for an entire run",fetched,3);
+}
 
 {
  const context = normalizeContextPayload({ institution: " Test institute ", place: "Test city" }, [
@@ -74,12 +127,14 @@ const eq = (name: string, a: unknown, b: unknown) =>
  let postedBody: unknown;
  const stub = { postJson: async (url: string, body: unknown) => {
   postedUrl = url; postedBody = body;
-  return { model: "stealth/union-alpha", choices: [{ message: { content: JSON.stringify(payload) } }] };
+  return { model: "stealth/union-alpha", choices: [{ message: { content: JSON.stringify(decisionPayload()) } }] };
  } } as unknown as Http;
  const result = await enrichOpportunityContext(env, stub, candidate, "openrouter", []);
  eq("OpenRouter request uses official chat endpoint", postedUrl, "https://openrouter.ai/api/v1/chat/completions");
  check("OpenRouter integration sends requested model", (postedBody as { model: string }).model === "stealth/union-alpha");
  eq("saved context records provider and model", [result.provider, result.model], ["openrouter", "stealth/union-alpha"]);
+ eq("provider output becomes a versioned decision brief",result.brief?.version,2);
+ eq("rich request retains zero price ceiling",(postedBody as ReturnType<typeof openrouterRequest>).provider.max_price,{prompt:0,completion:0,request:0});
  let placeholdersRejected = false;
  const placeholders = { postJson: async () => ({ choices: [{ message: { content: JSON.stringify(Object.fromEntries(Object.keys(payload).map(key => [key, UNKNOWN]))) } }] }) } as unknown as Http;
  try { await enrichOpportunityContext(env, placeholders, candidate, "openrouter", []); } catch { placeholdersRejected = true; }
@@ -102,6 +157,10 @@ const eq = (name: string, a: unknown, b: unknown) =>
  try { await fallback(async () => { throw new HttpResponseError(429, "OpenRouter quota reached"); }); }
  catch (error) { unavailable = error instanceof ContextProvidersUnavailable; }
  check("all providers exhausted stops batch with pending data intact", unavailable);
+ const bounded = createContextFallback<string>(["groq", "openrouter"], () => {}, 1);
+ let calls = 0;
+ try { await bounded(async () => { calls++; throw new HttpResponseError(429,"Busy"); }); } catch { /* pending */ }
+ eq("provider fallbacks share the configured model call cap",calls,1);
  let retriedDisabled = false;
  try { await fallback(async () => { retriedDisabled = true; return "bad"; }); } catch { /* expected */ }
  check("exhausted providers are not repeatedly called", !retriedDisabled);
@@ -364,6 +423,7 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
   termsForRun(["old profile term"], "pancreatic cancer postdoc"),
   ["pancreatic cancer postdoc", "pancreatic cancer postdoctoral", "pancreatic cancer research fellow"]);
  eq("blank query keeps the profile terms", termsForRun(["profile term"], "  "), ["profile term"]);
+ eq("role-only postdoc search uses selected subjects", termsForRun(["Cancer biology", "Spatial biology"], "postdoc"), ["Cancer biology postdoc", "Spatial biology postdoc"]);
  check("Telegram runs are fresh searches", isFreshSearch("telegram"));
  check("workspace/manual runs are fresh searches", isFreshSearch("manual"));
  check("scheduled runs remain incremental", !isFreshSearch("schedule"));
