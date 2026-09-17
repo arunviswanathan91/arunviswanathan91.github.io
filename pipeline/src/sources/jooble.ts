@@ -21,6 +21,9 @@ const COUNTRY_NAMES: Record<string, string> = {
  IN: "India", GB: "United Kingdom", DE: "Germany", NL: "Netherlands", SE: "Sweden",
  NO: "Norway", DK: "Denmark", FI: "Finland", CH: "Switzerland", FR: "France",
  BE: "Belgium", AT: "Austria", IE: "Ireland", US: "USA", CA: "Canada",
+ ES: "Spain", IT: "Italy", PT: "Portugal", PL: "Poland", CZ: "Czechia",
+ JP: "Japan", CN: "China", KR: "South Korea", HK: "Hong Kong", TW: "Taiwan",
+ SG: "Singapore", MY: "Malaysia", TH: "Thailand", AU: "Australia", NZ: "New Zealand", ZA: "South Africa",
 };
 
 /**
@@ -45,13 +48,15 @@ export function joobleAdapter(sourceKey: string): SourceAdapter {
    let requests = 0, collected = 0;
    const since = q.since ? new Date(q.since) : null;
 
-   for (const country of q.countries) {
+   const countries=q.countries.includes("*")?["*"]:q.countries;
+   for (const country of countries) {
     for (const term of q.terms.slice(0, 3)) {
      if (requests >= w.maxRequests || collected >= w.maxItems || Date.now() > w.deadlineAt) break;
 
+     const location=country==="*"?null:COUNTRY_NAMES[country]??country;
      const data = await ctx.http.postJson<{ jobs?: JoobleJob[] }>(`https://jooble.org/api/${apiKey}`, {
       keywords: term,
-      location: COUNTRY_NAMES[country] ?? country,
+      ...(location?{location}:{}),
       page: 1,
       ...(since ? { datecreatedfrom: since.toISOString().slice(0, 10) } : {}),
      });

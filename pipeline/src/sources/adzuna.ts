@@ -59,7 +59,8 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
   },
 
   async *fetch(q: SourceQuery, w: FetchWindow, ctx: SourceContext): AsyncGenerator<SourcePage> {
-   const countries = q.countries.map(c => COUNTRY_PATHS[c]).filter(Boolean);
+   const requested=q.countries.includes("*")?Object.keys(COUNTRY_PATHS):q.countries;
+   const countries = requested.map(c => COUNTRY_PATHS[c]).filter(Boolean);
    if (!countries.length) countries.push("in");
 
    const maxAgeDays = q.since

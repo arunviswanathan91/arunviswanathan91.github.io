@@ -670,6 +670,10 @@ kbd{padding:1px 5px;border:1px solid var(--border-strong);border-bottom-width:2p
 .assessment-preferences .primary{justify-self:start}.assessment-preferences textarea{min-height:65px}
 .assessment-subjects{display:flex;flex-wrap:wrap;gap:6px}.assessment-subjects button{padding:6px 10px;border:1px solid var(--border-strong);background:var(--surface);border-radius:20px;font-size:var(--f-xs);color:var(--text-2)}
 .assessment-subjects button.selected{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.destination-picker{display:grid;gap:9px}.destination-picker>.select-trigger{max-width:360px}
+.destination-chips{display:flex;flex-wrap:wrap;gap:6px}.destination-chips button{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--accent-border);background:var(--accent-soft);border-radius:20px;color:var(--accent);font-size:var(--f-xs)}
+.destination-chips button span{font-size:15px;line-height:1;color:var(--text-3)}
+.check-row{display:flex;align-items:center;gap:8px;width:max-content;color:var(--text-2)}.check-row input{accent-color:var(--accent)}
 .research-fit-filter{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:var(--f-xs);margin:0 0 14px}
 .research-fit-filter .select-trigger{width:230px;max-width:100%}.research-fit-filter small{color:var(--text-3)}
 .swipe-brief-body{padding:var(--s-4)}

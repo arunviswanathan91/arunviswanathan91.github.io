@@ -46,15 +46,14 @@ async function main() {
    console.log("  profile: already exists, left unchanged (site fetch failed)");
   }
  } else {
-  // Postdoc search is international by request -- Scandinavia weighted highest in
-  // scoring, other Western Europe close behind. Industry roles are fine anywhere
-  // in India (arguably preferable: no visa friction) or remote.
+  // Search destinations are independent of domicile. The dashboard can replace
+  // this initial Europe set with another region or any country combination.
   const { error } = await db.client.from("discovery_profiles").insert({
    user_id: userId, name: "Default", active: true,
    types: ["Postdoc", "Research scientist", "Industry R&D", "Fellowship", "Staff scientist"],
    home_city: "Thiruvananthapuram",
-   india_cities: ["Thiruvananthapuram", "Kochi", "Bengaluru", "Hyderabad", "Chennai", "Pune", "Mumbai"],
-   countries: ["IN", "SE", "NO", "DK", "FI", "DE", "NL", "CH", "GB", "FR", "BE", "AT", "IE"],
+   india_cities: [],
+   countries: ["DE", "NL", "SE", "NO", "DK", "FI", "CH", "GB", "FR", "BE", "AT", "IE", "ES", "IT", "PT", "PL", "CZ"],
    remote_ok: true, faculty_ok: false, years_experience: 0,
    reject_below_floor: false,
    ...siteFields,

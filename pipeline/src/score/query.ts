@@ -15,6 +15,7 @@ const FACULTY = /\b(faculty|professor|lecturer)\b/i;
 const FELLOWSHIP = /\bfellowship\b/i;
 const SCANDINAVIA = new Set(["SE","NO","DK","FI"]);
 const EUROPE = new Set(["DE","NL","SE","CH","GB","FR","BE","DK","NO","FI","AT","IE","ES","IT","PT","PL","CZ"]);
+const ASIA = new Set(["JP","CN","KR","HK","TW","SG","MY","TH","IN"]);
 
 const normalize = (value: string) => value
  .normalize("NFKD")
@@ -43,6 +44,11 @@ function locationIntent(query: string, o: NormalizedOpportunity): {matches:boole
  if (/\b(india|indian)\b/.test(q)) return {matches:o.country==="IN",label:"India"};
  if (/\b(usa|united states|america|american)\b/.test(q)) return {matches:o.country==="US",label:"United States"};
  if (/\b(canada|canadian)\b/.test(q)) return {matches:o.country==="CA",label:"Canada"};
+ if (/\b(japan|japanese)\b/.test(q)) return {matches:o.country==="JP",label:"Japan"};
+ if (/\b(china|chinese)\b/.test(q)) return {matches:o.country==="CN",label:"China"};
+ if (/\basian?\b/.test(q)) return {matches:!!o.country&&ASIA.has(o.country),label:"Asia"};
+ if (/\baustralia(n)?\b/.test(q)) return {matches:o.country==="AU",label:"Australia"};
+ if (/\bnew zealand\b/.test(q)) return {matches:o.country==="NZ",label:"New Zealand"};
  if (/\bkerala\b/.test(q)) return {matches:o.region==="Kerala",label:"Kerala"};
  if (/\b(bangalore|bengaluru)\b/.test(q)) return {matches:city==="bangalore"||o.region==="Bengaluru",label:"Bengaluru"};
  if (/\bremote\b/.test(q)) return {matches:o.isRemote,label:"remote"};
