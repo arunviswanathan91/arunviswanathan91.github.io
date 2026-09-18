@@ -5,9 +5,10 @@ import { useData } from "../../lib/store";
 import type { AssessmentPreferences as Preferences } from "../../lib/decision";
 import { SelectMenu } from "../ui/SelectMenu";
 import { applyDestinationChoice, DEFAULT_DESTINATIONS, DESTINATION_NAMES, DESTINATION_OPTIONS } from "../../lib/destinations";
+import { CURRENCY_OPTIONS } from "../../lib/currencies";
 
 const subjects = ["Cancer biology", "Cancer immunology", "Computational biology", "Bioinformatics", "Single-cell genomics", "Spatial biology", "Molecular biology", "Machine learning", "Drug discovery", "Microbiology"];
-const empty: Preferences = { interests: [], avoid: [], nationality: "", residence: "", household: 1, housing: "shared", careerGoal: "" };
+const empty: Preferences = { interests: [], avoid: [], nationality: "", residence: "", displayCurrency: "INR", household: 1, housing: "shared", careerGoal: "" };
 const split = (text: string) => [...new Set(text.split(/[,;\n]/).map(s => s.trim()).filter(Boolean))].slice(0, 12);
 
 export function AssessmentPreferences({disabled=false,registerSave}:{disabled?:boolean;registerSave?:(save:()=>Promise<boolean>)=>void}) {
@@ -32,7 +33,9 @@ export function AssessmentPreferences({disabled=false,registerSave}:{disabled?:b
    if (error) { setMessage(error.message); setLoadError(true); }
    else {
     const saved = data?.ontology_overrides?.assessment_preferences ?? {};
-    const value = { ...empty, ...saved, interests: saved.interests?.length ? saved.interests : data?.terms ?? [] };
+    const displayCurrency = typeof saved.displayCurrency === "string" && /^[A-Z]{3}$/i.test(saved.displayCurrency)
+     ? saved.displayCurrency.toUpperCase() : "INR";
+    const value = { ...empty, ...saved, displayCurrency, interests: saved.interests?.length ? saved.interests : data?.terms ?? [] };
     setPrefs(value); setTopics(value.interests.join(", ")); setAvoid((value.avoid ?? []).join(", "));
     setCountries(Array.isArray(data?.countries)?data.countries:DEFAULT_DESTINATIONS);
     setRemoteOk(data?.remote_ok??true);
@@ -51,7 +54,7 @@ export function AssessmentPreferences({disabled=false,registerSave}:{disabled?:b
    const { data, error } = await supabase.from("discovery_profiles").select("id,ontology_overrides")
     .eq("user_id", userId).eq("active", true).order("created_at").limit(1).maybeSingle();
    if (error) throw error;
-   const value = { ...prefs, interests, avoid: split(avoid), nationality: prefs.nationality.trim(), residence: prefs.residence.trim(), careerGoal: prefs.careerGoal.trim() };
+   const value = { ...prefs, interests, avoid: split(avoid), nationality: prefs.nationality.trim(), residence: prefs.residence.trim(), displayCurrency: prefs.displayCurrency.toUpperCase(), careerGoal: prefs.careerGoal.trim() };
    const ontology_overrides = { ...data?.ontology_overrides, assessment_preferences: value };
    if(!countries.length&&!remoteOk){setMessage("Choose at least one search destination or allow remote roles.");return false}
    const result = data
@@ -70,7 +73,7 @@ export function AssessmentPreferences({disabled=false,registerSave}:{disabled?:b
  return <details className="assessment-preferences">
   <summary><SlidersHorizontal/>Search destinations, research & relocation preferences</summary>
   <form onSubmit={save}>
-   <p>Search destinations control where vacancies are found. Citizenship and residence are separate domicile details used only for visa, tax, relocation and financial context.</p>
+   <p>Search destinations control where vacancies are found. Citizenship, residence and display currency are separate preferences and never change search geography.</p>
    <fieldset disabled={loading || saving || loadError || disabled}>
     <legend>Search destinations</legend>
     <div className="destination-picker">
@@ -99,12 +102,13 @@ export function AssessmentPreferences({disabled=false,registerSave}:{disabled?:b
     <legend>Domicile and relocation assessment</legend>
     <div className="field-grid">
      <label className="field">Citizenship / nationality — visa only<input className="input" value={prefs.nationality} maxLength={70} onChange={e => setPrefs({...prefs,nationality:e.target.value})} placeholder="e.g. India"/></label>
-     <label className="field">Current residence — visa, tax and currency context<input className="input" value={prefs.residence} maxLength={70} onChange={e => setPrefs({...prefs,residence:e.target.value})} placeholder="e.g. India"/></label>
+     <label className="field">Current residence — visa, tax and relocation context<input className="input" value={prefs.residence} maxLength={70} onChange={e => setPrefs({...prefs,residence:e.target.value})} placeholder="e.g. India"/></label>
+     <div className="field"><span>Display currency for pay comparisons</span><SelectMenu searchable label="Display currency for pay comparisons" value={prefs.displayCurrency} options={CURRENCY_OPTIONS} onChange={displayCurrency=>setPrefs({...prefs,displayCurrency})}/></div>
      <label className="field">People in your household<input className="input" type="number" min={1} max={8} required value={prefs.household} onChange={e => setPrefs({...prefs,household:Number(e.target.value)})}/></label>
      <div className="field"><span>Housing assumption</span><SelectMenu label="Housing assumption" value={prefs.housing} options={[{value:"shared",label:"Shared accommodation"},{value:"private",label:"Private accommodation"}]} onChange={housing=>setPrefs({...prefs,housing:housing as Preferences["housing"]})}/></div>
     </div>
     <label className="field">Career direction<textarea className="input" value={prefs.careerGoal} maxLength={400} onChange={e => setPrefs({...prefs,careerGoal:e.target.value})} placeholder="e.g. Build translational cancer research skills, then move into industry"/></label>
-    <p className="muted-note">Domicile details never add India—or any other country—to the search. They are sent to the configured AI provider with public vacancy information for immigration and relocation analysis. Pay remains in destination currency unless a verified exchange rate is available for a safe home-currency comparison.</p>
+    <p className="muted-note">Domicile details never add India—or any other country—to the search. Citizenship and residence are used for immigration, tax and relocation analysis only. Pay remains in its advertised destination currency, with an approximate value in your chosen display currency when a verified exchange rate is available.</p>
     <button className="primary" type="submit">{saving ? "Saving…" : loading ? "Loading…" : "Save preferences"}</button>
    </fieldset>
    {message && <p role="status">{message}</p>}

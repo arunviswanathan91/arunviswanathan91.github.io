@@ -3,6 +3,19 @@ const HAS_POSTDOC_ROLE = /\b(post[ -]?doc(?:toral)?|research fellow(?:ship)?)\b/
 
 const clean = (value: string) => value.trim().replace(/\s+/g, " ");
 
+/** Broad discovery is intentionally independent of the research-interest
+ * profile. Interests rank the resulting postdocs; they must never determine
+ * which postdocs the source APIs are allowed to return. */
+export const BROAD_DISCOVERY_TERMS = [
+ "postdoc",
+ "postdoctoral researcher",
+ "research fellow",
+];
+
+export function termsForDiscovery(): string[] {
+ return [...BROAD_DISCOVERY_TERMS];
+}
+
 /**
  * A custom search should spend its API budget on that search, rather than on
  * the profile's unrelated default terms. Small role variants improve recall

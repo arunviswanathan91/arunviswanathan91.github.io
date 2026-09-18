@@ -33,7 +33,7 @@ export function hardFilter(o: NormalizedOpportunity, p: SearchProfile): FilterVe
  // A salary only ever rejects when it is certain. Academic posts routinely omit
  // pay, and a predicted figure is not evidence of anything.
  if (p.rejectBelowFloor && p.salaryFloorInr && o.salary && !o.salary.isPredicted) {
-  const annual = annualInr(o.salary);
+  const annual = annualInr(o.salary, p.exchangeRates);
   if (annual !== null && annual < p.salaryFloorInr) return { keep: false, reason: "below_salary_floor" };
  }
 
@@ -62,7 +62,7 @@ function locationScore(o: NormalizedOpportunity, p: SearchProfile): { value: num
 
 function compensationScore(o: NormalizedOpportunity, p: SearchProfile): { value: number; note: string } {
  if (!o.salary) return { value: 4, note: "not stated" };
- const annual = annualInr(o.salary);
+ const annual = annualInr(o.salary, p.exchangeRates);
  if (annual === null) return { value: 4, note: "not comparable" };
  const floor = p.salaryFloorInr;
  if (!floor) return { value: o.salary.isPredicted ? 5 : 7, note: o.salary.isPredicted ? "estimated" : "stated" };

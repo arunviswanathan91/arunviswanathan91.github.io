@@ -6,6 +6,7 @@ export type OpportunityKind =
 
 export type SourceKind = "api" | "feed" | "crawl";
 export type QuotaProvider = "adzuna" | "jooble" | "rapidapi" | "groq" | "gemini" | "firecrawl" | "none";
+export type RunMode = "discovery" | "search" | "backfill";
 
 export interface SalaryEvidence {
  min: number | null;
@@ -45,6 +46,13 @@ export interface NormalizedOpportunity {
  contentHash: string;
  /** 0..1 — how many core fields we recovered deterministically. Drives the LLM gate. */
  completeness: number;
+ /** Provenance for a location repaired after the source parser ran. */
+ locationMetadata?: {
+  method: "source" | "deterministic" | "ai";
+  confidence: number;
+  evidence: string;
+  model?: string;
+ };
 }
 
 /** A raw item as fetched, before parsing. Written to the DB first so a crash loses nothing. */
@@ -74,6 +82,9 @@ export interface SearchProfile {
  maxCrawlPages: number;
  maxHttpRequests: number;
  assessmentPreferences?: import("./enrich/assessment.js").AssessmentPreferences;
+ /** Loaded once per run; unavailable rates disable foreign-currency comparisons safely. */
+ exchangeRates?: import("./currency.js").ExchangeRateSnapshot | null;
+ comparisonCurrency?: string | null;
 }
 
 export interface ScoreBreakdown {
@@ -132,7 +143,7 @@ export interface OpportunitySummary {
 export interface RunResult {
  runId: string | null;
  status: "done" | "partial" | "failed";
- mode: "incremental" | "fresh" | "backfill";
+ mode: RunMode;
  query: string | null;
  fetched: number;
  evaluated: number;
@@ -146,7 +157,17 @@ export interface RunResult {
  bySource: Record<string, SourceOutcome>;
  top: OpportunitySummary[];
  degradations: string[];
+ metadata: MetadataStats;
  enrichment: EnrichmentStats;
+}
+
+export interface MetadataStats {
+ candidates: number;
+ deterministic: number;
+ aiBatches: number;
+ aiUpdated: number;
+ unresolved: number;
+ backfilled: number;
 }
 
 export interface EnrichmentStats {

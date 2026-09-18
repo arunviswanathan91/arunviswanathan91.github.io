@@ -5,6 +5,7 @@ import { Badge, Dot } from "../ui/Badge";
 import { TagChips } from "../ui/TagChips";
 import type { FieldDef, Row } from "../../entities/types";
 import type { Tag } from "../../lib/tags";
+import { salaryDisplayFor } from "../../lib/currency";
 
 export interface ValueCtx{
  projectName(id:string|null):string|null;
@@ -17,7 +18,7 @@ export interface ValueCtx{
 
 /** The only place a stored value is turned into display output. */
 export function FieldValue({field,row,ctx,mode}:{field:FieldDef;row:Row;ctx:ValueCtx;mode:"card"|"cell"}){
- const raw=row[field.key];
+ const raw=field.key==="salary_display"?salaryDisplayFor(row):row[field.key];
  switch(field.kind){
   case "enum":{
    const v=groupValue(field,row);

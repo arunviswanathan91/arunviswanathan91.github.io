@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { CheckCircle2, LoaderCircle, RotateCcw, Search, TriangleAlert } from "lucide-react";
+import { CheckCircle2, LoaderCircle, Radar, RotateCcw, Search, TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { AssessmentPreferences } from "./AssessmentPreferences";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
@@ -10,21 +10,29 @@ interface StartResponse {
  run_id?: string;
  status?: "queued" | "running";
  query?: string | null;
+ mode?: "discovery" | "search";
  already_running?: boolean;
  error?: string;
 }
 interface RunStats {
+ phase?: string;
+ dispatchTarget?: "github_actions"|"cloud_run";
+ currentSource?: string;
+ sourceProgress?: {pages?:number;fetched?:number;apiCalls?:number};
  matched?: number;
  created?: number;
  fetched?: number;
  evaluated?: number;
  filtered?: number;
  degradations?: string[];
+ bySource?: Record<string,{itemsFetched?:number;itemsEvaluated?:number;itemsFiltered?:number;itemsMatched?:number;status?:string}>;
+ metadata?: {deterministic?:number;aiUpdated?:number;unresolved?:number;backfilled?:number};
  enrichment?: {requested?:number;attempted?:number;succeeded?:number;failed?:number;pending?:number};
 }
 interface RunRow {
  status: "queued" | "running" | "done" | "partial" | "failed";
  query: string | null;
+ run_mode?: "discovery" | "search" | "backfill";
  stats: RunStats | null;
  error: string | null;
 }
@@ -37,6 +45,7 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
  const [phase, setPhase] = useState<Phase>("idle");
  const [restarting,setRestarting]=useState(false);
  const [message, setMessage] = useState("Search job and postdoc sources using your profile filters.");
+ const [lastStats,setLastStats]=useState<RunStats|null>(null);
  const timer = useRef<number | null>(null);
  const generation = useRef(0);
  const preferenceSaver = useRef<(()=>Promise<boolean>)|null>(null);
@@ -52,7 +61,7 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
   const poll = async () => {
    if (generation.current !== current || !supabase) return;
    const { data, error } = await supabase.from("discovery_runs")
-    .select("status,query,stats,error").eq("id", runId).single();
+    .select("status,query,run_mode,stats,error").eq("id", runId).single();
    if (generation.current !== current) return;
    if (error || !data) {
     setPhase("failed");
@@ -61,11 +70,15 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
    }
 
    const row = data as RunRow;
+   setLastStats(row.stats ?? null);
    if (row.status === "queued" || row.status === "running") {
     setPhase(row.status);
+    const stats=row.stats??{};
+    const checked=Number(stats.evaluated??0),matched=Number(stats.matched??0);
+    const source=stats.currentSource??(stats.bySource?Object.keys(stats.bySource).at(-1):null);
     setMessage(row.status === "queued"
-     ? "Search queued — waiting for the discovery worker."
-     : "Searching live sources — you can leave this page while it finishes.");
+     ? `Run queued — waiting for ${stats.dispatchTarget==="github_actions"?"GitHub Actions":"the discovery worker"}.`
+     : `${row.run_mode==="search"?"Focused search":"Broad discovery"} is checking live sources${source?` · ${source}`:""}${checked?` · ${checked} evaluated · ${matched} matched`:""}.`);
     if (Date.now() - startedAt > 20 * 60 * 1000) {
      setPhase("failed");
      setMessage("The search is taking unusually long. Check the latest Cloud Run revision and logs.");
@@ -94,16 +107,16 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
    setPhase("done");
    setMessage(matched
     ? `Found ${matched} match${matched === 1 ? "" : "es"} from ${checked} checked · ${created} new${contextNote}${row.status === "partial" && !contextUnavailable ? " · some sources had issues" : ""}.`
-    : `No matching results in ${checked} checked listing${checked === 1 ? "" : "s"}${row.status === "partial" ? "; some sources had issues" : ""}.`);
+    : `No strong query matches in ${checked} checked listing${checked === 1 ? "" : "s"}; lower-ranked discoveries were retained for review${row.status === "partial" ? "; some sources had issues" : ""}.`);
    onComplete();
   };
   void poll();
  };
 
- const submit = async (event: FormEvent) => {
-  event.preventDefault();
+ const start = async (mode:"discovery"|"search",event?:FormEvent) => {
+  event?.preventDefault();
   const requested = query.trim().replace(/\s+/g, " ");
-  if (!requested || active(phase)) return;
+  if ((mode==="search"&&!requested) || active(phase)) return;
   if (!supabase) {
    setPhase("failed");
    setMessage("Discovery requires the connected Supabase workspace.");
@@ -111,6 +124,7 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
   }
 
   setPhase("starting");
+  setLastStats(null);
   setMessage("Saving research and relocation preferences…");
   if (preferenceSaver.current && !await preferenceSaver.current()) {
    setPhase("failed");
@@ -122,7 +136,7 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
   const current = ++generation.current;
   setMessage("Starting a protected workspace search…");
   const { data, error } = await supabase.functions.invoke<StartResponse>("opportunity-discover", {
-   body: { query: requested },
+   body: { mode, query: mode==="search"?requested:null },
   });
   if (generation.current !== current) return;
   if (error || !data?.run_id) {
@@ -135,9 +149,13 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
   setPhase(data.status ?? "queued");
   setMessage(data.already_running
    ? `A search${data.query ? ` for “${data.query}”` : ""} is already running — following it here.`
-   : `Searching for “${requested}” — results will appear here automatically.`);
+   : mode==="search"
+    ? `Searching for “${requested}” — ranked results will appear automatically.`
+    : "Broad discovery started — all configured crawlers will be checked independently of the typed search.");
   follow(data.run_id, current, Date.now());
  };
+
+ const submit=(event:FormEvent)=>void start("search",event);
 
  const restart=()=>ask({
   title:"Restart Opportunity discovery?",
@@ -180,8 +198,19 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
     {active(phase) ? <LoaderCircle className="spin"/> : <Search/>}
     {active(phase) ? "Searching" : "Search sources"}
    </button>
+   <button className="secondary" type="button" disabled={active(phase)} onClick={()=>void start("discovery")}>
+    {active(phase)?<LoaderCircle className="spin"/>:<Radar/>}Discover all postdocs
+   </button>
   </form>
   <p className="discovery-status" role="status" aria-live="polite">{message}</p>
+  {lastStats?.bySource&&Object.keys(lastStats.bySource).length>0&&<div className="discovery-monitor" aria-label="Discovery run details">
+   <strong>Run monitor</strong>
+   <div className="discovery-monitor-grid">
+    {Object.entries(lastStats.bySource).map(([source,value])=><span key={source}>
+     {source}: {Number(value.itemsEvaluated??0)} checked · {Number(value.itemsMatched??0)} matched · {Number(value.itemsFiltered??0)} excluded
+    </span>)}
+   </div>
+  </div>}
   <AssessmentPreferences disabled={active(phase)} registerSave={registerPreferenceSaver}/>
   {confirmation}
  </section>;

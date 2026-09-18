@@ -44,7 +44,7 @@ export function formatDigest(r: RunResult, dashboardUrl: string): string {
  if (!r.top.length) {
   const subject = r.query ? ` for ${quoted(r.query)}` : "";
   const nothing = r.fetched === 0
-   ? (r.mode === "fresh" ? `No listings were returned${subject}.` : "Nothing new was published since the last run.")
+   ? (r.mode === "search" ? `No listings were returned${subject}.` : "Nothing new was published since the last run.")
    : `No matching opportunities were found${subject}.`;
   const details = [nothing, diagnosticLine(r), filterLine(r)].filter(Boolean);
   if (r.degradations.length) details.push(`Source issues: ${r.degradations.join(", ")}.`);
@@ -52,7 +52,7 @@ export function formatDigest(r: RunResult, dashboardUrl: string): string {
  }
 
  const lines: string[] = [];
- if (r.mode === "fresh") {
+ if (r.mode === "search") {
   const subject = r.query ? ` for ${quoted(r.query)}` : "";
   lines.push(`Found ${r.matched} current match${r.matched === 1 ? "" : "es"}${subject}.`);
   lines.push(`${r.created} new · ${Math.max(0, r.matched - r.created)} already in your workspace`);

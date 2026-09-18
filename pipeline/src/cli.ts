@@ -36,7 +36,7 @@ Discovery pipeline
 
   --dry-run           parse and score, write nothing
   --trigger <t>       schedule | telegram | manual   (default: schedule)
-  --mode <m>          discover | backfill            (default: discover)
+  --mode <m>          discovery | search | backfill   (default: discovery)
   --query <text>      extra search terms for this run
   --chat-id <id>      Telegram chat to send the digest to
   --user <uuid>       override DISCOVERY_USER_ID

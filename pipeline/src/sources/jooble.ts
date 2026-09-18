@@ -49,15 +49,16 @@ export function joobleAdapter(sourceKey: string): SourceAdapter {
    const since = q.since ? new Date(q.since) : null;
 
    const countries=q.countries.includes("*")?["*"]:q.countries;
-   for (const country of countries) {
-    for (const term of q.terms.slice(0, 3)) {
+   const pairs = q.terms.slice(0, 3).flatMap(term => countries.map(country => ({ country, term })));
+   for (let page = 1; page <= 3; page++) {
+    for (const { country, term } of pairs) {
      if (requests >= w.maxRequests || collected >= w.maxItems || Date.now() > w.deadlineAt) break;
 
      const location=country==="*"?null:COUNTRY_NAMES[country]??country;
      const data = await ctx.http.postJson<{ jobs?: JoobleJob[] }>(`https://jooble.org/api/${apiKey}`, {
       keywords: term,
       ...(location?{location}:{}),
-      page: 1,
+      page,
       ...(since ? { datecreatedfrom: since.toISOString().slice(0, 10) } : {}),
      });
      requests++;
@@ -69,7 +70,7 @@ export function joobleAdapter(sourceKey: string): SourceAdapter {
       fetchedAt: ctx.now.toISOString(),
      }));
      collected += items.length;
-     yield { items, cursor: { lastSuccessIso: ctx.now.toISOString() }, requestsUsed: 1, exhausted: false };
+     yield { items, cursor: { lastSuccessIso: ctx.now.toISOString() }, requestsUsed: 1, exhausted: items.length === 0 };
     }
    }
   },

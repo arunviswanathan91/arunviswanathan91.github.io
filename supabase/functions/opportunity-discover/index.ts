@@ -27,11 +27,12 @@ Deno.serve(async (req) => {
  const userId = userIdFromRequest(req);
  if (!userId) return json({ error: "unauthenticated" }, 401);
 
- let body: { query?: unknown };
+ let body: { query?: unknown; mode?: unknown };
  try { body = await req.json(); }
  catch { return json({ error: "invalid_json" }, 400); }
  const query = typeof body.query === "string" ? body.query.trim().replace(/\s+/g, " ") : "";
- if (!query) return json({ error: "Enter what you want to find." }, 400);
+ const mode = body.mode === "discovery" ? "discovery" : "search";
+ if (mode === "search" && !query) return json({ error: "Enter what you want to find." }, 400);
  if (query.length > 180) return json({ error: "Keep the search under 180 characters." }, 400);
 
  const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -51,7 +52,7 @@ Deno.serve(async (req) => {
 
  // Attach the workspace to an existing run instead of starting competing work.
  const { data: busy } = await db.from("discovery_runs")
-  .select("id,status,query")
+  .select("id,status,query,run_mode")
   .eq("user_id", userId)
   .in("status", ["queued", "running"])
   .gt("expires_at", new Date().toISOString())
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
   .limit(1)
   .maybeSingle();
  if (busy) return json({
-  run_id: busy.id, status: busy.status, query: busy.query, already_running: true,
+  run_id: busy.id, status: busy.status, query: busy.query, mode: busy.run_mode, already_running: true,
  });
 
  const { data: profile } = await db.from("discovery_profiles")
@@ -69,10 +70,12 @@ Deno.serve(async (req) => {
   user_id: userId,
   profile_id: profile?.id ?? null,
   trigger: "manual",
+  run_mode: mode,
   status: "queued",
   query,
   chat_id: null,
   claim_token: claimToken,
+  stats: { phase: "queued", dispatchTarget: hasGitHub ? "github_actions" : "cloud_run" },
   expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
  }).select("id").single();
  if (insertError || !run) return json({ error: "Could not create the discovery run." }, 500);
@@ -93,7 +96,7 @@ Deno.serve(async (req) => {
      },
      body: JSON.stringify({
       event_type: "discover",
-      client_payload: { trigger: "manual", query, run_id: run.id, claim_token: claimToken },
+      client_payload: { trigger: "manual", mode, query, run_id: run.id, claim_token: claimToken },
      }),
     });
     if (response.ok) return;
@@ -108,6 +111,9 @@ Deno.serve(async (req) => {
     }
    }
   }
+  await db.from("discovery_runs").update({
+   stats: { phase: "queued", dispatchTarget: "cloud_run", fallbackFrom: hasGitHub ? "github_actions" : null },
+  }).eq("id", run.id);
   try {
    const response = await fetch(discoveryUrl!, {
     method: "POST",
@@ -122,5 +128,5 @@ Deno.serve(async (req) => {
 
  // The browser returns immediately and follows progress from the run row.
  EdgeRuntime.waitUntil(execute());
- return json({ run_id: run.id, status: "queued", query }, 202);
+ return json({ run_id: run.id, status: "queued", query: query || null, mode }, 202);
 });

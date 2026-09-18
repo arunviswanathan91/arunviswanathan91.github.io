@@ -61,7 +61,8 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
   async *fetch(q: SourceQuery, w: FetchWindow, ctx: SourceContext): AsyncGenerator<SourcePage> {
    const requested=q.countries.includes("*")?Object.keys(COUNTRY_PATHS):q.countries;
    const countries = requested.map(c => COUNTRY_PATHS[c]).filter(Boolean);
-   if (!countries.length) countries.push("in");
+   // Unsupported/empty destinations must not silently become India.
+   if (!countries.length) return;
 
    const maxAgeDays = q.since
     ? Math.max(1, Math.ceil((ctx.now.getTime() - q.since.getTime()) / 86400000) + 1)
@@ -70,12 +71,15 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
    let requests = 0;
    let collected = 0;
 
-   for (const country of countries) {
-    for (const term of q.terms.slice(0, 4)) {
+   const pairs = q.terms.slice(0, 3).flatMap(term => countries.map(country => ({ country, term })));
+   // Page 1 for every country/term pair before page 2 for any pair. This avoids
+   // exhausting the request budget on the first few countries.
+   for (let page = 1; page <= 3; page++) {
+    for (const { country, term } of pairs) {
      if (requests >= w.maxRequests || collected >= w.maxItems || Date.now() > w.deadlineAt) break;
 
      const url =
-      `https://api.adzuna.com/v1/api/jobs/${country}/search/1` +
+      `https://api.adzuna.com/v1/api/jobs/${country}/search/${page}` +
       `?app_id=${encodeURIComponent(appId)}&app_key=${encodeURIComponent(appKey)}` +
       `&results_per_page=${resultsPerPage}` +
       `&what=${encodeURIComponent(term)}` +
@@ -98,7 +102,7 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
       items,
       cursor: { lastSuccessIso: ctx.now.toISOString() },
       requestsUsed: 1,
-      exhausted: false,
+      exhausted: data.results.length < resultsPerPage,
      };
     }
    }

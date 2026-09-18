@@ -1,11 +1,12 @@
-/** Persisted inside opportunities.score_breakdown.context.brief (version 2).
+/** Persisted inside opportunities.score_breakdown.context.brief (versioned).
  * Keep this display contract aligned with pipeline/src/enrich/assessment.ts. */
+import type { CurrencyConversion } from "./currency";
 export type Basis = "listing" | "source" | "general" | "estimate" | "unknown";
 export interface Claim { text: string; basis: Basis; source_ids: number[] }
 export interface MoneyRange { low: number; high: number; basis: Basis; source_ids: number[]; note: string }
 export interface AssessmentPreferences {
  interests: string[]; avoid: string[]; nationality: string; residence: string;
- household: number; housing: "shared" | "private"; careerGoal: string;
+ displayCurrency: string; household: number; housing: "shared" | "private"; careerGoal: string;
 }
 export const moneyKeys = ["gross", "deductions", "rent", "essentials", "upfront"] as const;
 export type MoneyKey = typeof moneyKeys[number];
@@ -15,6 +16,7 @@ export interface DecisionBrief {
  fit: { verdict: "direct" | "transferable" | "weak" | "unknown"; reason: string; strengths: string[]; gaps: string[] };
  sections: Record<string, Claim>;
  money: Record<MoneyKey, MoneyRange | null> & { currency: string | null; contract_percent: number | null; salary_basis: string; assumptions: string[] };
+ currency_conversion?: CurrencyConversion;
  questions: string[]; next_steps: string[];
 }
 export interface Range { low: number; high: number }

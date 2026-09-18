@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Env } from "./config.js";
 import { assessmentPreferences, needsAssessment } from "./enrich/assessment.js";
-import type { SearchProfile, SourceOutcome } from "./types.js";
+import type { NormalizedOpportunity, RunMode, SearchProfile, SourceOutcome } from "./types.js";
 import type { Candidate } from "./dedupe/cascade.js";
 
 export interface SourceRow {
@@ -87,9 +87,9 @@ export class Db {
   return (data ?? []) as SourceRow[];
  }
 
- async createRun(userId: string, profileId: string | null, trigger: string, query: string | null, chatId: number | null): Promise<string | null> {
+ async createRun(userId: string, profileId: string | null, trigger: string, mode: RunMode, query: string | null, chatId: number | null): Promise<string | null> {
   const { data, error } = await this.client.from("discovery_runs")
-   .insert({ user_id: userId, profile_id: profileId, trigger, status: "running", query, chat_id: chatId, started_at: new Date().toISOString() })
+   .insert({ user_id: userId, profile_id: profileId, trigger, run_mode: mode, status: "running", query, chat_id: chatId, started_at: new Date().toISOString() })
    .select("id").maybeSingle();
   if (error) return null;
   return data?.id ? String(data.id) : null;
@@ -104,7 +104,7 @@ export class Db {
    .update({ status: "running", started_at: new Date().toISOString(), claim_token: null })
    .eq("id", runId).eq("claim_token", token).eq("status", "queued")
    .gt("expires_at", new Date().toISOString())
-   .select("user_id,profile_id,query,chat_id,trigger").maybeSingle();
+   .select("user_id,profile_id,query,chat_id,trigger,run_mode").maybeSingle();
   return data ?? null;
  }
 
@@ -115,13 +115,70 @@ export class Db {
    .eq("id", runId);
  }
 
+ async updateRunProgress(runId: string | null, stats: unknown) {
+  if (!runId) return;
+  await this.client.from("discovery_runs").update({ stats }).eq("id", runId);
+ }
+
  async recordSourceOutcome(runId: string | null, userId: string, o: SourceOutcome) {
   if (!runId) return;
   await this.client.from("discovery_run_sources").upsert({
    run_id: runId, user_id: userId, source_key: o.sourceKey, status: o.status,
    items_fetched: o.itemsFetched, items_new: o.itemsNew, pages: o.pages,
+   items_evaluated: o.itemsEvaluated, items_filtered: o.itemsFiltered,
+   items_matched: o.itemsMatched, items_unchanged: o.itemsUnchanged,
+   filter_reasons: o.filterReasons,
    api_calls: o.apiCalls, duration_ms: o.durationMs, error: o.error ?? null,
   }, { onConflict: "run_id,source_key" });
+ }
+
+ async recordRunItems(runId: string | null, userId: string, rows: Array<{
+  opportunity: NormalizedOpportunity;
+  disposition: "accepted" | "ranked_low" | "excluded";
+  reason: string | null;
+  score: number | null;
+ }>) {
+  if (!runId || !rows.length) return;
+  const payload = rows.map(({ opportunity:o, disposition, reason, score }) => ({
+   run_id: runId, user_id: userId, source_key: o.sourceKey,
+   external_id: o.externalId, content_hash: o.contentHash, url: o.url,
+   title: o.title, organization: o.organization, location: o.locationRaw,
+   country: o.country, opportunity_type: o.opportunityType,
+   disposition, reason, score,
+   metadata: o.locationMetadata ?? {},
+  }));
+  const { error } = await this.client.from("discovery_run_items").upsert(payload, {
+   onConflict: "run_id,source_key,external_id,content_hash",
+  });
+  // Audit data must never make discovery fail during the short deployment
+  // window before the additive SQL migration is applied.
+  return error?.message ?? null;
+ }
+
+ async loadMetadataCandidates(userId: string, limit: number, refreshExisting = false): Promise<ContextCandidate[]> {
+  let query = this.client.from("opportunities")
+   .select("id,role,organization,organization_url,location,city,country,url,summary,description_excerpt,score_breakdown,enrichment,salary_display,salary_is_predicted")
+   .eq("user_id", userId).is("deleted_at", null).in("status", ["New", "Shortlisted"])
+   .order("match_score", { ascending: false }).limit(Math.max(limit * 4, limit));
+  if (!refreshExisting) query = query.or("country.is.null,organization.is.null,city.is.null");
+  const { data, error } = await query;
+  if (error) throw new Error("loadMetadataCandidates: " + error.message);
+  return ((data ?? []) as ContextCandidate[]).slice(0, limit);
+ }
+
+ async saveOpportunityMetadata(candidate: ContextCandidate, enriched: NormalizedOpportunity) {
+  const score = candidate.score_breakdown && typeof candidate.score_breakdown === "object"
+   ? candidate.score_breakdown : {};
+  const { error } = await this.client.from("opportunities").update({
+   organization: enriched.organization ?? candidate.organization,
+   city: enriched.city ?? candidate.city,
+   country: enriched.country ?? candidate.country,
+   region: enriched.region,
+   score_breakdown: { ...score, metadata: enriched.locationMetadata ?? {} },
+   enrichment: candidate.enrichment === "context_ready"
+    ? "context_ready" : enriched.country ? "metadata_ready" : candidate.enrichment,
+  }).eq("id", candidate.id);
+  if (error) throw new Error("saveOpportunityMetadata: " + error.message);
  }
 
  async markSourceSuccess(id: string, cursor: unknown) {

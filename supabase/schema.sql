@@ -720,6 +720,7 @@ create table if not exists discovery_runs (
   user_id uuid not null references auth.users(id) on delete cascade,
   profile_id uuid references discovery_profiles(id) on delete set null,
   trigger text not null default 'schedule',
+  run_mode text not null default 'discovery' check (run_mode in ('discovery','search','backfill')),
   status discovery_run_status not null default 'queued',
   query text,
   chat_id bigint,
@@ -741,6 +742,11 @@ create table if not exists discovery_run_sources (
   status text not null default 'ok',
   items_fetched integer not null default 0,
   items_new integer not null default 0,
+  items_evaluated integer not null default 0,
+  items_filtered integer not null default 0,
+  items_matched integer not null default 0,
+  items_unchanged integer not null default 0,
+  filter_reasons jsonb not null default '{}'::jsonb,
   pages integer not null default 0,
   api_calls integer not null default 0,
   duration_ms integer not null default 0,
@@ -768,6 +774,31 @@ create table if not exists discovery_raw_items (
   error text,
   fetched_at timestamptz not null default now(),
   unique (user_id, source_key, external_id, content_hash)
+);
+
+-- Per-run decision ledger. Raw items are content-deduplicated across runs, so
+-- this separate table explains what every individual run accepted, ranked low,
+-- or excluded without deleting the underlying discovery evidence.
+create table if not exists discovery_run_items (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references discovery_runs(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  source_key text not null,
+  external_id text not null,
+  content_hash text not null,
+  opportunity_id uuid,
+  url text not null,
+  title text not null,
+  organization text,
+  location text,
+  country text,
+  opportunity_type text,
+  disposition text not null check (disposition in ('accepted','ranked_low','excluded')),
+  reason text,
+  score integer,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (run_id, source_key, external_id, content_hash)
 );
 
 -- The dashboard entity. Deliberately bounded: useTable has no pagination, so
@@ -905,6 +936,12 @@ alter table opportunities add column if not exists reposted_of uuid references o
 alter table opportunities add column if not exists enrichment text not null default 'none';
 alter table discovery_sources add column if not exists precedence smallint not null default 50;
 alter table discovery_profiles add column if not exists site_snapshot jsonb not null default '{}'::jsonb;
+alter table discovery_runs add column if not exists run_mode text not null default 'discovery';
+alter table discovery_run_sources add column if not exists items_evaluated integer not null default 0;
+alter table discovery_run_sources add column if not exists items_filtered integer not null default 0;
+alter table discovery_run_sources add column if not exists items_matched integer not null default 0;
+alter table discovery_run_sources add column if not exists items_unchanged integer not null default 0;
+alter table discovery_run_sources add column if not exists filter_reasons jsonb not null default '{}'::jsonb;
 
 do $$ begin
   if exists (select 1 from pg_type where typname='vector') then
@@ -918,6 +955,7 @@ alter table discovery_sources enable row level security;
 alter table discovery_runs enable row level security;
 alter table discovery_run_sources enable row level security;
 alter table discovery_raw_items enable row level security;
+alter table discovery_run_items enable row level security;
 alter table opportunities enable row level security;
 alter table opportunity_sources enable row level security;
 alter table opportunity_salaries enable row level security;
@@ -935,6 +973,8 @@ drop policy if exists "own discovery run sources" on discovery_run_sources;
 create policy "own discovery run sources" on discovery_run_sources for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
 drop policy if exists "own discovery raw items" on discovery_raw_items;
 create policy "own discovery raw items" on discovery_raw_items for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+drop policy if exists "own discovery run items" on discovery_run_items;
+create policy "own discovery run items" on discovery_run_items for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
 drop policy if exists "own opportunities" on opportunities;
 create policy "own opportunities" on opportunities for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
 drop policy if exists "own opportunity sources" on opportunity_sources;

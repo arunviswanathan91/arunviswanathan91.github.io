@@ -73,6 +73,11 @@ export interface QueryRelevance {
  note: string;
 }
 
+/** A focused query classifies presentation priority only. Source discovery is
+ * never destroyed because a lexical/ontology matcher lacked overlap. */
+export const queryDisposition = (relevance: QueryRelevance): "accepted" | "ranked_low" =>
+ relevance.keep ? "accepted" : "ranked_low";
+
 /**
  * Makes an explicit interactive query authoritative. The ontology supplies
  * scientific synonyms (for example PDAC -> pancreatic cancer), while lexical
