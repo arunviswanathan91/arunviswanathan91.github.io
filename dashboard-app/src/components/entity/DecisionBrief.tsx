@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowUpRight, Calculator, CheckCheck, Compass, Sparkles } from "lucide-react";
 import { calculateBudget, fitLabels, moneyKeys, parseBudgetRange, type Basis, type Claim, type DecisionBrief, type MoneyKey, type Range } from "../../lib/decision";
+import { convertedRange, type CurrencyConversion } from "../../lib/currency";
 import { formatDate } from "../../lib/format";
 import { safeUrl, type OpportunityContext } from "./OpportunityContext";
 
@@ -29,13 +30,20 @@ function BriefClaim({name,claim,context}:{name:string;claim?:Claim;context:Oppor
  </div>;
 }
 
-function Budget({brief,context}:{brief:DecisionBrief;context:OpportunityContext}) {
+function Budget({brief,context,currencyConversion}:{brief:DecisionBrief;context:OpportunityContext;currencyConversion?:CurrencyConversion|null}) {
  const initial=()=>Object.fromEntries(moneyKeys.map(key=>[key,{low:brief.money[key]?.low?.toString()??"",high:brief.money[key]?.high?.toString()??""}])) as Record<MoneyKey,{low:string;high:string}>;
  const [values,setValues]=useState(initial);
  const [edited,setEdited]=useState(false);
  const ranges=Object.fromEntries(moneyKeys.map(key=>[key,parseBudgetRange(values[key].low,values[key].high)])) as Record<MoneyKey,Range|null>;
  const result=calculateBudget(ranges);
  const currency=brief.money.currency;
+ const candidate=brief.currency_conversion??currencyConversion??null;
+ const conversion=candidate&&currency&&candidate.fromCurrency===currency&&candidate.toCurrency!==currency?candidate:null;
+ const home=(range:Range|null)=>{
+  const converted=convertedRange(range,conversion);
+  return converted&&conversion?`≈${formatRange(converted,conversion.toCurrency)}`:null;
+ };
+ const netHome=home(result.net),savingsHome=home(result.savings),upfrontHome=home(ranges.upfront),firstYearHome=home(result.firstYear);
  const set=(key:MoneyKey,bound:"low"|"high",value:string)=>{setEdited(true);setValues(prev=>({...prev,[key]:{...prev[key],[bound]:value}}))};
  const changed=(key:MoneyKey)=>values[key].low!==(brief.money[key]?.low?.toString()??"")||values[key].high!==(brief.money[key]?.high?.toString()??"");
  return <section className="brief-budget" data-no-swipe aria-label="Monthly budget scenario">
@@ -43,9 +51,10 @@ function Budget({brief,context}:{brief:DecisionBrief;context:OpportunityContext}
   <p className="brief-budget-assumption">{brief.money.salary_basis==="typical_estimate"?"Pay is an estimated market range, not a salary offered by this employer.":brief.money.salary_basis==="pay_scale"?"Pay uses a scale assumption; confirm grade and step with HR.":brief.money.salary_basis==="listed"?"Pay is based on the listing; confirm the final contract with HR.":"Employer pay is not established."}
    {brief.money.contract_percent!==null&&` ${brief.money.contract_percent}% guaranteed contract assumed; any possible uplift is excluded.`}
   </p>
+  {conversion&&<p className="currency-rate-note">Approximate {conversion.toCurrency} comparisons use the <a href={safeUrl(conversion.sourceUrl)??undefined} target="_blank" rel="noopener noreferrer">daily exchange rate</a> dated {conversion.asOf}. The destination-currency amounts remain authoritative.</p>}
   <div className="budget-results" aria-live="polite">
-   <div><span>Take-home / month</span><strong>{currency?formatRange(result.net,currency):"Currency not established"}</strong><small>Gross minus estimated payroll deductions</small></div>
-   <div className={result.savings&&result.savings.low<0?"budget-shortfall":"budget-saving"}><span>Possible savings / month</span><strong>{currency?formatRange(result.savings,currency):"Currency not established"}</strong><small>{result.savings&&result.savings.low<0?"Lower scenario has a shortfall":"After rent and everyday essentials"}</small></div>
+   <div><span>Take-home / month</span><strong>{currency?formatRange(result.net,currency):"Currency not established"}</strong>{netHome&&<small className="currency-conversion">{netHome} in {conversion?.toCurrency}</small>}<small>Gross minus estimated payroll deductions</small></div>
+   <div className={result.savings&&result.savings.low<0?"budget-shortfall":"budget-saving"}><span>Possible savings / month</span><strong>{currency?formatRange(result.savings,currency):"Currency not established"}</strong>{savingsHome&&<small className="currency-conversion">{savingsHome} in {conversion?.toCurrency}</small>}<small>{result.savings&&result.savings.low<0?"Lower scenario has a shortfall":"After rent and everyday essentials"}</small></div>
   </div>
   <p className="muted-note">These are estimates, not a payroll calculation. The lower scenario pairs lower pay with higher costs. Missing amounts are never treated as zero. Remittances, debts and optional spending are extra.</p>
   <details className="budget-inputs">
@@ -64,16 +73,16 @@ function Budget({brief,context}:{brief:DecisionBrief;context:OpportunityContext}
   </details>
   {brief.money.assumptions?.length>0&&<details><summary>Assumptions & exclusions</summary><ul>{brief.money.assumptions.map((text,i)=><li key={i}>{text}</li>)}</ul></details>}
   <details><summary>One-off costs & 12-month comparison</summary>
-   <p>Upfront cash needed: <strong>{formatRange(ranges.upfront,currency)}</strong>. A rental deposit is tied-up cash, and may be refundable.</p>
-   <p>Hypothetical 12-month cash remaining after upfront costs: <strong>{formatRange(result.firstYear,currency)}</strong>.</p>
+   <p>Upfront cash needed: <strong>{formatRange(ranges.upfront,currency)}</strong>{upfrontHome&&<> ({upfrontHome} in {conversion?.toCurrency})</>}. A rental deposit is tied-up cash, and may be refundable.</p>
+   <p>Hypothetical 12-month cash remaining after upfront costs: <strong>{formatRange(result.firstYear,currency)}</strong>{firstYearHome&&<> ({firstYearHome} in {conversion?.toCurrency})</>}.</p>
    <p>This assumes the same income and expenses for all 12 months. A shorter contract, tax adjustment or job gap changes the result; a possible extension is not guaranteed.</p>
   </details>
  </section>;
 }
 
-export function DecisionBriefView({context}:{context:OpportunityContext}) {
+export function DecisionBriefView({context,currencyConversion}:{context:OpportunityContext;currencyConversion?:CurrencyConversion|null}) {
  const brief=context.brief;
- if(!brief||brief.version!==2)return null;
+ if(!brief||brief.version<2)return null;
  const sections=brief.sections??{};
  const verdict=brief.fit?.verdict??"unknown";
  const group=(title:string,keys:string[],open=false)=><details className="brief-group" open={open||undefined}>
@@ -92,7 +101,7 @@ export function DecisionBriefView({context}:{context:OpportunityContext}) {
    </div>
   </section>
   <div className="brief-claims brief-essentials">{["role","contract"].map(key=><BriefClaim key={key} name={key} claim={sections[key]} context={context}/>)}</div>
-  <Budget key={context.generated_at} brief={brief} context={context}/>
+  <Budget key={context.generated_at} brief={brief} context={context} currencyConversion={currencyConversion}/>
   {group("Visa, taxes & relocation",["visa","tax","relocation"],true)}
   {group("Institution & career value",["institution","career"])}
   {group("Life in this city",["place","population","climate","transport","living","inclusion"])}

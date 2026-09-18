@@ -4,6 +4,7 @@ import {
  MapPin, RotateCcw, ShieldCheck, Shuffle, Sparkles, ThermometerSun, ThumbsDown, ThumbsUp, Users,
 } from "lucide-react";
 import { formatDate } from "../../lib/format";
+import { currencyConversionFor, salaryDisplayFor } from "../../lib/currency";
 import { shuffleIds } from "../../lib/shuffle";
 import type { Row } from "../../entities/types";
 import { ContextFact, contextFor, safeUrl } from "./OpportunityContext";
@@ -130,9 +131,9 @@ export function OpportunitySwipe({rows,onDecision,onUndo}:{
     <span><MapPin/>{current.location||[current.city,current.country].filter(Boolean).join(", ")||"Location unavailable"}</span>
     <span><CalendarDays/>{current.deadline?"Deadline "+formatDate(current.deadline):"No deadline listed"}</span>
     <span>{current.opportunity_type||"Research role"}</span>
-    {current.salary_display&&<span>{current.salary_display}</span>}
+    {current.salary_display&&<span>{salaryDisplayFor(current)}</span>}
    </div>
-   {context.brief?.version===2?<div className="swipe-brief-body"><DecisionBriefView key={current.id} context={context}/></div>:<div className="swipe-card-body">
+   {Number(context.brief?.version??0)>=2?<div className="swipe-brief-body"><DecisionBriefView key={current.id} context={context} currencyConversion={currencyConversionFor(current)}/></div>:<div className="swipe-card-body">
     <section className="swipe-main-copy">
      {current.summary&&<div><h3>Role overview</h3><p>{current.summary}</p></div>}
      {current.fit_reason&&<div><h3>Why it matched</h3><p>{current.fit_reason}</p></div>}

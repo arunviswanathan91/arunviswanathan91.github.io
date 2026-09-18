@@ -1,17 +1,15 @@
 import type { SalaryEvidence } from "../types.js";
+import { conversionBetween, rateBetween, type CurrencyConversion, type ExchangeRateSnapshot } from "../currency.js";
 
-/** Rough, deliberately conservative. Only used to compare against a floor. */
-const TO_INR: Record<string, number> = {
- INR: 1, USD: 84, EUR: 92, GBP: 107, CHF: 96, SGD: 62, AUD: 55, CAD: 61, SEK: 8, DKK: 12, NOK: 8, JPY: 0.56,
-};
 const PER_YEAR: Record<string, number> = { hour: 2080, day: 260, week: 52, month: 12, year: 1 };
 
-export function annualInr(s: SalaryEvidence | null): number | null {
+/** Used for the INR salary floor. Foreign pay is comparable only with a fetched daily rate. */
+export function annualInr(s: SalaryEvidence | null, rates?: ExchangeRateSnapshot | null): number | null {
  if (!s) return null;
  const value = s.max != null && s.max > 0 ? s.max : s.min != null && s.min > 0 ? s.min : null;
  if (value == null) return null;
- const rate = TO_INR[(s.currency ?? "INR").toUpperCase()];
- if (!rate) return null;
+ const rate = rateBetween(rates, s.currency ?? "INR", "INR");
+ if (rate === null) return null;
  return Math.round(value * rate * PER_YEAR[s.period ?? "year"]);
 }
 
@@ -111,4 +109,28 @@ export function salarySourceLabel(s: SalaryEvidence | null): string {
  if (s.extractedFrom === "jsonld") return "JSON-LD";
  if (s.extractedFrom === "llm") return "From text";
  return "From text";
+}
+
+export interface SalaryCurrencyConversion extends CurrencyConversion {
+ display: string;
+}
+
+/** Keeps the advertised amount primary and prepares a clearly approximate user-selected comparison. */
+export function salaryCurrencyConversion(
+ s: SalaryEvidence | null,
+ comparisonCurrency: string | null | undefined,
+ rates: ExchangeRateSnapshot | null | undefined,
+): SalaryCurrencyConversion | null {
+ if (!s?.currency || !comparisonCurrency || s.currency.toUpperCase() === comparisonCurrency.toUpperCase()) return null;
+ const conversion = conversionBetween(rates, s.currency, comparisonCurrency);
+ if (!conversion) return null;
+ const converted: SalaryEvidence = {
+  ...s,
+  min: s.min == null ? null : Math.round(s.min * conversion.rate),
+  max: s.max == null ? null : Math.round(s.max * conversion.rate),
+  currency: conversion.toCurrency,
+  isPredicted: false,
+ };
+ const display = salaryDisplay(converted);
+ return display ? { ...conversion, display: `≈${display}` } : null;
 }

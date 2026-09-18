@@ -3,13 +3,14 @@ import { canonicalizeUrl, atsKey, urlHash } from "../src/normalize/url.js";
 import { contentHash, htmlToText, normalizeForHash, stripBoilerplate, decodeEntities, excerpt } from "../src/normalize/text.js";
 import { normalizeCity, normalizeCountry, regionOf, locKey, parseLocation, looksRemote } from "../src/normalize/location.js";
 import { classifyType, requiredPostPhdYears, isSeniorLeadership, JUNK_TITLE } from "../src/normalize/type.js";
-import { salaryFromText, annualInr, salaryDisplay } from "../src/normalize/salary.js";
+import { salaryFromText, annualInr, salaryDisplay, salaryCurrencyConversion } from "../src/normalize/salary.js";
+import { loadInrExchangeRates, rateBetween, type ExchangeRateSnapshot } from "../src/currency.js";
 import { extractJsonLd, findJobPostings, readJobPosting } from "../src/normalize/jsonld.js";
 import { orgKey, titleTokens, jaccard, simhash, hamming, simhashBands } from "../src/dedupe/keys.js";
 import { matchCandidate, type Candidate } from "../src/dedupe/cascade.js";
 import { topicMatch } from "../src/score/ontology.js";
 import { hardFilter, scoreOpportunity } from "../src/score/score.js";
-import { queryRelevance } from "../src/score/query.js";
+import { queryDisposition, queryRelevance } from "../src/score/query.js";
 import { buildOpportunity } from "../src/sources/build.js";
 import { parseFeed } from "../src/sources/feed.js";
 import { formatDigest } from "../src/sinks/telegram.js";
@@ -17,7 +18,8 @@ import type { NormalizedOpportunity, SearchProfile } from "../src/types.js";
 import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/euraxess.js";
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
-import { isFreshSearch, shouldEvaluate, termsForRun } from "../src/search/query.js";
+import { isFreshSearch, shouldEvaluate, termsForDiscovery, termsForRun } from "../src/search/query.js";
+import { enrichMetadataLocally } from "../src/enrich/metadata.js";
 import { contextPayloadFromInteraction, hasMeaningfulContext, normalizeContextPayload, UNKNOWN } from "../src/enrich/context.js";
 import { contextProviders, createContextFallback, ContextProvidersUnavailable, openrouterRequest, parseOpenrouterContext, enrichOpportunityContext } from "../src/enrich/context.js";
 import { readEnv } from "../src/config.js";
@@ -133,7 +135,7 @@ const decisionPayload = () => ({
  eq("OpenRouter request uses official chat endpoint", postedUrl, "https://openrouter.ai/api/v1/chat/completions");
  check("OpenRouter integration sends requested model", (postedBody as { model: string }).model === "stealth/union-alpha");
  eq("saved context records provider and model", [result.provider, result.model], ["openrouter", "stealth/union-alpha"]);
- eq("provider output becomes a versioned decision brief",result.brief?.version,3);
+ eq("provider output becomes a versioned decision brief",result.brief?.version,4);
  eq("rich request retains zero price ceiling",(postedBody as ReturnType<typeof openrouterRequest>).provider.max_price,{prompt:0,completion:0,request:0});
  let placeholdersRejected = false;
  const placeholders = { postJson: async () => ({ choices: [{ message: { content: JSON.stringify(Object.fromEntries(Object.keys(payload).map(key => [key, UNKNOWN]))) } }] }) } as unknown as Http;
@@ -235,6 +237,10 @@ check("postdoc is not senior leadership", !isSeniorLeadership("Postdoctoral Fell
 
 // ---- salary ----
 {
+ const rates: ExchangeRateSnapshot = {
+  base:"INR", asOf:"2026-09-16", sourceUrl:"https://example.test/inr.json",
+  toInr:{INR:1,USD:84,EUR:92},
+ };
  const s = salaryFromText("Salary range: INR 8,00,000 - INR 12,00,000 per annum");
  check("salary range parsed", !!s && s.min === 800000 && s.max === 1200000 && s.currency === "INR");
  const lpa = salaryFromText("Compensation: 18 LPA");
@@ -242,13 +248,27 @@ check("postdoc is not senior leadership", !isSeniorLeadership("Postdoctoral Fell
  const usd = salaryFromText("We offer $60,000 - $75,000 a year depending on experience.");
  check("usd range parsed", !!usd && usd.currency === "USD" && usd.min === 60000 && usd.max === 75000);
  check("no salary mentioned returns null", salaryFromText("A wonderful opportunity to join our team.") === null);
- eq("annualInr converts usd", annualInr({ min: 60000, max: 60000, currency: "USD", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null }), 60000 * 84);
+ eq("annualInr converts usd with the fetched rate", annualInr({ min: 60000, max: 60000, currency: "USD", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null },rates), 60000 * 84);
+ eq("foreign salary is not guessed when rates are unavailable", annualInr({ min: 60000, max: 60000, currency: "USD", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null }), null);
+ eq("rate conversion works between two non-INR currencies",rateBetween(rates,"EUR","USD"),92/84);
+ eq("display currency defaults to INR independently of residence",assessmentPreferences({residence:"Sweden"}).displayCurrency,"INR");
+ eq("user-selected display currency is normalized",assessmentPreferences({residence:"India",displayCurrency:"usd"}).displayCurrency,"USD");
+ const converted=salaryCurrencyConversion(usd,"INR",rates);
+ eq("converted salary preserves the original period and marks approximation",converted?.display,"≈₹50.4L–63L/yr");
  eq("salaryDisplay formats inr lakhs", salaryDisplay({ min: 800000, max: 1200000, currency: "INR", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null }), "₹8L–12L/yr");
  eq("salaryDisplay null salary", salaryDisplay(null), null);
  eq("salaryDisplay ignores a zero lower bound", salaryDisplay({
   min: 0, max: 80000, currency: "USD", period: "year", isPredicted: false,
   extractedFrom: "api", confidence: 0.9, evidence: null,
  }), "$80,000/yr");
+
+ const requested:string[]=[];
+ const loaded=await loadInrExchangeRates({getJson:async (url:string)=>{
+  requested.push(url);
+  return requested.length===1?null:{date:"2026-09-16",inr:{usd:1/84,eur:1/92,...Object.fromEntries(Array.from({length:25},(_,i)=>[`x${String.fromCharCode(97+i%26)}z`,i+1]))}};
+ }} as unknown as Pick<Http,"getJson">);
+ eq("exchange API falls back to the documented mirror",requested.length,2);
+ eq("exchange API response is inverted into INR-per-unit rates",Math.round(loaded?.toInr.USD??0),84);
 }
 
 // ---- JSON-LD ----
@@ -416,6 +436,8 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("explicit query keeps a broader cancer postdoc as a related result", queryRelevance(related, "pancreatic cancer postdoc").keep);
  check("explicit query rejects an unrelated laser postdoc", !queryRelevance(laser, "pancreatic cancer postdoc").keep);
  check("explicit query rejects an unrelated astronomy postdoc", !queryRelevance(galaxy, "pancreatic cancer postdoc").keep);
+ eq("unrelated query results are retained as ranked-low discoveries, not deleted",
+  queryDisposition(queryRelevance(galaxy, "pancreatic cancer postdoc")), "ranked_low");
  check("Europe query rejects an otherwise relevant US postdoc", !queryRelevance(makeOpp({
   title: "Cancer Biology Postdoctoral Fellow", descriptionText: "Cancer research", city: "New York", country: "US", region: "North America",
  }), "cancer biology postdoc in Europe").keep);
@@ -436,12 +458,24 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
   termsForRun(["old profile term"], "pancreatic cancer postdoc"),
   ["pancreatic cancer postdoc", "pancreatic cancer postdoctoral", "pancreatic cancer research fellow"]);
  eq("blank query keeps the profile terms", termsForRun(["profile term"], "  "), ["profile term"]);
+ eq("broad discovery is independent of profile interests", termsForDiscovery(), ["postdoc","postdoctoral researcher","research fellow"]);
  eq("role-only postdoc search uses selected subjects", termsForRun(["Cancer biology", "Spatial biology"], "postdoc"), ["Cancer biology postdoc", "Spatial biology postdoc"]);
  check("Telegram runs are fresh searches", isFreshSearch("telegram"));
  check("workspace/manual runs are fresh searches", isFreshSearch("manual"));
  check("scheduled runs remain incremental", !isFreshSearch("schedule"));
  check("fresh searches rescore unchanged listings", shouldEvaluate(true, false));
  check("scheduled runs skip unchanged listings", !shouldEvaluate(false, false));
+}
+
+// ---- metadata repair before geography filtering ----
+{
+ const fromDomain=enrichMetadataLocally(makeOpp({
+  country:null,city:null,locationRaw:null,organizationUrl:"https://www.example.ac.uk/research",url:"https://jobs.example.ac.uk/42",
+ }));
+ eq("country can be repaired from an institution domain before filtering",fromDomain.country,"GB");
+ eq("country repair records deterministic provenance",fromDomain.locationMetadata?.method,"deterministic");
+ const sourceWins=enrichMetadataLocally(makeOpp({country:"SE",organizationUrl:"https://example.de"}));
+ eq("explicit source country wins over domain inference",sourceWins.country,"SE");
 }
 
 // ---- default source catalog ----
@@ -551,29 +585,30 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
 // ---- telegram digest formatting ----
 {
  const noEnrichment = { requested: 0, candidates: 0, attempted: 0, succeeded: 0, failed: 0, skipped: 0, pending: 0, requestsUsed: 0 };
+ const noMetadata = { candidates: 0, deterministic: 0, aiBatches: 0, aiUpdated: 0, unresolved: 0, backfilled: 0 };
  const empty = formatDigest({
-  runId: "r1", status: "done", mode: "fresh", query: "cancer postdoc",
+  runId: "r1", status: "done", mode: "search", query: "cancer postdoc",
   fetched: 0, evaluated: 0, filtered: 0, matched: 0, deduped: 0,
   created: 0, changed: 0, persistenceFailures: 0, filterReasons: {},
-  bySource: {}, top: [], degradations: [], enrichment: noEnrichment,
+  bySource: {}, top: [], degradations: [], metadata: noMetadata, enrichment: noEnrichment,
  }, "https://example.com");
  check("empty digest is informative, not blank", empty.length > 10);
  check("fresh empty digest does not claim nothing new was published", !empty.includes("Nothing new was published"));
  const filteredOut = formatDigest({
-  runId: "r2", status: "done", mode: "fresh", query: "pancreatic cancer postdoc",
+  runId: "r2", status: "done", mode: "search", query: "pancreatic cancer postdoc",
   fetched: 25, evaluated: 25, filtered: 20, matched: 0, deduped: 5,
   created: 0, changed: 0, persistenceFailures: 0,
   filterReasons: { deadline_passed: 12, too_senior: 8 },
-  bySource: {}, top: [], degradations: ["feed:jobrxiv (failed)"], enrichment: noEnrichment,
+  bySource: {}, top: [], degradations: ["feed:jobrxiv (failed)"], metadata: noMetadata, enrichment: noEnrichment,
  }, "https://example.com");
  check("no-match digest exposes concrete filter counts", filteredOut.includes("deadline already passed 12"));
  check("no-match digest no longer invents a score cutoff", !filteredOut.includes("matched well enough"));
  const withResults = formatDigest({
-  runId: "r1", status: "partial", mode: "fresh", query: "cancer postdoc",
+  runId: "r1", status: "partial", mode: "search", query: "cancer postdoc",
   fetched: 10, evaluated: 10, filtered: 2, matched: 4, deduped: 3, created: 2, changed: 1,
   persistenceFailures: 0, filterReasons: { deadline_passed: 2 },
   bySource: {}, degradations: ["adzuna (monthly quota)"],
-  enrichment: noEnrichment,
+  metadata: noMetadata, enrichment: noEnrichment,
   top: [{ id: "1", score: 82, role: "Postdoc", organization: "Test Institute", location: "Stockholm", deadline: null, salaryDisplay: "€45,000/yr", url: "https://x.com/1" }],
  }, "https://example.com/dashboard");
  check("digest includes the score", withResults.includes("82"));
@@ -585,7 +620,7 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
   runId: "r3", status: "partial", mode: "backfill", query: null,
   fetched: 0, evaluated: 0, filtered: 0, matched: 0, deduped: 0,
   created: 0, changed: 0, persistenceFailures: 0, filterReasons: {}, bySource: {}, top: [],
-  degradations: ["1 context enrichment failure(s)"],
+  degradations: ["1 context enrichment failure(s)"], metadata: noMetadata,
   enrichment: { ...noEnrichment, requested: 25, candidates: 25, attempted: 25, succeeded: 24, failed: 1, pending: 10 },
  }, "https://example.com/dashboard");
  check("backfill digest reports enrichment counts", backfill.includes("enriched 24") && backfill.includes("pending 10"));

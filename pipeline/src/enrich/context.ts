@@ -2,6 +2,7 @@ import type { Env } from "../config.js";
 import type { ContextCandidate } from "../db.js";
 import type { Http } from "../http.js";
 import { HttpResponseError } from "../http.js";
+import { conversionBetween, type ExchangeRateSnapshot } from "../currency.js";
 import { excerpt } from "../normalize/text.js";
 import { assessmentInstructions, assessmentPreferences, assessmentSchema, normalizeAssessment, type AssessmentPreferences, type DecisionBrief, type Evidence } from "./assessment.js";
 import { collectDecisionEvidence, type OfficialReference } from "./evidence.js";
@@ -151,6 +152,8 @@ export async function enrichOpportunityContext(
  provider: ContextProvider = "gemini",
  suppliedEvidence?: Evidence[],
  prefs: AssessmentPreferences = assessmentPreferences({}),
+ exchangeRates?: ExchangeRateSnapshot | null,
+ comparisonCurrency?: string | null,
 ): Promise<OpportunityContext> {
  const evidence = suppliedEvidence ?? (await collectDecisionEvidence(http, candidate)).evidence;
  const schema = assessmentSchema;
@@ -200,6 +203,10 @@ export async function enrichOpportunityContext(
   payload = contextPayloadFromInteraction(response);
  }
  const brief = normalizeAssessment(payload, evidence, prefs);
+ if (brief.money.currency && comparisonCurrency && brief.money.currency !== comparisonCurrency) {
+  const conversion = conversionBetween(exchangeRates, brief.money.currency, comparisonCurrency);
+  if (conversion) brief.currency_conversion = conversion;
+ }
  if (!Object.values(brief.sections).some(claim => claim.text && claim.basis !== "unknown"))
   throw new Error(`${provider} returned no useful assessment; leaving the card pending`);
  const context: OpportunityContext = {
@@ -216,8 +223,12 @@ export async function enrichWithFallback(
  env: Env, http: Http, candidate: ContextCandidate,
  fallback: ReturnType<typeof createContextFallback<OpportunityContext>>,
  prefs: AssessmentPreferences = assessmentPreferences({}),
+ exchangeRates?: ExchangeRateSnapshot | null,
+ comparisonCurrency?: string | null,
 ) {
  const { evidence, references } = await collectDecisionEvidence(http, candidate);
- const result = await fallback(provider => enrichOpportunityContext(env, http, candidate, provider, evidence, prefs));
+ const result = await fallback(provider => enrichOpportunityContext(
+  env, http, candidate, provider, evidence, prefs, exchangeRates, comparisonCurrency,
+ ));
  return { ...result, references };
 }

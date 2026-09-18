@@ -4,6 +4,7 @@ import {
  ThermometerSun, Users,
 } from "lucide-react";
 import { formatDate } from "../../lib/format";
+import { currencyConversionFor } from "../../lib/currency";
 import type { Row } from "../../entities/types";
 import type { DecisionBrief } from "../../lib/decision";
 import { DecisionBriefView } from "./DecisionBrief";
@@ -39,7 +40,7 @@ export const contextFor=(row:Row):OpportunityContext=>{
 
 export function OpportunityContextDetails({row}:{row:Row}){
  const context=contextFor(row);
- if(context.brief?.version===2)return <div className="field-wide"><DecisionBriefView key={row.id} context={context}/></div>;
+ if(Number(context.brief?.version??0)>=2)return <div className="field-wide"><DecisionBriefView key={row.id} context={context} currencyConversion={currencyConversionFor(row)}/></div>;
  const sources=(context.sources??[]).filter(source=>safeUrl(source.url));
  const ready=Boolean(context.institution||context.place||context.living||context.inclusion);
  return <section className="opportunity-context-details field-wide" aria-label="AI decision context">

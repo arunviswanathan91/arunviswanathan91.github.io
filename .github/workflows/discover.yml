@@ -12,6 +12,7 @@ on:
         default: discovery
         options:
           - discovery
+          - search
           - backfill
       query:
         description: 'Extra search terms for a discovery run'
@@ -66,6 +67,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ github.event.inputs.mode || 'discovery' }}
           INPUT_QUERY: ${{ github.event.inputs.query || github.event.client_payload.query || '' }}
+          INPUT_RUN_MODE: ${{ github.event.client_payload.mode || '' }}
           INPUT_CHAT_ID: ${{ github.event.client_payload.chat_id || '' }}
           INPUT_RUN_ID: ${{ github.event.client_payload.run_id || '' }}
           INPUT_CLAIM_TOKEN: ${{ github.event.client_payload.claim_token || '' }}
@@ -90,7 +92,13 @@ jobs:
           MODE="discovery"
           BATCH="25"
           REFRESH="false"
-          if [ "$EVENT_NAME" = "repository_dispatch" ]; then TRIGGER="${INPUT_TRIGGER:-telegram}"; fi
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            TRIGGER="${INPUT_TRIGGER:-telegram}"
+            MODE="$INPUT_RUN_MODE"
+            if [ -z "$MODE" ]; then
+              if [ -n "$INPUT_QUERY" ]; then MODE="search"; else MODE="discovery"; fi
+            fi
+          fi
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             TRIGGER="manual"
             MODE="$INPUT_MODE"

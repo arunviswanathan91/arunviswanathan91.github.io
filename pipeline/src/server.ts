@@ -56,6 +56,7 @@ const server = createServer(async (req, res) => {
   const trigger = claimed.trigger === "manual" ? "manual" : "telegram";
   const result = await runDiscovery({
     userId: claimed.user_id, runId, trigger,
+    mode: claimed.run_mode === "search" || claimed.run_mode === "backfill" ? claimed.run_mode : "discovery",
     query: claimed.query ?? null, chatId: claimed.chat_id ?? null, quiet: true,
   }).catch(async (e: unknown) => {
    const message = e instanceof Error ? e.message : String(e);

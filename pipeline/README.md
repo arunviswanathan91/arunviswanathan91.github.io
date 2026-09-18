@@ -14,11 +14,18 @@ package with its own build, its own tests, and two thin entrypoints (`cli.ts` fo
 ```
 sources (feeds, Adzuna, Jooble, EURAXESS, JSON-LD crawl — optionally Firecrawl-rendered)
   → raw items written to the DB first (a crash never loses fetched data)
+  → source fields + deterministic + batched OpenRouter metadata repair (country/city/organisation)
+  → factual safety filters (expired/junk/blocked and explicit profile exclusions)
+  → focused-query classification (matching or ranked-low; never deletion)
   → deduplicated against everything already known (URL, ATS id, org+title+location, description fingerprint)
-  → hard-filtered (deadline, type, location, salary floor — facts, never judgment calls)
   → scored 0–100 across six explainable components (topic, role fit, location, salary, recency, your own past triage)
   → written to `opportunities`, read by the dashboard
 ```
+
+Broad discovery uses stable role-wide terms (`postdoc`, `postdoctoral researcher`, `research fellow`)
+and is independent of the research-interest profile. Focused search uses the typed query to allocate
+API requests and rank the returned set, but a query mismatch is retained as `ranked_low` in the
+per-run ledger and can still enter the discovery index. It is never treated as a deletion rule.
 
 Nightly runs skip unchanged listings because the raw-item table's unique constraint makes an
 unchanged insert a no-op. Interactive Telegram and workspace searches deliberately work differently:
@@ -58,7 +65,14 @@ npm run check           # offline checks — no network, no database
 
 Search geography comes only from `discovery_profiles.countries` (edited by the dashboard's
 **Search destinations** control) plus the separate remote toggle. Nationality, current residence,
-home city and home currency are assessment inputs only; they never add or boost a search country.
+home city and the independently selected display currency never add or boost a search country.
+
+Salary conversion uses the daily, key-free
+[`fawazahmed0/exchange-api`](https://github.com/fawazahmed0/exchange-api) INR-base table. The worker
+tries jsDelivr first and the project's documented Cloudflare Pages mirror second. Advertised pay
+always remains primary; the dashboard and Telegram digest label the user-selected display-currency value as an
+approximation and show the rate date. If both endpoints fail, foreign salaries are not guessed or
+rejected against the INR floor, and the original destination-currency amount remains available.
 
 For GitHub Actions, add `OPENROUTER_API_KEY` under repository Settings → Secrets and variables →
 Actions → New repository secret. Never use a `VITE_` key or put it in the frontend. The workflow
@@ -77,17 +91,18 @@ No paid web-search plugins are enabled. Visa/tax context comes from fetched offi
 is typical seasonal context, not a live weather forecast.
 See https://openrouter.ai/stealth/union-alpha for current preview terms and availability.
 
-Enrichment is stored under `opportunities.score_breakdown.context`, alongside the existing scoring
-components. It therefore works with the current Supabase schema and needs no migration. Source URLs
+Decision enrichment is stored under `opportunities.score_breakdown.context`; metadata provenance is
+stored under `score_breakdown.metadata`. The independent run modes and audit ledger require the
+additive `supabase/opportunity-search-v2.sql` migration. Source URLs
 are stored with the summary so the dashboard can show the evidence used for each card.
 
-To enrich opportunities that were created before context enrichment was enabled, run the
+To repair country/organisation metadata and enrich opportunities created before these stages existed, run the
 **Nightly opportunity discovery** workflow manually with **mode = backfill** and a batch size such
 as 5 for the first verification. Backfill skips every crawler, uses a separate evidence/AI request
 budget, tries OpenRouter → Groq → Gemini (configured providers only), and reuses each card's evidence
 across fallbacks. It skips quota/auth/unavailable providers for the rest of that run. If all providers
 are unavailable, it stops the batch and preserves remaining cards as pending for a later rerun.
-This is fallback/queueing, not automatic rate-limit waiting. It rejects all-placeholder results and prints
+The backfill first repairs missing metadata in batches, then produces decision briefs. This is fallback/queueing, not automatic rate-limit waiting. It rejects all-placeholder results and prints
 attempted, enriched, failed, and pending totals. Repeat it until pending reaches zero. Enable
 `refreshExisting` only when a current assessment should be forced to regenerate. Legacy seven-field
 summaries, assessments over 30 days old, and briefs generated for different preferences are eligible
@@ -101,7 +116,7 @@ These values live in the existing `discovery_profiles.ontology_overrides.assessm
 JSON. The worker uses the oldest active profile consistently with the dashboard. Other profile
 settings, source configuration and collaborator permissions are preserved. No SQL migration is needed.
 
-The second AI pass produces `score_breakdown.context.brief` version 2:
+The second AI pass produces a versioned `score_breakdown.context.brief`:
 
 - Semantic research fit (direct / transferable / weak / unknown), strengths and gaps. It distinguishes
   subject fit from a generic postdoc title and from the original deterministic search score. Broad
@@ -114,7 +129,10 @@ The second AI pass produces `score_breakdown.context.brief` version 2:
   steps. No promise of visa eligibility, processing speed, tax exemption or a specific net salary.
 - Monthly gross pay, estimated payroll deductions, rent and essentials plus separate one-off costs.
   Listed pay, pay-scale assumptions and model estimates are distinct. Guaranteed FTE is applied once;
-  a conflicting explicit part-time percentage invalidates the model's salary calculation.
+  a conflicting explicit part-time percentage invalidates the model's salary calculation. When a
+  verified daily rate is available, the UI also shows approximate values in the user's selected
+  display currency without replacing the destination-currency budget. INR is the default and any
+  browser-supported ISO currency can be selected independently of residence.
 - Questions for the PI/HR and tailored next steps. Facts, model background and estimates are labelled,
   with per-section citations and source read dates. References that could not be fetched are shown
   as links to check, not as evidence read by the model.
@@ -132,7 +150,8 @@ budget calculator uses conservative bounds, preserves unknowns, allows negative 
 upfront costs out of monthly savings. Edits are local to the open card, not a promise of payroll or a
 saved household budget. A 12-month comparison is explicitly hypothetical for shorter contracts.
 
-**Rollout:** merge the PR to publish the dashboard and make the new GitHub Actions worker available.
+**Rollout:** apply `supabase/opportunity-search-v2.sql`, deploy the updated `opportunity-discover`
+function, then merge/publish the dashboard and worker.
 Save preferences, then run **Nightly opportunity discovery → Run workflow → backfill**, starting with
 `batchSize=5`, `maxLlmCalls=10`, `refreshExisting=false`. Repeat pending batches; failed calls stay
 pending rather than overwriting an existing brief. Model attempts across provider fallbacks share
@@ -141,8 +160,7 @@ quotas can still stop a free-tier batch early. OpenRouter's zero price ceiling r
 
 If interactive searches use Cloud Run, redeploy the service from **pipeline/** using the existing
 service/project/region and existing Secret Manager bindings. A GitHub merge does not redeploy that
-service. The Docker image uses the same worker code and existing API variable names; no new API key,
-database column or Supabase Edge Function deployment is required for this feature. Backfill through
+service. The Docker image uses the same worker code and existing API variable names. Backfill through
 GitHub Actions can upgrade existing cards before the Cloud Run revision is replaced.
 
 ### One-time setup: register sources and the search profile
@@ -167,7 +185,8 @@ editor. Research and relocation preferences now have a dashboard editor as descr
 
 ```bash
 node dist/src/cli.js run --dry-run                 # parse + score, write nothing
-node dist/src/cli.js run --query "extra search terms" --chat-id 123456789
+node dist/src/cli.js run --mode discovery
+node dist/src/cli.js run --mode search --query "extra search terms" --chat-id 123456789
 node dist/src/cli.js --help
 ```
 
@@ -199,12 +218,9 @@ through a legal API, so this isn't a coverage loss, just a legal route to overla
 
 ## Search profile
 
-Postdoc search is international — Europe and Scandinavia specifically score highest in
-`src/score/score.ts`'s location component, ahead of India — because a genuine postdoc is often
-advertised under a plain "job"/"scientist" title rather than the word "postdoc", so the location
-signal (not the unreliable type classification) is what actually finds them. Industry roles score
-well anywhere in India (no visa friction) or remote, matching the original ask for Bangalore/Kerala
-coverage on that side.
+Postdoc search is international. Every explicitly selected destination receives the same location
+weight; `*` means worldwide. Citizenship and current residence are used only in later visa, tax and
+relocation analysis. They never add India—or any other country—to source queries or ranking.
 
 ## Deployment
 

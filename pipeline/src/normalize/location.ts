@@ -24,7 +24,23 @@ const COUNTRY_NAMES: Record<string, string> = {
  singapore: "SG", australia: "AU", canada: "CA", france: "FR", belgium: "BE",
  denmark: "DK", norway: "NO", finland: "FI", austria: "AT", ireland: "IE", japan: "JP",
  spain: "ES", italy: "IT", portugal: "PT", poland: "PL", "czech republic": "CZ", czechia: "CZ",
+ greece: "GR", estonia: "EE", latvia: "LV", lithuania: "LT", luxembourg: "LU", malta: "MT",
+ slovenia: "SI", slovakia: "SK", croatia: "HR", hungary: "HU", romania: "RO", bulgaria: "BG",
+ iceland: "IS", cyprus: "CY", liechtenstein: "LI",
+ china: "CN", "people's republic of china": "CN", "south korea": "KR", korea: "KR",
+ "hong kong": "HK", taiwan: "TW", malaysia: "MY", thailand: "TH", "new zealand": "NZ",
+ "south africa": "ZA", brazil: "BR", mexico: "MX", israel: "IL", "united arab emirates": "AE",
 };
+
+export function countryMention(value: string | null | undefined): string | null {
+ if (!value) return null;
+ const text = value.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ");
+ const entries = Object.entries(COUNTRY_NAMES).sort((a, b) => b[0].length - a[0].length);
+ for (const [name, code] of entries) {
+  if (new RegExp(`(?:^|\\s)${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|\\s)`).test(text)) return code;
+ }
+ return null;
+}
 
 // Many feeds return "City, State" without a country. Country inference is
 // intentionally limited to unambiguous administrative regions/cities needed

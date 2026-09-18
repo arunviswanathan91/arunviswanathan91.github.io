@@ -5,11 +5,8 @@ import { buildOpportunity } from "./build.js";
 import type { SourceAdapter, SourceContext, SourceQuery, FetchWindow, SourcePage } from "./types.js";
 import type { NormalizedOpportunity, RawItem } from "../types.js";
 
-const SEARCH_PAGES = [
- "https://euraxess.ec.europa.eu/jobs/search?f%5B0%5D=offer_type%3Ajob_offer",
- "https://euraxess.ec.europa.eu/jobs/search?f%5B0%5D=offer_type%3Ajob_offer&page=1",
- "https://euraxess.ec.europa.eu/jobs/search?f%5B0%5D=offer_type%3Ajob_offer&page=2",
-];
+const searchPage = (page: number) => "https://euraxess.ec.europa.eu/jobs/search?f%5B0%5D=offer_type%3Ajob_offer"
+ + (page ? `&page=${page}` : "");
 const DETAIL_PATH = /^\/jobs\/\d+$/;
 
 /**
@@ -32,12 +29,18 @@ export function euraxessAdapter(sourceKey: string): SourceAdapter {
    const detailUrls = new Set<string>();
    let requests = 0;
 
-   for (const searchUrl of SEARCH_PAGES) {
+   // Scan more than the former fixed first three pages, while reserving most of
+   // the request budget for vacancy detail pages.
+   const searchPageLimit = Math.max(1, Math.min(8, Math.floor(w.maxRequests / 4)));
+   for (let page = 0; page < searchPageLimit; page++) {
+    const searchUrl = searchPage(page);
     if (requests >= w.maxRequests || Date.now() > w.deadlineAt) break;
     const res = await ctx.http.get(searchUrl);
     requests++;
     if (!res.ok || !res.body) continue;
+    const before = detailUrls.size;
     for (const link of sameSiteLinks(res.body, searchUrl, DETAIL_PATH)) detailUrls.add(link);
+    if (page > 0 && detailUrls.size === before) break;
    }
 
    const items: RawItem[] = [];
