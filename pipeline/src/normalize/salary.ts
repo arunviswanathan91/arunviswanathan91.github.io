@@ -27,7 +27,27 @@ function periodOf(text: string): SalaryEvidence["period"] {
  return "year";
 }
 
-const num = (s: string) => Number(s.replace(/[,\s]/g, ""));
+/** Salary sites use both 3,204.50 and 3.204,50, while European vacancies often
+ * write a whole monthly amount as 3.204. Treat a single three-digit suffix as
+ * a thousands group; otherwise the last one/two-digit suffix is decimal. */
+export function parseSalaryNumber(input: string): number {
+ const raw = input.replace(/\s/g, "").replace(/[^\d.,]/g, "");
+ if (!raw) return NaN;
+ const comma = raw.lastIndexOf(",");
+ const dot = raw.lastIndexOf(".");
+ if (comma >= 0 && dot >= 0) {
+  const decimalAt = Math.max(comma, dot);
+  const decimals = raw.length - decimalAt - 1;
+  return Number(decimals > 0 && decimals <= 2
+   ? raw.slice(0, decimalAt).replace(/[.,]/g, "") + "." + raw.slice(decimalAt + 1)
+   : raw.replace(/[.,]/g, ""));
+ }
+ const separator = comma >= 0 ? "," : dot >= 0 ? "." : null;
+ if (!separator) return Number(raw);
+ const parts = raw.split(separator);
+ if (parts.length > 2 || parts.at(-1)?.length === 3) return Number(parts.join(""));
+ return Number(parts.join("."));
+}
 
 /**
  * Pulls a salary out of prose. Conservative on purpose: a wrong number is worse
@@ -38,12 +58,12 @@ export function salaryFromText(text: string): SalaryEvidence | null {
 
  // "₹8,00,000 - ₹12,00,000 per annum" / "$60,000–$75,000 a year"
  const range = window.match(
-  /([₹$€£¥]|INR|USD|EUR|GBP|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*(?:-|–|—|to)\s*([₹$€£¥]|INR|USD|EUR|GBP|Rs\.?)?\s*([\d,]+(?:\.\d+)?)[^.\n]{0,30}/i
+  /([₹$€£¥]|INR|USD|EUR|GBP|Rs\.?)\s*([\d][\d.,]*)\s*(?:-|–|—|to)\s*([₹$€£¥]|INR|USD|EUR|GBP|Rs\.?)?\s*([\d][\d.,]*)[^.\n]{0,30}/i
  );
  if (range) {
   const sign = range[1];
   const currency = CURRENCY_SIGNS[sign] ?? (/^rs/i.test(sign) ? "INR" : sign.toUpperCase());
-  const min = num(range[2]), max = num(range[4]);
+  const min = parseSalaryNumber(range[2]), max = parseSalaryNumber(range[4]);
   if (min > 0 && max >= min && max < 1e10) {
    return {
     min, max, currency, period: periodOf(range[0]) ?? "year",
@@ -67,12 +87,12 @@ export function salaryFromText(text: string): SalaryEvidence | null {
 
  // Single figure: "Salary: ₹75,000 per month"
  const single = window.match(
-  /(?:salary|stipend|remuneration|fellowship amount)[^.\n]{0,40}?([₹$€£¥]|INR|USD|EUR|GBP|Rs\.?)\s*([\d,]+(?:\.\d+)?)[^.\n]{0,20}/i
+  /(?:salary|stipend|remuneration|fellowship amount)[^.\n]{0,40}?([₹$€£¥]|INR|USD|EUR|GBP|Rs\.?)\s*([\d][\d.,]*)[^.\n]{0,20}/i
  );
  if (single) {
   const sign = single[1];
   const currency = CURRENCY_SIGNS[sign] ?? (/^rs/i.test(sign) ? "INR" : sign.toUpperCase());
-  const v = num(single[2]);
+  const v = parseSalaryNumber(single[2]);
   if (v > 0 && v < 1e10) {
    return {
     min: v, max: v, currency, period: periodOf(single[0]) ?? "month",

@@ -33,7 +33,7 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   groqApiKey: env.GROQ_API_KEY ?? null,
   groqModel: env.GROQ_MODEL ?? "openai/gpt-oss-20b",
   openrouterApiKey: env.OPENROUTER_API_KEY?.trim() || null,
-  openrouterModel: env.OPENROUTER_MODEL?.trim() || "stealth/union-alpha",
+  openrouterModel: env.OPENROUTER_MODEL?.trim() || "openrouter/free",
  };
 }
 

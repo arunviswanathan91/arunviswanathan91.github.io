@@ -33,8 +33,9 @@ const FIELDS = ["institution", "place", "population", "climate", "transport", "l
 export type ContextProvider = "gemini" | "groq" | "openrouter";
 
 export function contextProviders(env: Env): ContextProvider[] {
- // OpenRouter's zero-price Union Alpha route is the primary decision-brief
- // provider. Groq and Gemini remain fallbacks when it is busy or unavailable.
+ // OpenRouter's free router selects a currently available zero-cost model that
+ // supports the requested structured-output features. Groq and Gemini remain
+ // fallbacks when the free route is busy or unavailable.
  return (["openrouter", "groq", "gemini"] as const).filter(provider =>
   Boolean(env[`${provider}ApiKey`]?.trim()));
 }
@@ -45,7 +46,7 @@ export function openrouterRequest(model: string, prompt: string, decisionBrief =
   messages: [{ role: "user", content: decisionBrief ? prompt : `${prompt}\nJSON must contain exactly these string fields: ${FIELDS.join(", ")}.` }],
   response_format: { type: "json_object" },
   max_tokens: decisionBrief ? 4800 : 2048,
-  // Fail closed if this preview becomes paid; never enable paid search plugins.
+  // The route is already free; this is a second guard against paid providers.
   provider: { require_parameters: true, max_price: { prompt: 0, completion: 0, request: 0 } },
  };
 }

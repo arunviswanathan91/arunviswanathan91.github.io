@@ -357,41 +357,41 @@ Deno.serve(async(req)=>{
    const {data:prof}=await db.from("discovery_profiles").select("id")
      .eq("user_id",userId).eq("active",true).limit(1).maybeSingle();
    const token=crypto.randomUUID();
+   const mode=rest?"search":"discovery";
    const {data:run,error:runErr}=await db.from("discovery_runs").insert({
     user_id:userId,profile_id:prof?.id??null,trigger:"telegram",status:"queued",
-    query:rest||null,chat_id:chatId,claim_token:token,
+    run_mode:mode,query:rest||null,chat_id:chatId,claim_token:token,
+    stats:{phase:"queued",dispatchTarget:"cloud_run"},
     expires_at:new Date(Date.now()+15*60*1000).toISOString(),
    }).select("id").maybeSingle();
    if(runErr||!run)return send(chatId,"I couldn't start a search right now.");
 
    const discoveryUrl=Deno.env.get("DISCOVERY_URL");
-   const dispatchToken=Deno.env.get("GITHUB_DISPATCH_TOKEN");
-   const dispatchRepo=Deno.env.get("GITHUB_REPOSITORY_SLUG");   // "owner/repo"
-
-   if(discoveryUrl){
-    // Cloud Run path: replies in seconds. A single-use claim token means the
-    // request body carries nothing else user-controlled, so this endpoint is
-    // safe to leave unauthenticated on the Cloud Run side.
-    EdgeRuntime.waitUntil(fetch(discoveryUrl,{
-     method:"POST",
-     headers:{"content-type":"application/json","x-discovery-secret":Deno.env.get("DISCOVERY_SHARED_SECRET")??""},
-     body:JSON.stringify({run_id:run.id,claim_token:token}),
-    }).catch(()=>{}));
-   }else if(dispatchToken&&dispatchRepo){
-    // GitHub Actions path: 45-90s instead of seconds, but needs no Cloud Run
-    // deployment at all -- this is what makes /discover work from Phase 1.
-    EdgeRuntime.waitUntil(fetch(`https://api.github.com/repos/${dispatchRepo}/dispatches`,{
-     method:"POST",
-     headers:{
-      authorization:`Bearer ${dispatchToken}`,accept:"application/vnd.github+json",
-      "content-type":"application/json","user-agent":"telegram-webhook",
-     },
-     body:JSON.stringify({event_type:"discover",client_payload:{query:rest||null,chat_id:chatId,run_id:run.id,claim_token:token}}),
-    }).catch(()=>{}));
-   }else{
+   const sharedSecret=Deno.env.get("DISCOVERY_SHARED_SECRET");
+   if(!discoveryUrl||!sharedSecret){
     await db.from("discovery_runs").update({status:"failed",error:"no dispatch target configured"}).eq("id",run.id);
-    return send(chatId,"Discovery isn't wired up yet on this deployment — set GITHUB_DISPATCH_TOKEN (or DISCOVERY_URL once Cloud Run is deployed) as an Edge Function secret.");
+    return send(chatId,"Discovery isn't wired up yet — configure the Cloud Run DISCOVERY_URL and shared secret.");
    }
+   // A single-use claim token makes retries replay-safe; the shared secret
+   // prevents anyone outside the Edge Function from invoking the worker.
+   EdgeRuntime.waitUntil((async()=>{
+    try{
+     const response=await fetch(discoveryUrl,{
+      method:"POST",
+      headers:{"content-type":"application/json","x-discovery-secret":sharedSecret},
+      body:JSON.stringify({run_id:run.id,claim_token:token}),
+     });
+     if(!response.ok)await db.from("discovery_runs").update({
+      status:"failed",finished_at:new Date().toISOString(),
+      error:`Discovery worker returned HTTP ${response.status}`,
+     }).eq("id",run.id);
+    }catch(error){
+     await db.from("discovery_runs").update({
+      status:"failed",finished_at:new Date().toISOString(),
+      error:error instanceof Error?error.message:"Discovery worker request failed",
+     }).eq("id",run.id);
+    }
+   })());
    return send(chatId,`Searching${rest?` for "${rest}"`:""} — I'll message you here in a few minutes.`);
   }
 

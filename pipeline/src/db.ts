@@ -110,14 +110,29 @@ export class Db {
 
  async finishRun(runId: string | null, status: string, stats: unknown, error?: string) {
   if (!runId) return;
+  const merged = await this.mergeRunStats(runId, stats);
   await this.client.from("discovery_runs")
-   .update({ status, finished_at: new Date().toISOString(), stats, error: error ?? null })
+   .update({ status, finished_at: new Date().toISOString(), stats: merged, error: error ?? null })
    .eq("id", runId);
  }
 
  async updateRunProgress(runId: string | null, stats: unknown) {
   if (!runId) return;
-  await this.client.from("discovery_runs").update({ stats }).eq("id", runId);
+  const merged = await this.mergeRunStats(runId, stats);
+  await this.client.from("discovery_runs").update({ stats: merged }).eq("id", runId);
+ }
+
+ /** Preserve dispatch/provenance fields written by the Edge Function while the
+  * worker replaces live counters and phase information. Runs are single-writer
+  * after their one-time claim, so this read/merge/update cannot race another
+  * worker for the same row. */
+ private async mergeRunStats(runId: string, patch: unknown): Promise<Record<string, unknown>> {
+  const { data } = await this.client.from("discovery_runs").select("stats").eq("id", runId).maybeSingle();
+  const current = data?.stats && typeof data.stats === "object" && !Array.isArray(data.stats)
+   ? data.stats as Record<string, unknown> : {};
+  const next = patch && typeof patch === "object" && !Array.isArray(patch)
+   ? patch as Record<string, unknown> : {};
+  return { ...current, ...next };
  }
 
  async recordSourceOutcome(runId: string | null, userId: string, o: SourceOutcome) {

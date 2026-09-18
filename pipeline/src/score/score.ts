@@ -15,6 +15,12 @@ export function hardFilter(o: NormalizedOpportunity, p: SearchProfile): FilterVe
   if (!isNaN(d) && d < Date.now() - 86400000) return { keep: false, reason: "deadline_passed" };
  }
  if (JUNK_TITLE.test(o.title)) return { keep: false, reason: "junk_title" };
+ // Keep genuinely unclassified research jobs for recall, but do not let the
+ // catch-all `Other` type smuggle explicit student positions into a postdoc run.
+ if (o.opportunityType === "Other" && !p.types.includes("Other") &&
+     /\b(ph\.?d\.?|doctoral (student|candidate)|research scholar|jrf|srf)\b/i.test(o.title)) {
+  return { keep: false, reason: "type_excluded" };
+ }
  if (!p.types.includes(o.opportunityType) && o.opportunityType !== "Other") {
   return { keep: false, reason: "type_excluded" };
  }

@@ -107,10 +107,9 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  if (!runId && !opts.dryRun) {
   runId = await db.createRun(userId, profile.id, trigger, mode, queryText, opts.chatId ?? null);
  } else if (runId && opts.claimToken && !opts.dryRun) {
-  // A caller (the Telegram webhook, via repository_dispatch) pre-created this row
-  // for its own busy-check. Claiming it atomically means a duplicate dispatch --
-  // GitHub's delivery is at-least-once -- skips instead of running the pipeline
-  // twice or leaving a second orphaned run row behind.
+  // An Edge Function pre-created this row for its own busy-check. Claiming it
+  // atomically means a retried Cloud Run request skips instead of executing the
+  // pipeline twice or leaving a second orphaned run row behind.
   const claimed = await db.claimRun(runId, opts.claimToken);
   if (!claimed) {
    log.info("run already claimed or expired, skipping", { runId });
@@ -127,6 +126,10 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    .eq("id", runId).eq("status", "queued");
  }
 
+ if (!opts.dryRun) await db.updateRunProgress(runId, {
+  phase: "starting", mode, query: queryText,
+ });
+
  const sources = backfill ? [] : await db.loadSources(userId);
  log.info("run starting", {
   userId, trigger, mode,
@@ -140,7 +143,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const bySource: Record<string, SourceOutcome> = {};
  const degradations: string[] = [];
  const metadata = emptyMetadata();
- const metadataHttp = new Http({ ...DEFAULT_HTTP, timeoutMs: 45_000, maxRetries: 0 }, 12);
+ const metadataHttp = new Http({ ...DEFAULT_HTTP, timeoutMs: 45_000, maxRetries: 1 }, 18);
  profile.comparisonCurrency = preferences.displayCurrency;
  profile.exchangeRates = await loadInrExchangeRates(new Http(
   { ...DEFAULT_HTTP, minHostIntervalMs: 0, timeoutMs: 8_000, maxRetries: 0 }, 2,
@@ -280,7 +283,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   enrichment.candidates = loaded.candidates.length;
   enrichment.pending = loaded.total;
   const contextHttp = new Http(
-   { ...DEFAULT_HTTP, timeoutMs: 60_000, maxRetries: 0 },
+   { ...DEFAULT_HTTP, timeoutMs: 60_000, maxRetries: 1 },
    Math.max(16, contextLimit * 10 + 4),
   );
   const fallback = createContextFallback<OpportunityContext>(providers, (from, to) =>
