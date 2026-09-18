@@ -46,6 +46,8 @@ export function enrichMetadataLocally(o: NormalizedOpportunity): NormalizedOppor
  const country = parsed.country
   ?? countryMention(o.locationRaw)
   ?? countryMention(o.organization)
+  ?? countryMention(o.title)
+  ?? countryMention(excerpt(o.descriptionText, 1600))
   ?? countryFromUrl(o.organizationUrl)
   ?? countryFromUrl(o.url);
  if (!country) return o;

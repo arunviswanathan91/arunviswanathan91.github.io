@@ -61,7 +61,7 @@ npm run check           # offline checks — no network, no database
 | `GROQ_API_KEY` | no | automatic structured-output fallback when OpenRouter is unavailable or busy |
 | `GROQ_MODEL` | no | Groq model override; defaults to `openai/gpt-oss-20b` |
 | `OPENROUTER_API_KEY` | no | primary context provider; Groq and Gemini are automatic fallbacks |
-| `OPENROUTER_MODEL` | no | defaults to `stealth/union-alpha`; all OpenRouter requests enforce zero prompt/completion/request prices |
+| `OPENROUTER_MODEL` | no | defaults to `openrouter/free`, which automatically selects a currently available free model supporting the requested features |
 
 Search geography comes only from `discovery_profiles.countries` (edited by the dashboard's
 **Search destinations** control) plus the separate remote toggle. Nationality, current residence,
@@ -76,20 +76,19 @@ rejected against the INR floor, and the original destination-currency amount rem
 
 For GitHub Actions, add `OPENROUTER_API_KEY` under repository Settings → Secrets and variables →
 Actions → New repository secret. Never use a `VITE_` key or put it in the frontend. The workflow
-pins `OPENROUTER_MODEL=stealth/union-alpha`. For an existing Cloud Run deployment, configure the
+pins `OPENROUTER_MODEL=openrouter/free`. For an existing Cloud Run deployment, configure the
 same key through Secret Manager and redeploy the updated pipeline separately; GitHub secrets
 do not automatically propagate to Cloud Run.
 
-Union Alpha supports JSON output, not strict JSON-schema enforcement. The pipeline validates the
+The free router filters for models supporting requested features such as structured output. The pipeline validates the
 structured decision brief locally before saving, rejects malformed/empty responses, and records
-the provider and actual model alongside context. OpenRouter routes to an anonymous provider
-which may retain prompts and responses (not for training per its current model page). This
+the provider and actual selected model alongside context. The selected free provider may vary between calls. This
 integration sends listing text, collected public evidence, and the explicitly saved assessment
 preferences (research interests, nationality/residence country, household/housing and career goal).
 It does not send account email, credentials, private tasks or private documents.
 No paid web-search plugins are enabled. Visa/tax context comes from fetched official pages; climate
 is typical seasonal context, not a live weather forecast.
-See https://openrouter.ai/stealth/union-alpha for current preview terms and availability.
+See https://openrouter.ai/openrouter/free for current routing behaviour and availability.
 
 Decision enrichment is stored under `opportunities.score_breakdown.context`; metadata provenance is
 stored under `score_breakdown.metadata`. The independent run modes and audit ledger require the
@@ -241,27 +240,22 @@ GEMINI_API_KEY      # optional; enables swipe-card context enrichment
 And as a repository **variable**: `DISCOVERY_USER_ID` (your user id — the same one the dashboard's
 Supabase auth uses).
 
-**Telegram `/discover` (optional but recommended):** works without any Cloud Run deployment via
-`repository_dispatch` — add a fine-grained GitHub PAT scoped to **only this repo** with `Contents:
-write`, then set as Supabase Edge Function secrets (`supabase secrets set ...`, alongside the
-existing Telegram secrets):
-
-```
-GITHUB_DISPATCH_TOKEN=<the PAT>
-GITHUB_REPOSITORY_SLUG=<your-username>/<this-repo-name>
-```
-
-The dashboard and `/discover` can then use the Actions runtime, including the AI provider secrets
-already configured for the nightly workflow. An Actions run may take 45–90 seconds to start from
-cold, but this avoids maintaining a second copy of those secrets in Cloud Run. The dashboard falls
-back to Cloud Run when GitHub dispatch is not configured.
-
-**Cloud Run (optional, Phase 3):** for a sub-5-second `/discover` reply, build and deploy
-`Dockerfile` to Cloud Run, then set `DISCOVERY_URL` and `DISCOVERY_SHARED_SECRET` as Edge Function
-secrets — the webhook prefers this path over `repository_dispatch` when it's configured. Note
+**Dashboard and Telegram discovery (required):** build and deploy `pipeline/Dockerfile` to Cloud Run,
+then set `DISCOVERY_URL` and `DISCOVERY_SHARED_SECRET` as Supabase Edge Function secrets. Interactive
+runs never dispatch GitHub Actions: the authenticated Edge Function creates the run and sends its
+one-time claim token directly to Cloud Run. Cloud Run must receive the crawler/API and AI secrets,
+including `OPENROUTER_API_KEY`; repository secrets do not automatically appear in Cloud Run. Note
 Cloud Run's default CPU allocation gives the container no CPU after a response is sent, so
 `server.ts` deliberately runs the entire discovery pass inside the request rather than replying
 early — budget the Cloud Run timeout accordingly (`INTERACTIVE_CAPS.maxRuntimeMs` in `config.ts`).
+
+`.github/workflows/deploy-discovery-worker.yml` performs that deployment on changes to `pipeline/`.
+Configure repository variables `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER` and
+`GCP_SERVICE_ACCOUNT`; `GCP_REGION` is optional and defaults to `europe-west1`. The workflow keeps
+the existing Cloud Run runtime service account, tests the pipeline, synchronizes configured GitHub
+API secrets into Google Secret Manager, deploys `opportunity-discovery`, and verifies that the
+protected endpoint responds. The deployment identity needs Cloud Run/Cloud Build deployment access
+and permission to create secret versions and grant the runtime service account secret access.
 
 ## Cost
 

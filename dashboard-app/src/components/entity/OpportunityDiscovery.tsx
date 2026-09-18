@@ -16,7 +16,7 @@ interface StartResponse {
 }
 interface RunStats {
  phase?: string;
- dispatchTarget?: "github_actions"|"cloud_run";
+ dispatchTarget?: "cloud_run";
  currentSource?: string;
  sourceProgress?: {pages?:number;fetched?:number;apiCalls?:number};
  matched?: number;
@@ -77,7 +77,7 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
     const checked=Number(stats.evaluated??0),matched=Number(stats.matched??0);
     const source=stats.currentSource??(stats.bySource?Object.keys(stats.bySource).at(-1):null);
     setMessage(row.status === "queued"
-     ? `Run queued — waiting for ${stats.dispatchTarget==="github_actions"?"GitHub Actions":"the discovery worker"}.`
+     ? "Run queued — waiting for the Cloud Run discovery worker."
      : `${row.run_mode==="search"?"Focused search":"Broad discovery"} is checking live sources${source?` · ${source}`:""}${checked?` · ${checked} evaluated · ${matched} matched`:""}.`);
     if (Date.now() - startedAt > 20 * 60 * 1000) {
      setPhase("failed");

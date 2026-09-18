@@ -1,5 +1,5 @@
-# Cloud Run image for the interactive /discover path. The scheduled path runs
-# the same compiled output directly under GitHub Actions, no container needed.
+# Cloud Run image for every interactive dashboard/Telegram discovery request.
+# GitHub Actions uses the same pipeline only for scheduled discovery.
 FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

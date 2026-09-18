@@ -103,13 +103,13 @@ const decisionPayload = () => ({
 {
  const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
  const env = readEnv({ ...base, OPENROUTER_API_KEY: " test-key " });
- eq("OpenRouter defaults to requested Union Alpha model", env.openrouterModel, "stealth/union-alpha");
+ eq("OpenRouter defaults to the automatic free-model router", env.openrouterModel, "openrouter/free");
  eq("OpenRouter key whitespace is trimmed", env.openrouterApiKey, "test-key");
  eq("OpenRouter works without Gemini or Groq", contextProviders(env), ["openrouter"]);
  eq("blank AI keys are disabled", contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: " ", GEMINI_API_KEY: "", GROQ_API_KEY: "" })), []);
  eq("OpenRouter is primary with Groq and Gemini fallbacks", contextProviders(readEnv({ ...base, GEMINI_API_KEY: "a", GROQ_API_KEY: "b", OPENROUTER_API_KEY: "c" })), ["openrouter", "groq", "gemini"]);
  const request = openrouterRequest(env.openrouterModel, "ROLE: Researcher");
- eq("Union Alpha uses JSON mode, not unsupported schema mode", request.response_format, { type: "json_object" });
+ eq("free router requests JSON mode", request.response_format, { type: "json_object" });
  eq("OpenRouter price ceiling is zero", request.provider.max_price, { prompt: 0, completion: 0, request: 0 });
  check("OpenRouter does not enable paid search or model fallback", !("plugins" in request) && !("models" in request));
  check("prompt enumerates required fields", request.messages[0]!.content.includes("institution, place, population, climate, transport, living, inclusion"));
@@ -129,12 +129,12 @@ const decisionPayload = () => ({
  let postedBody: unknown;
  const stub = { postJson: async (url: string, body: unknown) => {
   postedUrl = url; postedBody = body;
-  return { model: "stealth/union-alpha", choices: [{ message: { content: JSON.stringify(decisionPayload()) } }] };
+  return { model: "google/gemma-3-27b-it:free", choices: [{ message: { content: JSON.stringify(decisionPayload()) } }] };
  } } as unknown as Http;
  const result = await enrichOpportunityContext(env, stub, candidate, "openrouter", []);
  eq("OpenRouter request uses official chat endpoint", postedUrl, "https://openrouter.ai/api/v1/chat/completions");
- check("OpenRouter integration sends requested model", (postedBody as { model: string }).model === "stealth/union-alpha");
- eq("saved context records provider and model", [result.provider, result.model], ["openrouter", "stealth/union-alpha"]);
+ check("OpenRouter integration sends the free router", (postedBody as { model: string }).model === "openrouter/free");
+ eq("saved context records the model selected by the router", [result.provider, result.model], ["openrouter", "google/gemma-3-27b-it:free"]);
  eq("provider output becomes a versioned decision brief",result.brief?.version,4);
  eq("rich request retains zero price ceiling",(postedBody as ReturnType<typeof openrouterRequest>).provider.max_price,{prompt:0,completion:0,request:0});
  let placeholdersRejected = false;
@@ -247,6 +247,10 @@ check("postdoc is not senior leadership", !isSeniorLeadership("Postdoctoral Fell
  check("lpa parsed", !!lpa && lpa.min === 1800000 && lpa.currency === "INR");
  const usd = salaryFromText("We offer $60,000 - $75,000 a year depending on experience.");
  check("usd range parsed", !!usd && usd.currency === "USD" && usd.min === 60000 && usd.max === 75000);
+ const eurThousands = salaryFromText("Salary: €3.204/month gross, based on full-time employment");
+ check("European dot thousands are not parsed as decimals", !!eurThousands && eurThousands.min === 3204 && eurThousands.period === "month");
+ const eurDecimal = salaryFromText("Salary: €3.204,50 per month gross");
+ check("European decimal salary remains precise", !!eurDecimal && eurDecimal.min === 3204.5 && eurDecimal.period === "month");
  check("no salary mentioned returns null", salaryFromText("A wonderful opportunity to join our team.") === null);
  eq("annualInr converts usd with the fetched rate", annualInr({ min: 60000, max: 60000, currency: "USD", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null },rates), 60000 * 84);
  eq("foreign salary is not guessed when rates are unavailable", annualInr({ min: 60000, max: 60000, currency: "USD", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null }), null);
@@ -411,6 +415,9 @@ check("remote roles are allowed only when selected",hardFilter(makeOpp({country:
 eq("remote roles can be disabled independently",hardFilter(makeOpp({country:"US",isRemote:true}),{...profile,remoteOk:false}).reason,"location_excluded");
 eq("hard filter rejects a passed deadline", hardFilter(makeOpp({ deadline: "2020-01-01T00:00:00Z" }), profile).reason, "deadline_passed");
 eq("hard filter rejects junk titles", hardFilter(makeOpp({ title: "Marketing Internship" }), profile).reason, "junk_title");
+eq("explicit PhD candidates cannot bypass role selection as Other",hardFilter(makeOpp({
+ title:"PhD Candidate in Metabolic Inflammation",opportunityType:"Other",
+}),profile).reason,"type_excluded");
 eq("hard filter rejects blocked org", hardFilter(makeOpp({ organization: "BlockedCorp Inc" }), profile).reason, "blocked_org");
 check("hard filter allows unknown location rather than rejecting", hardFilter(makeOpp({ country: null, city: null }), profile).keep);
 check("hard filter does not reject on a predicted salary below floor", hardFilter(makeOpp({ salary: { min: 500000, max: 500000, currency: "INR", period: "year", isPredicted: true, extractedFrom: "api", confidence: 0.3, evidence: null } }), profile).keep);
@@ -474,6 +481,11 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  }));
  eq("country can be repaired from an institution domain before filtering",fromDomain.country,"GB");
  eq("country repair records deterministic provenance",fromDomain.locationMetadata?.method,"deterministic");
+ const fromTitle=enrichMetadataLocally(makeOpp({
+  country:null,city:null,locationRaw:null,organizationUrl:null,
+  title:"Postdoctoral Research Fellow, Max Planck Institute, Germany",
+ }));
+ eq("country can be repaired from the vacancy title before AI",fromTitle.country,"DE");
  const sourceWins=enrichMetadataLocally(makeOpp({country:"SE",organizationUrl:"https://example.de"}));
  eq("explicit source country wins over domain inference",sourceWins.country,"SE");
 }
