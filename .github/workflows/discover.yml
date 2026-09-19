@@ -20,7 +20,7 @@ on:
       batchSize:
         description: 'Opportunities to enrich in backfill mode (1-100)'
         required: false
-        default: '25'
+        default: '5'
       refreshExisting:
         description: 'Regenerate context that already exists'
         required: false
@@ -29,7 +29,7 @@ on:
       maxLlmCalls:
         description: 'LLM call cap for this run'
         required: false
-        default: '40'
+        default: '15'
 
 permissions:
   contents: write            # heartbeat commit only, see the last step
@@ -65,9 +65,9 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ github.event.inputs.mode || 'discovery' }}
           INPUT_QUERY: ${{ github.event.inputs.query || '' }}
-          INPUT_BATCH: ${{ github.event.inputs.batchSize || '25' }}
+          INPUT_BATCH: ${{ github.event.inputs.batchSize || '5' }}
           INPUT_REFRESH: ${{ github.event.inputs.refreshExisting || 'false' }}
-          INPUT_MAX_LLM: ${{ github.event.inputs.maxLlmCalls || '40' }}
+          INPUT_MAX_LLM: ${{ github.event.inputs.maxLlmCalls || '15' }}
           SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DISCOVERY_USER_ID: ${{ vars.DISCOVERY_USER_ID }}
@@ -83,7 +83,7 @@ jobs:
         run: |
           TRIGGER="schedule"
           MODE="discovery"
-          BATCH="25"
+          BATCH="5"
           REFRESH="false"
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             TRIGGER="manual"

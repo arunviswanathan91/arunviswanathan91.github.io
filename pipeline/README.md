@@ -57,7 +57,7 @@ npm run check           # offline checks — no network, no database
 | `TELEGRAM_BOT_TOKEN` | to push a digest | same bot token the dashboard's webhook uses |
 | `FIRECRAWL_API_KEY` | no — crawl targets work without it | Tier-3 fallback for JS-rendered career pages; free at [firecrawl.dev](https://www.firecrawl.dev), capped locally by `FIRECRAWL_MAX_PER_RUN` |
 | `GEMINI_API_KEY` | no | final automatic fallback for evidence-grounded decision briefs |
-| `GEMINI_MODEL` | no | model override; defaults to `gemini-3.8-flash` |
+| `GEMINI_MODEL` | no | model override; defaults to the stable `gemini-2.5-flash` endpoint |
 | `GROQ_API_KEY` | no | automatic structured-output fallback when OpenRouter is unavailable or busy |
 | `GROQ_MODEL` | no | Groq model override; defaults to `openai/gpt-oss-20b` |
 | `OPENROUTER_API_KEY` | no | primary context provider; Groq and Gemini are automatic fallbacks |
@@ -153,10 +153,11 @@ saved household budget. A 12-month comparison is explicitly hypothetical for sho
 **Rollout:** apply `supabase/opportunity-search-v2.sql` and then `supabase/opportunity-search-v3.sql`, deploy the updated `opportunity-discover`
 function, then merge/publish the dashboard and worker.
 Save preferences, then run **Nightly opportunity discovery → Run workflow → backfill**, starting with
-`batchSize=5`, `maxLlmCalls=10`, `refreshExisting=false`. Repeat pending batches; failed calls stay
+`batchSize=5`, `maxLlmCalls=15`, `refreshExisting=false`. Repeat pending batches; failed calls stay
 pending rather than overwriting an existing brief. Model attempts across provider fallbacks share
 the smaller of the run and profile call caps. Source retrieval and responses remain runtime-bounded;
-quotas can still stop a free-tier batch early. OpenRouter's zero price ceiling remains enforced.
+quotas can still stop a free-tier batch early. OpenRouter's zero price ceiling remains enforced, and
+its free router is constrained to endpoints that accept the decision brief's strict JSON schema.
 
 If interactive searches use Cloud Run, redeploy the service from **pipeline/** using the existing
 service/project/region and existing Secret Manager bindings. A GitHub merge does not redeploy that

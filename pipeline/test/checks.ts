@@ -21,7 +21,7 @@ import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery, termsForRun } from "../src/search/query.js";
 import { enrichMetadataLocally } from "../src/enrich/metadata.js";
 import { contextPayloadFromInteraction, hasMeaningfulContext, normalizeContextPayload, UNKNOWN } from "../src/enrich/context.js";
-import { contextProviders, createContextFallback, ContextProvidersUnavailable, openrouterRequest, parseOpenrouterContext, enrichOpportunityContext } from "../src/enrich/context.js";
+import { contextProviders, createContextFallback, ContextProvidersUnavailable, openrouterRequest, parseOpenrouterContext, parseStructuredJson, enrichOpportunityContext } from "../src/enrich/context.js";
 import { readEnv } from "../src/config.js";
 import { Http, HttpResponseError } from "../src/http.js";
 import type { ContextCandidate } from "../src/db.js";
@@ -104,12 +104,17 @@ const decisionPayload = () => ({
  const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
  const env = readEnv({ ...base, OPENROUTER_API_KEY: " test-key " });
  eq("OpenRouter defaults to the automatic free-model router", env.openrouterModel, "openrouter/free");
+ eq("Gemini fallback defaults to the stable high-volume model", env.geminiModel, "gemini-2.5-flash");
  eq("OpenRouter key whitespace is trimmed", env.openrouterApiKey, "test-key");
  eq("OpenRouter works without Gemini or Groq", contextProviders(env), ["openrouter"]);
  eq("blank AI keys are disabled", contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: " ", GEMINI_API_KEY: "", GROQ_API_KEY: "" })), []);
  eq("OpenRouter is primary with Groq and Gemini fallbacks", contextProviders(readEnv({ ...base, GEMINI_API_KEY: "a", GROQ_API_KEY: "b", OPENROUTER_API_KEY: "c" })), ["openrouter", "groq", "gemini"]);
  const request = openrouterRequest(env.openrouterModel, "ROLE: Researcher");
  eq("free router requests JSON mode", request.response_format, { type: "json_object" });
+ const richRequest = openrouterRequest(env.openrouterModel, "ROLE: Researcher", true);
+ const richFormat = richRequest.response_format as { type: string; json_schema?: { strict?: boolean } };
+ check("decision brief requires strict JSON schema", richFormat.type === "json_schema" && richFormat.json_schema?.strict === true);
+ eq("decision brief output is bounded", richRequest.max_tokens, 2600);
  eq("OpenRouter price ceiling is zero", request.provider.max_price, { prompt: 0, completion: 0, request: 0 });
  check("OpenRouter does not enable paid search or model fallback", !("plugins" in request) && !("models" in request));
  check("prompt enumerates required fields", request.messages[0]!.content.includes("institution, place, population, climate, transport, living, inclusion"));
@@ -123,6 +128,11 @@ const decisionPayload = () => ({
  let invalidJson = false;
  try { parseOpenrouterContext("not JSON"); } catch { invalidJson = true; }
  check("invalid OpenRouter JSON rejected", invalidJson);
+ eq("structured parser accepts fenced JSON", parseStructuredJson('```json\n{"ok":true}\n```'), { ok: true });
+ eq("structured parser extracts a complete wrapped object", parseStructuredJson('Result: {"text":"brace } in a string"} done'), { text: "brace } in a string" });
+ let truncatedRejected = false;
+ try { parseStructuredJson('{"incomplete":'); } catch { truncatedRejected = true; }
+ check("structured parser rejects truncated output", truncatedRejected);
 
  const candidate: ContextCandidate = { id: "test", role: "Researcher", organization: null, organization_url: null, location: null, city: null, country: null, url: null, summary: "Listing", description_excerpt: null, score_breakdown: null, enrichment: null };
  let postedUrl = "";
