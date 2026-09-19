@@ -100,7 +100,7 @@ export function parseOpenrouterContext(text: string): Record<string, string> {
 export class ContextProvidersUnavailable extends Error {}
 export function createContextFallback<T>(
  providers: ContextProvider[],
- onSwitch: (from: ContextProvider, to: ContextProvider) => void,
+ onSwitch: (from: ContextProvider, to: ContextProvider, error: unknown) => void,
  maxAttempts = Infinity,
 ) {
  const disabled = new Set<ContextProvider>();
@@ -125,18 +125,20 @@ export function createContextFallback<T>(
     const failures = (consecutiveFailures.get(provider) ?? 0) + 1;
     consecutiveFailures.set(provider, failures);
     const message = error instanceof Error ? error.message : String(error);
-    if ((error instanceof HttpResponseError && [401, 402, 403, 429, 503].includes(error.status))
+    if ((error instanceof HttpResponseError && [401, 402, 403, 404, 429, 503].includes(error.status))
      || (error instanceof HttpResponseError && error.status === 400 && /json|schema|structured/i.test(error.responseBody))
      || /aborted due to timeout|timed?\s*out/i.test(message)
      || failures >= 2)
      disabled.add(provider);
     const next = Array.from({ length: providers.length - offset - 1 }, (_, i) =>
      providers[(preferred + offset + i + 1) % providers.length]!).find(p => !disabled.has(p));
-    if (next) onSwitch(provider, next);
+    if (next) onSwitch(provider, next, error);
    }
   }
-  if (disabled.size === providers.length)
-   throw new ContextProvidersUnavailable("All configured AI providers are unavailable; remaining context stays pending");
+  if (disabled.size === providers.length) {
+   const detail = lastError instanceof Error ? ` Last failure: ${lastError.message.slice(0, 500)}` : "";
+   throw new ContextProvidersUnavailable(`All configured AI providers are unavailable; remaining context stays pending.${detail}`);
+  }
   throw lastError ?? new Error("No context provider succeeded");
  };
 }

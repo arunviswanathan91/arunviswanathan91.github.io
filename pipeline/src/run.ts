@@ -301,8 +301,10 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    { ...DEFAULT_HTTP, timeoutMs: 50_000, maxRetries: 1 },
    Math.max(16, contextLimit * 10 + 4),
   );
-  const fallback = createContextFallback<OpportunityContext>(providers, (from, to) =>
-   log.warn("switching opportunity context provider", { from, to }), llmCallLimit);
+  const fallback = createContextFallback<OpportunityContext>(providers, (from, to, error) =>
+   log.warn("switching opportunity context provider", {
+    from, to, error: error instanceof Error ? error.message.slice(0, 700) : String(error).slice(0, 700),
+   }), llmCallLimit);
   log.info("opportunity context providers", { providers, openrouterModel: env.openrouterModel });
   for (const candidate of loaded.candidates) {
    if (Date.now() > deadlineAt) {

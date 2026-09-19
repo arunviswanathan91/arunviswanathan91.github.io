@@ -57,7 +57,7 @@ npm run check           # offline checks — no network, no database
 | `TELEGRAM_BOT_TOKEN` | to push a digest | same bot token the dashboard's webhook uses |
 | `FIRECRAWL_API_KEY` | no — crawl targets work without it | Tier-3 fallback for JS-rendered career pages; free at [firecrawl.dev](https://www.firecrawl.dev), capped locally by `FIRECRAWL_MAX_PER_RUN` |
 | `GEMINI_API_KEY` | no | final automatic fallback for evidence-grounded decision briefs |
-| `GEMINI_MODEL` | no | model override; defaults to the stable `gemini-2.5-flash` endpoint |
+| `GEMINI_MODEL` | no | model override; defaults to the stable `gemini-3.6-flash` endpoint |
 | `GROQ_API_KEY` | no | automatic structured-output fallback when OpenRouter is unavailable or busy |
 | `GROQ_MODEL` | no | Groq model override; defaults to `openai/gpt-oss-20b` |
 | `OPENROUTER_API_KEY` | no | primary context provider; Groq and Gemini are automatic fallbacks |

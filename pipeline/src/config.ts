@@ -29,9 +29,10 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   userId: env.DISCOVERY_USER_ID ?? null,
   firecrawlApiKey: env.FIRECRAWL_API_KEY ?? null,
   geminiApiKey: env.GEMINI_API_KEY ?? null,
-  // The stable 2.5 Flash endpoint is intended for high-volume work and is a
-  // safer default for unattended backfills than a newer high-demand model.
-  geminiModel: env.GEMINI_MODEL ?? "gemini-2.5-flash",
+  // Gemini rejects 2.5 Flash for newly provisioned API users and directs them
+  // to this stable model. Keep the exact model override available for future
+  // endpoint migrations without another code change.
+  geminiModel: env.GEMINI_MODEL?.trim() || "gemini-3.6-flash",
   groqApiKey: env.GROQ_API_KEY ?? null,
   groqModel: env.GROQ_MODEL ?? "openai/gpt-oss-20b",
   openrouterApiKey: env.OPENROUTER_API_KEY?.trim() || null,
