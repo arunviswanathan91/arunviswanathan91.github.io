@@ -113,7 +113,8 @@ export function feedAdapter(sourceKey: string): SourceAdapter {
     externalId: item.externalId,
     url: item.url,
     title: p.title,
-    organization: p.organization,
+    // A board's configured name identifies the publisher, not the employer.
+    organization: ["feed:researchersjob", "feed:jobrxiv"].includes(sourceKey) ? null : p.organization,
     description: htmlToText(p.description ?? ""),
     postedAt: p.published,
    });

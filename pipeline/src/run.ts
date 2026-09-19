@@ -18,6 +18,9 @@ import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery,
 import { contextProviders, createContextFallback, ContextProvidersUnavailable, enrichWithFallback, type OpportunityContext } from "./enrich/context.js";
 import { enrichMetadataWithOpenRouter } from "./enrich/metadata.js";
 import { assessmentPreferences } from "./enrich/assessment.js";
+import { sourceIssues } from "./normalize/quality.js";
+import { sha256 } from "./normalize/text.js";
+import { canonicalizeUrl, urlHash } from "./normalize/url.js";
 import type {
  EnrichmentStats, MetadataStats, NormalizedOpportunity, OpportunitySummary, RunCaps, RunMode, RunResult, SearchProfile, SourceOutcome,
 } from "./types.js";
@@ -446,6 +449,7 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution>
   let cursorOut: unknown = row.cursor ?? {};
   const rawRows: Record<string, unknown>[] = [];
   const parsed: NormalizedOpportunity[] = [];
+  const changedHashes = new Set<string>();
 
   for await (const page of adapter.fetch(query, window, ctx)) {
    base.pages++;
@@ -454,14 +458,31 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution>
    if (page.cursor) cursorOut = page.cursor;
 
    for (const item of page.items) {
-    const o = adapter.normalize(item, ctx);
-    if (!o) continue;
+    let o: NormalizedOpportunity | null = null;
+    try { o = adapter.normalize(item, ctx); }
+    catch (error) { c.log.warn("source parsing failed", { source: row.source_key, externalId: item.externalId, error: String(error) }); }
+    if (!o) {
+     // Retain parser failures for replay without pretending they are vacancies.
+     const canon = canonicalizeUrl(item.url);
+     if (!c.dryRun) await c.db.insertRawItems([{
+      user_id: c.userId, run_id: c.runId, source_key: row.source_key, external_id: item.externalId,
+      url: item.url, url_canon: canon, url_hash: urlHash(canon),
+      content_hash: sha256(JSON.stringify(item.payload) ?? "null"), payload: item.payload, processed: false,
+     }]);
+     base.filterReasons.parse_failed = (base.filterReasons.parse_failed ?? 0) + 1;
+     continue;
+    }
     parsed.push(o);
     rawRows.push({
      user_id: c.userId, run_id: c.runId, source_key: o.sourceKey, external_id: o.externalId,
      url: o.url, url_canon: o.urlCanon, url_hash: o.urlHash, content_hash: o.contentHash,
      payload: item.payload as object, processed: false,
     });
+   }
+   // Commit each fetched page, so a later source/network failure cannot erase it.
+   if (!c.dryRun) {
+    for (const hash of await c.db.insertRawItems(rawRows)) changedHashes.add(hash);
+    rawRows.length = 0;
    }
    if (!c.dryRun && (base.pages === 1 || base.pages % 3 === 0)) {
     await c.db.updateRunProgress(c.runId, {
@@ -475,18 +496,49 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution>
 
   // Written before anything is judged, so a crash later costs no re-fetching.
   // The set that comes back is exactly what is new or changed.
-  const changedHashes = c.dryRun ? new Set(parsed.map(p => p.contentHash)) : await c.db.insertRawItems(rawRows);
+  if (c.dryRun) for (const o of parsed) changedHashes.add(o.contentHash);
   base.itemsNew = changedHashes.size;
   base.itemsUnchanged = Math.max(0, parsed.length - changedHashes.size);
 
   const toEvaluate = parsed.filter(o => shouldEvaluate(c.freshSearch, changedHashes.has(o.contentHash)));
-  const enriched = await enrichMetadataWithOpenRouter(c.env, c.metadataHttp, toEvaluate, c.metadata);
   const audit: Array<{
    opportunity: NormalizedOpportunity; disposition: "accepted" | "ranked_low" | "excluded";
    reason: string | null; score: number | null; metadata?: Record<string, unknown>;
   }> = [];
+  const ready: NormalizedOpportunity[] = [];
+  const seen = new Set<string>();
+  for (const o of toEvaluate) {
+   const issues = sourceIssues(o);
+   if (issues.length) {
+    base.itemsEvaluated++;
+    base.itemsFiltered++;
+    for (const issue of issues) base.filterReasons[issue.reason] = (base.filterReasons[issue.reason] ?? 0) + 1;
+    audit.push({ opportunity: o, disposition: "ranked_low", reason: issues[0]!.reason, score: null, metadata: { issues } });
+    continue;
+   }
+   const identity = `${o.externalId}:${o.contentHash}`;
+   if (seen.has(identity)) continue;
+   seen.add(identity);
+   // Location is checked after metadata repair; obvious role/date exclusions
+   // need no provider call and retain their audit entry.
+   const verdict = hardFilter({ ...o, country: null }, c.profile);
+   if (!verdict.keep) {
+    base.itemsEvaluated++; base.itemsFiltered++;
+    const reason = verdict.reason ?? "unknown";
+    base.filterReasons[reason] = (base.filterReasons[reason] ?? 0) + 1;
+    audit.push({ opportunity: o, disposition: "excluded", reason, score: null });
+   } else ready.push(o);
+  }
+  const enriched = await enrichMetadataWithOpenRouter(c.env, c.metadataHttp, ready, c.metadata);
   for (const o of enriched) {
    base.itemsEvaluated++;
+   const issues = sourceIssues(o);
+   if (issues.length) {
+    base.itemsFiltered++;
+    for (const issue of issues) base.filterReasons[issue.reason] = (base.filterReasons[issue.reason] ?? 0) + 1;
+    audit.push({ opportunity: o, disposition: "ranked_low", reason: issues[0]!.reason, score: null, metadata: { issues } });
+    continue;
+   }
    const verdict = hardFilter(o, c.profile);
    if (!verdict.keep) {
     base.itemsFiltered++;

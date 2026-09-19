@@ -1,5 +1,6 @@
 import { htmlToText, sha256 } from "../normalize/text.js";
 import { buildOpportunity } from "./build.js";
+import { salaryFromText } from "../normalize/salary.js";
 import { SourceConfigError } from "./types.js";
 import type { SourceAdapter, SourceContext, SourceQuery, FetchWindow, SourcePage } from "./types.js";
 import type { NormalizedOpportunity, RawItem } from "../types.js";
@@ -87,6 +88,7 @@ export function joobleAdapter(sourceKey: string): SourceAdapter {
     locationRaw: j.location ?? null,
     postedAt: j.updated ?? null,
     employmentType: j.type ?? null,
+    salary: j.salary ? salaryFromText(`Salary: ${j.salary}`) : null,
    });
   },
  };

@@ -72,10 +72,13 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
    let collected = 0;
 
    const pairs = q.terms.slice(0, 3).flatMap(term => countries.map(country => ({ country, term })));
+   const exhaustedPairs = new Set<string>();
    // Page 1 for every country/term pair before page 2 for any pair. This avoids
    // exhausting the request budget on the first few countries.
    for (let page = 1; page <= 3; page++) {
     for (const { country, term } of pairs) {
+     const pairKey = `${country}:${term}`;
+     if (exhaustedPairs.has(pairKey)) continue;
      if (requests >= w.maxRequests || collected >= w.maxItems || Date.now() > w.deadlineAt) break;
 
      const url =
@@ -88,7 +91,8 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
 
      const data = await ctx.http.getJson<{ results?: AdzunaResult[] }>(url);
      requests++;
-     if (!data?.results?.length) continue;
+     if (!data?.results?.length) { exhaustedPairs.add(pairKey); continue; }
+     if (data.results.length < resultsPerPage) exhaustedPairs.add(pairKey);
 
      const items: RawItem[] = data.results.slice(0, w.maxItems - collected).map(r => ({
       externalId: String(r.id),
@@ -102,7 +106,7 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
       items,
       cursor: { lastSuccessIso: ctx.now.toISOString() },
       requestsUsed: 1,
-      exhausted: data.results.length < resultsPerPage,
+      exhausted: exhaustedPairs.size === pairs.length,
      };
     }
    }
