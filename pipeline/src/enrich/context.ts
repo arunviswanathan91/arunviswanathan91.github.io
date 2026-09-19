@@ -44,11 +44,44 @@ export function openrouterRequest(model: string, prompt: string, decisionBrief =
  return {
   model,
   messages: [{ role: "user", content: decisionBrief ? prompt : `${prompt}\nJSON must contain exactly these string fields: ${FIELDS.join(", ")}.` }],
-  response_format: { type: "json_object" },
-  max_tokens: decisionBrief ? 4800 : 2048,
+  response_format: decisionBrief
+   ? { type: "json_schema", json_schema: { name: "opportunity_context", strict: true, schema: assessmentSchema } }
+   : { type: "json_object" },
+  max_tokens: decisionBrief ? 2600 : 2048,
   // The route is already free; this is a second guard against paid providers.
   provider: { require_parameters: true, max_price: { prompt: 0, completion: 0, request: 0 } },
  };
+}
+
+/** Accept a plain JSON response as well as the harmless wrappers some routed
+ * models add despite JSON mode. Truncated JSON still fails and is never saved. */
+export function parseStructuredJson(text: string): unknown {
+ const trimmed = text.trim();
+ if (!trimmed) throw new Error("empty structured response");
+ try { return JSON.parse(trimmed); } catch { /* try a wrapped object below */ }
+ const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+ if (fenced) {
+  try { return JSON.parse(fenced); } catch { /* continue */ }
+ }
+ const start = trimmed.indexOf("{");
+ if (start >= 0) {
+  let depth = 0, quoted = false, escaped = false;
+  for (let i = start; i < trimmed.length; i++) {
+   const char = trimmed[i]!;
+   if (quoted) {
+    if (escaped) escaped = false;
+    else if (char === "\\") escaped = true;
+    else if (char === '"') quoted = false;
+    continue;
+   }
+   if (char === '"') quoted = true;
+   else if (char === "{") depth++;
+   else if (char === "}" && --depth === 0) {
+    try { return JSON.parse(trimmed.slice(start, i + 1)); } catch { break; }
+   }
+  }
+ }
+ throw new Error("invalid structured JSON");
 }
 
 export function parseOpenrouterContext(text: string): Record<string, string> {
@@ -71,6 +104,7 @@ export function createContextFallback<T>(
  maxAttempts = Infinity,
 ) {
  const disabled = new Set<ContextProvider>();
+ const consecutiveFailures = new Map<ContextProvider, number>();
  let preferred = 0;
  let attempts = 0;
  return async (attempt: (provider: ContextProvider) => Promise<T>): Promise<T> => {
@@ -83,11 +117,18 @@ export function createContextFallback<T>(
    attempts++;
    try {
     const result = await attempt(provider);
+    consecutiveFailures.set(provider, 0);
     preferred = index;
     return result;
    } catch (error) {
     lastError = error;
-    if (error instanceof HttpResponseError && [401, 402, 403, 429, 503].includes(error.status))
+    const failures = (consecutiveFailures.get(provider) ?? 0) + 1;
+    consecutiveFailures.set(provider, failures);
+    const message = error instanceof Error ? error.message : String(error);
+    if ((error instanceof HttpResponseError && [401, 402, 403, 429, 503].includes(error.status))
+     || (error instanceof HttpResponseError && error.status === 400 && /json|schema|structured/i.test(error.responseBody))
+     || /aborted due to timeout|timed?\s*out/i.test(message)
+     || failures >= 2)
      disabled.add(provider);
     const next = Array.from({ length: providers.length - offset - 1 }, (_, i) =>
      providers[(preferred + offset + i + 1) % providers.length]!).find(p => !disabled.has(p));
@@ -135,15 +176,29 @@ export function contextPayloadFromInteraction(value: unknown): unknown {
   ? response.interaction as Record<string, unknown> : null;
  const output = response.output_text ?? response.outputText ?? nested?.output_text ?? nested?.outputText;
  if (typeof output !== "string") return value;
- try { return JSON.parse(output); }
+ try { return parseStructuredJson(output); }
  catch { throw new Error("Gemini returned invalid JSON in output_text"); }
 }
 
 export function decisionPrompt(candidate: ContextCandidate, evidence: Evidence[], prefs: AssessmentPreferences, provider: ContextProvider = "openrouter") {
- // Groq free accounts have tighter token-per-minute budgets. Avoid duplicating
- // its response schema in the prompt and keep all source IDs with shorter text.
- const facts = evidence.map((item, index) => `SOURCE ${index + 1} (${item.kind ?? "background"}): ${item.label}\n${excerpt(item.text, provider === "groq" ? item.kind === "listing" ? 2000 : 500 : 6500)}`).join("\n\n");
- return `${assessmentInstructions(prefs, provider === "openrouter")}\nVACANCY: ${JSON.stringify({ role: candidate.role, organisation: candidate.organization, city: candidate.city, location: candidate.location, country: candidate.country, salary: candidate.salary_display, salary_predicted: candidate.salary_is_predicted })}\nEVIDENCE:\n${facts || "No sources could be fetched; do not claim source verification."}`;
+ // Keep the entire request inside free-tier token budgets. The schema is sent
+ // through each provider's native structured-output field, so duplicating it in
+ // the prompt wastes tokens and makes truncation substantially more likely.
+ const totalBudget = provider === "groq" ? 7_500 : 12_000;
+ const listingBudget = provider === "groq" ? 2_800 : 4_000;
+ const sourceBudget = provider === "groq" ? 900 : 1_500;
+ let remaining = totalBudget;
+ const facts: string[] = [];
+ for (let index = 0; index < evidence.length && remaining > 120; index++) {
+  const item = evidence[index]!;
+  const heading = `SOURCE ${index + 1} (${item.kind ?? "background"}): ${item.label}\n`;
+  const allowed = Math.min(item.kind === "listing" ? listingBudget : sourceBudget, Math.max(0, remaining - heading.length));
+  if (allowed < 80) break;
+  const fact = `${heading}${excerpt(item.text, allowed)}`;
+  facts.push(fact);
+  remaining -= fact.length + 2;
+ }
+ return `${assessmentInstructions(prefs, false)}\nVACANCY: ${JSON.stringify({ role: candidate.role, organisation: candidate.organization, city: candidate.city, location: candidate.location, country: candidate.country, salary: candidate.salary_display, salary_predicted: candidate.salary_is_predicted })}\nEVIDENCE:\n${facts.join("\n\n") || "No sources could be fetched; do not claim source verification."}`;
 }
 
 export async function enrichOpportunityContext(
@@ -171,7 +226,7 @@ export async function enrichOpportunityContext(
   if (response?.error) throw new Error("OpenRouter returned an API error");
   const text = response?.choices?.[0]?.message?.content;
   if (!text) throw new Error("OpenRouter returned an empty response");
-  try { payload = JSON.parse(text); }
+  try { payload = parseStructuredJson(text); }
   catch { throw new Error("OpenRouter returned invalid assessment JSON"); }
   model = response?.model ?? model;
  } else if (provider === "groq") {
@@ -182,13 +237,13 @@ export async function enrichOpportunityContext(
     model: env.groqModel,
     messages: [{ role: "user", content: prompt }],
     response_format: { type: "json_schema", json_schema: { name: "opportunity_context", strict: true, schema } },
-    max_completion_tokens: 3072,
+    max_completion_tokens: 2200,
    },
    { authorization: `Bearer ${env.groqApiKey}` },
   );
   const text = response?.choices?.[0]?.message?.content;
   if (!text) throw new Error("Groq returned an empty structured response");
-  try { payload = JSON.parse(text); }
+  try { payload = parseStructuredJson(text); }
   catch { throw new Error("Groq returned invalid JSON"); }
  } else {
   if (!env.geminiApiKey) throw new Error("GEMINI_API_KEY missing");

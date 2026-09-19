@@ -28,6 +28,13 @@ export class HttpResponseError extends Error {
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+function retryDelayMs(headers: Headers, body: string, attempt: number): number {
+ const retryAfter = Number(headers.get("retry-after"));
+ if (isFinite(retryAfter) && retryAfter > 0) return Math.min(60_000, retryAfter * 1000);
+ const messageDelay = body.match(/(?:try again|retry)\s+in\s+([\d.]+)s/i);
+ if (messageDelay) return Math.min(60_000, Math.ceil(Number(messageDelay[1]) * 1000));
+ return 1000 * 2 ** attempt;
+}
 
 /**
  * A polite HTTP client: one request at a time per host, robots.txt respected and
@@ -143,13 +150,12 @@ export class Http {
      body: JSON.stringify(body),
      signal: AbortSignal.timeout(this.opts.timeoutMs),
     });
+    const responseText = await res.text();
     if ((res.status === 429 || res.status >= 500) && attempt < this.opts.maxRetries) {
-     const retryAfter = Number(res.headers.get("retry-after"));
-     await new Promise(r => setTimeout(r, isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** attempt));
+     await sleep(retryDelayMs(res.headers, responseText, attempt));
      attempt++;
      continue;
     }
-    const responseText = await res.text();
     if (!res.ok) throw new HttpResponseError(res.status, responseText);
     if (!responseText) throw new Error(`HTTP ${res.status}: empty JSON response`);
     try { return JSON.parse(responseText) as T; }

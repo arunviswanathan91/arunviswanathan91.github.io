@@ -197,7 +197,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  }
 
  if (backfill && !opts.dryRun && Date.now() < deadlineAt) {
-  const batch = boundedBatchSize(opts.contextBatchSize, 25);
+  const batch = boundedBatchSize(opts.contextBatchSize, 5);
   const candidates = await db.loadMetadataCandidates(userId, batch, !!opts.refreshContext);
   for (let offset = 0; offset < candidates.length; offset += 20) {
    const chunk = candidates.slice(offset, offset + 20);
@@ -283,9 +283,9 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  // Context enrichment has a separate request budget. Crawlers can use their
  // entire allowance without silently preventing an AI provider afterward.
- // A person waiting in Swipe mode expects every result from a normal-sized
- // interactive search to receive its brief, not only the first three cards.
- const defaultContextLimit = backfill ? 25 : trigger === "schedule" ? 8 : 12;
+ // A decision brief is intentionally substantial. Small resumable backfills
+ // stay inside free-provider rate limits and the Cloud Run execution window.
+ const defaultContextLimit = backfill ? 5 : trigger === "schedule" ? 5 : 8;
  const requestedContext = boundedBatchSize(opts.contextBatchSize, defaultContextLimit);
  const llmCallLimit = Math.max(0, Math.min(caps.maxLlmCalls, profile.maxLlmCalls) - metadata.aiBatches);
  const contextLimit = Math.min(llmCallLimit, requestedContext);
@@ -298,7 +298,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   enrichment.candidates = loaded.candidates.length;
   enrichment.pending = loaded.total;
   const contextHttp = new Http(
-   { ...DEFAULT_HTTP, timeoutMs: 60_000, maxRetries: 1 },
+   { ...DEFAULT_HTTP, timeoutMs: 50_000, maxRetries: 1 },
    Math.max(16, contextLimit * 10 + 4),
   );
   const fallback = createContextFallback<OpportunityContext>(providers, (from, to) =>
