@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderKanban, Inbox } from "lucide-react";
+import { FolderKanban, Inbox, Radar } from "lucide-react";
 import { useData, useEntityTable, useUi } from "../../lib/store";
 import { applyQuery } from "../../lib/query";
 import { fieldByKey } from "../../entities/types";
@@ -13,6 +13,8 @@ import { OpportunityDiscovery } from "./OpportunityDiscovery";
 import { OpportunitySwipe } from "./OpportunitySwipe";
 import { contextFor } from "./OpportunityContext";
 import { includeResearchFit } from "../../lib/decision";
+import { applyDiscoveryRunScope } from "../../lib/discoveryRun";
+import type { DiscoveryRunScope } from "../../lib/discoveryRun";
 import { SelectMenu } from "../ui/SelectMenu";
 import { useEntityCtx } from "./ctx";
 import type { EntityDef, FieldDef, QuickAction, Row } from "../../entities/types";
@@ -24,14 +26,17 @@ export function EntityView({def}:{def:EntityDef}){
  const {valueCtx,inputCtx}=useEntityCtx(def);
  const [composer,setComposer]=useState<Record<string,unknown>|null>(null);
  const [researchFit,setResearchFit]=useState("all");
+ const [discoveryScope,setDiscoveryScope]=useState<DiscoveryRunScope|null>(null);
 
  const query=ui.queries[def.key];
  const scopeProjectId=ui.scope==="all"?null:ui.scope;
  const selection=ui.selection.entity===def.key?ui.selection.ids:[];
 
- const rows=useMemo(()=>applyQuery(def,table.rows,query,{
+ const viewRows=useMemo(()=>def.key==="opportunities"
+  ?applyDiscoveryRunScope(table.rows,discoveryScope):table.rows,[def.key,table.rows,discoveryScope]);
+ const rows=useMemo(()=>applyQuery(def,viewRows,query,{
   scope:ui.scope,tagsFor:(e,id)=>tags.idsFor(e,id),
- }).filter(row=>def.key!=="opportunities"||includeResearchFit(contextFor(row).brief?.fit?.verdict,researchFit)),[def,table.rows,query,ui.scope,tags,researchFit]);
+ }).filter(row=>def.key!=="opportunities"||includeResearchFit(contextFor(row).brief?.fit?.verdict,researchFit)),[def,viewRows,query,ui.scope,tags,researchFit]);
 
  const groupField=query.groupBy?fieldByKey(def,query.groupBy):null;
  const layout=query.layout==="swipe"&&def.key==="opportunities"?"swipe":query.layout==="board"&&groupField?"board":"table";
@@ -79,7 +84,19 @@ export function EntityView({def}:{def:EntityDef}){
    </div>
   </div>
 
-  {def.key==="opportunities"&&<OpportunityDiscovery currentCount={table.rows.length} onComplete={()=>void table.refetch(true)}/>}
+  {def.key==="opportunities"&&<OpportunityDiscovery currentCount={table.rows.length} onComplete={scope=>{
+   setDiscoveryScope(scope);void table.refetch(true);
+  }}/>}
+
+  {def.key==="opportunities"&&discoveryScope&&<section className="scope-banner" aria-label="Active discovery run filter">
+   <div className="scope-banner-copy">
+    <Radar/>
+    <span>Viewing <strong>{discoveryScope.mode==="search"&&discoveryScope.query
+     ?`matches for “${discoveryScope.query}”`:"this broad discovery run"}</strong>
+     <small>{discoveryScope.items.length} accepted result{discoveryScope.items.length===1?"":"s"}; dashboard filters apply inside this run</small></span>
+   </div>
+   <button className="secondary" onClick={()=>setDiscoveryScope(null)}>Show all opportunities</button>
+  </section>}
 
   {def.projectField&&ui.scope!=="all"&&<section className="scope-banner" aria-label="Active project filter">
    <div className="scope-banner-copy">

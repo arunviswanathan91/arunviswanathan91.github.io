@@ -92,7 +92,8 @@ See https://openrouter.ai/openrouter/free for current routing behaviour and avai
 
 Decision enrichment is stored under `opportunities.score_breakdown.context`; metadata provenance is
 stored under `score_breakdown.metadata`. The independent run modes and audit ledger require the
-additive `supabase/opportunity-search-v2.sql` migration. Source URLs
+additive `supabase/opportunity-search-v2.sql` migration. Run-scoped dashboard results and run-bound
+AI enrichment additionally require `supabase/opportunity-search-v3.sql`. Source URLs
 are stored with the summary so the dashboard can show the evidence used for each card.
 
 To repair country/organisation metadata and enrich opportunities created before these stages existed, run the
@@ -149,7 +150,7 @@ budget calculator uses conservative bounds, preserves unknowns, allows negative 
 upfront costs out of monthly savings. Edits are local to the open card, not a promise of payroll or a
 saved household budget. A 12-month comparison is explicitly hypothetical for shorter contracts.
 
-**Rollout:** apply `supabase/opportunity-search-v2.sql`, deploy the updated `opportunity-discover`
+**Rollout:** apply `supabase/opportunity-search-v2.sql` and then `supabase/opportunity-search-v3.sql`, deploy the updated `opportunity-discover`
 function, then merge/publish the dashboard and worker.
 Save preferences, then run **Nightly opportunity discovery → Run workflow → backfill**, starting with
 `batchSize=5`, `maxLlmCalls=10`, `refreshExisting=false`. Repeat pending batches; failed calls stay
