@@ -104,7 +104,8 @@ const decisionPayload = () => ({
  const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
  const env = readEnv({ ...base, OPENROUTER_API_KEY: " test-key " });
  eq("OpenRouter defaults to the automatic free-model router", env.openrouterModel, "openrouter/free");
- eq("Gemini fallback defaults to the stable high-volume model", env.geminiModel, "gemini-2.5-flash");
+ eq("Gemini fallback defaults to the supported stable model", env.geminiModel, "gemini-3.6-flash");
+ eq("Gemini model override whitespace is trimmed", readEnv({ ...base, GEMINI_MODEL: " gemini-3.7-flash " }).geminiModel, "gemini-3.7-flash");
  eq("OpenRouter key whitespace is trimmed", env.openrouterApiKey, "test-key");
  eq("OpenRouter works without Gemini or Groq", contextProviders(env), ["openrouter"]);
  eq("blank AI keys are disabled", contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: " ", GEMINI_API_KEY: "", GROQ_API_KEY: "" })), []);
@@ -154,7 +155,11 @@ const decisionPayload = () => ({
 
  const attempted: string[] = [];
  const switches: string[] = [];
- const fallback = createContextFallback<string>(["gemini", "groq", "openrouter"], (a,b) => switches.push(`${a}:${b}`));
+ const switchErrors: string[] = [];
+ const fallback = createContextFallback<string>(["gemini", "groq", "openrouter"], (a,b,error) => {
+  switches.push(`${a}:${b}`);
+  switchErrors.push(error instanceof Error ? error.message : String(error));
+ });
  eq("quota failures reach OpenRouter for the same card", await fallback(async provider => {
   attempted.push(provider);
   if (provider !== "openrouter") throw new HttpResponseError(429, "Quota reached");
@@ -162,6 +167,7 @@ const decisionPayload = () => ({
  }), "saved");
  eq("fallback provider order", attempted, ["gemini", "groq", "openrouter"]);
  eq("fallback transitions are observable", switches, ["gemini:groq", "groq:openrouter"]);
+ check("fallback transitions retain the provider failure", switchErrors.every(error => error.includes("HTTP 429")));
  attempted.length = 0;
  await fallback(async provider => { attempted.push(provider); return "saved"; });
  eq("next card skips exhausted providers", attempted, ["openrouter"]);
@@ -179,6 +185,12 @@ const decisionPayload = () => ({
  const malformed = createContextFallback<string>(["openrouter"], () => {});
  try { await malformed(async () => { throw new Error("Malformed card response"); }); } catch { /* expected */ }
  eq("card-specific parse error does not disable provider", await malformed(async () => "next card"), "next card");
+ const retired = createContextFallback<string>(["gemini"], () => {});
+ let retiredUnavailable = false, retiredCalls = 0;
+ try { await retired(async () => { retiredCalls++; throw new HttpResponseError(404, "model retired"); }); }
+ catch (error) { retiredUnavailable = error instanceof ContextProvidersUnavailable && error.message.includes("model retired"); }
+ try { await retired(async () => { retiredCalls++; return "bad"; }); } catch { /* disabled */ }
+ check("retired provider is disabled immediately with a useful final error", retiredUnavailable && retiredCalls === 1);
 }
 
 eq("strips utm params", canonicalizeUrl("https://x.com/job/1?utm_source=fb&utm_campaign=x"), "https://x.com/job/1");
