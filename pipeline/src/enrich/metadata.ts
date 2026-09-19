@@ -69,6 +69,14 @@ const clean = (value: unknown, max = 180) => typeof value === "string"
 export async function enrichMetadataWithOpenRouter(
  env: Env, http: Http, rows: NormalizedOpportunity[], stats: MetadataStats, verifyExisting = false,
 ): Promise<NormalizedOpportunity[]> {
+ // Bound normal discovery too, not only backfills. Preserve input ordering.
+ if (rows.length > 5) {
+  const output: NormalizedOpportunity[] = [];
+  for (let offset = 0; offset < rows.length; offset += 5) {
+   output.push(...await enrichMetadataWithOpenRouter(env, http, rows.slice(offset, offset + 5), stats, verifyExisting));
+  }
+  return output;
+ }
  const local = rows.map(enrichMetadataLocally);
  stats.deterministic += local.filter((o, i) => !rows[i]!.country && !!o.country).length;
  const candidates = local.map((o, index) => ({ o, index })).filter(({ o }) =>

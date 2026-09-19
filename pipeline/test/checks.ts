@@ -19,7 +19,7 @@ import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/eu
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery, termsForRun } from "../src/search/query.js";
-import { enrichMetadataLocally } from "../src/enrich/metadata.js";
+import { enrichMetadataLocally, enrichMetadataWithOpenRouter } from "../src/enrich/metadata.js";
 import { contextPayloadFromInteraction, hasMeaningfulContext, normalizeContextPayload, UNKNOWN } from "../src/enrich/context.js";
 import { contextProviders, createContextFallback, ContextProvidersUnavailable, openrouterRequest, parseOpenrouterContext, parseStructuredJson, enrichOpportunityContext } from "../src/enrich/context.js";
 import { readEnv } from "../src/config.js";
@@ -27,6 +27,11 @@ import { Http, HttpResponseError } from "../src/http.js";
 import type { ContextCandidate } from "../src/db.js";
 import { assessmentInstructions, assessmentPreferences, assessmentKey, needsAssessment, normalizeAssessment, SECTION_KEYS, type Evidence } from "../src/enrich/assessment.js";
 import { collectDecisionEvidence, relevantExcerpt, safeEvidenceUrl } from "../src/enrich/evidence.js";
+import { sourceIssues } from "../src/normalize/quality.js";
+import { adzunaAdapter } from "../src/sources/adzuna.js";
+import { joobleAdapter } from "../src/sources/jooble.js";
+import { feedAdapter } from "../src/sources/feed.js";
+import type { SourceContext } from "../src/sources/types.js";
 
 type Check = { name: string; ok: boolean; detail?: string };
 const out: Check[] = [];
@@ -673,6 +678,51 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
 
  check("makeRenderer returns null with no api key", makeRenderer(null, 5) === null);
  check("makeRenderer returns a function once a key is set", typeof makeRenderer("key", 5) === "function");
+}
+
+// Captured failure shapes: keep external calls stubbed and exercise adapters,
+// not only their individual string helpers.
+{
+ const ctx = { now: new Date(), cursorIn: {}, log: () => {} } as unknown as SourceContext;
+ const raw = (payload: unknown) => ({ externalId: "fixture", url: "https://example.org/job/1", payload, fetchedAt: new Date().toISOString() });
+ const jooble = joobleAdapter("jooble");
+ const salary = jooble.normalize(raw({ title: "Postdoctoral Fellow", link: "https://example.org/job/1", salary: "€3.204/month", location: "Maastricht, Netherlands" }), ctx);
+ eq("Jooble salary field survives adapter normalization", salary?.salary?.min, 3204);
+ const feed = feedAdapter("feed:researchersjob");
+ const article = feed.normalize(raw({ title: "Postdoc Quantum Torsional Resonators at TU Delft", description: "Quantum physics", organization: "ResearchersJob" }), ctx);
+ eq("feed publisher is never substituted for hiring employer", article?.organization, null);
+ eq("Dallas TX becomes US, not invented country TX", parseLocation("Dallas, TX").country, "US");
+ eq("German city aliases never imply India", parseLocation("Munich").country, null);
+ eq("Canadian country suffix is not overwritten as California", parseLocation("Toronto, CA").country, "CA");
+ eq("role title overrides incidental postdoc description", classifyType("Staff Product Manager, Machine Learning", "Work with postdoctoral researchers"), "Other");
+ const conflict = buildOpportunity({ sourceKey:"jooble", externalId:"conflict",url:"https://example.org/job/2",title:"Senior Analytical Scientist – ICP-MS",country:"AT",description:"Location\nDallas, TX\nType of Employment\nContract" })!;
+ eq("Dallas/Austria contradiction is explicit before AI", sourceIssues(conflict)[0]?.reason, "location_conflict");
+ eq("unrelated employer office mentions do not trigger conflicts", sourceIssues({ ...conflict, descriptionText:"Our company also has an office in Dallas, TX." }).length, 0);
+ eq("product manager routed out before AI", sourceIssues({ ...conflict, title:"Staff Product Manager, Machine Learning",descriptionText:"Climate solutions" })[0]?.reason, "non_research_role");
+ const adzuna = adzunaAdapter("adzuna");
+ adzuna.configure({}, { ADZUNA_APP_ID:"fixture", ADZUNA_APP_KEY:"fixture" });
+ const visited: string[] = [];
+ const http = { getJson: async (url:string) => { visited.push(url); return {results:[{id:url,title:"Postdoc",redirect_url:"https://example.org/job/1",description:"Research"}]}; } } as unknown as Http;
+ for await (const page of adzuna.fetch({terms:["postdoc"],countries:["DE","NL"],cities:[],remoteOk:false,since:null}, {maxItems:100,maxRequests:10,maxPages:10,deadlineAt:Date.now()+5000}, {...ctx,http})) {
+  if (page.exhausted) break; // same consumption contract as the real runner
+ }
+ check("short Adzuna country page does not suppress other countries", visited.length===2 && visited.some(url=>url.includes("/nl/")));
+}
+
+{
+ const env = readEnv({ SUPABASE_URL:"https://example.org", SUPABASE_SERVICE_ROLE_KEY:"test-only", OPENROUTER_API_KEY:"test-only" });
+ const stats = { candidates:0, deterministic:0, aiBatches:0, aiUpdated:0, unresolved:0, backfilled:0 };
+ const sizes: number[] = [];
+ const http = { postJson: async (_url: string, body: { messages: { content: string }[] }) => {
+  const prompt = body.messages[0]!.content;
+  const input = JSON.parse(prompt.split("INPUT=")[1]!.split("\nReturn only JSON:")[0]!) as {index:number; title:string}[];
+  sizes.push(input.length);
+  return { choices:[{message:{content:JSON.stringify({items:input.map(row=>({index:row.index,country:"DE",city:row.title,organization:"Fixture institute",confidence:0.95,evidence:"Fixture only"}))})}}] };
+ } } as unknown as Http;
+ const rows = Array.from({length:11}, (_, i)=>buildOpportunity({ sourceKey:"fixture",externalId:String(i),url:`https://example.org/${i}`,title:`Postdoc ${i}`,description:"Research vacancy" })!);
+ const enriched = await enrichMetadataWithOpenRouter(env,http,rows,stats);
+ eq("metadata AI receives bounded batches", sizes, [5,5,1]);
+ eq("batch-local model indices preserve listing association", enriched.map(row=>row.city), rows.map(row=>row.title));
 }
 
 let bad = 0;

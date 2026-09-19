@@ -15,8 +15,10 @@ const RULES: [RegExp, OpportunityKind][] = [
 ];
 
 export function classifyType(title: string, description: string): OpportunityKind {
- const hay = title + " \n " + description.slice(0, 1200);
- for (const [re, kind] of RULES) if (re.test(hay)) return kind;
+ // A postdoc mentioned in a manager's team description is not the offered role.
+ if (/\b(product|project|account|sales) manager\b/i.test(title)) return "Other";
+ for (const [re, kind] of RULES) if (re.test(title)) return kind;
+ for (const [re, kind] of RULES) if (re.test(description.slice(0, 1200))) return kind;
  return "Other";
 }
 

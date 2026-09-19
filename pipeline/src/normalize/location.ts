@@ -48,7 +48,7 @@ export function countryMention(value: string | null | undefined): string | null 
 const US_REGIONS = new Set(`alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia|dc|ny|ia|ca|ma|md|nj|pa|tx|wa|il|fl|ga|nc|oh|mi|mn|co|az|or|va`.split("|"));
 const CANADA_REGIONS = new Set(`alberta|british columbia|manitoba|new brunswick|newfoundland and labrador|nova scotia|ontario|prince edward island|quebec|saskatchewan|northwest territories|nunavut|yukon|ab|bc|mb|nb|nl|ns|nt|nu|on|pe|qc|sk|yt`.split("|"));
 const INDIA_LOCATIONS = new Set([
- ...Object.keys(CITY_ALIASES), "kerala", "karnataka", "tamil nadu", "telangana", "andhra pradesh",
+ ...Object.keys(CITY_ALIASES).filter(city => !["munich", "cologne"].includes(CITY_ALIASES[city]!)), "kerala", "karnataka", "tamil nadu", "telangana", "andhra pradesh",
  "maharashtra", "west bengal", "uttar pradesh", "madhya pradesh", "rajasthan", "gujarat", "odisha",
  "punjab", "haryana", "assam", "goa", "chandigarh", "puducherry",
 ]);
@@ -96,7 +96,10 @@ export function parseLocation(raw: string | null): { city: string | null; countr
  if (!raw) return { city: null, country: null };
  const parts = raw.split(",").map(p => p.trim()).filter(Boolean);
  if (!parts.length) return { city: null, country: null };
- const explicitCountry = normalizeCountry(parts[parts.length - 1]);
+ // In "Dallas, TX", the final two letters are a state, not an ISO country.
+ const tail = parts[parts.length - 1]!;
+ const explicitCountry = parts.length > 1 && US_REGIONS.has(tail.toLowerCase()) && !Object.values(COUNTRY_NAMES).includes(tail.toUpperCase())
+  ? "US" : normalizeCountry(tail);
  const country = explicitCountry ?? inferCountryFromParts(parts);
  const city = parts.length > 1 || !explicitCountry ? parts[0] : null;
  return { city: city ?? null, country };
