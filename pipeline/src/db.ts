@@ -152,21 +152,35 @@ export class Db {
   disposition: "accepted" | "ranked_low" | "excluded";
   reason: string | null;
   score: number | null;
+  metadata?: Record<string, unknown>;
  }>) {
   if (!runId || !rows.length) return;
-  const payload = rows.map(({ opportunity:o, disposition, reason, score }) => ({
+  const payload = rows.map(({ opportunity:o, disposition, reason, score, metadata }) => ({
    run_id: runId, user_id: userId, source_key: o.sourceKey,
    external_id: o.externalId, content_hash: o.contentHash, url: o.url,
    title: o.title, organization: o.organization, location: o.locationRaw,
    country: o.country, opportunity_type: o.opportunityType,
    disposition, reason, score,
-   metadata: o.locationMetadata ?? {},
+   metadata: metadata ?? (o.locationMetadata ? { location: o.locationMetadata } : {}),
   }));
   const { error } = await this.client.from("discovery_run_items").upsert(payload, {
    onConflict: "run_id,source_key,external_id,content_hash",
   });
   // Audit data must never make discovery fail during the short deployment
   // window before the additive SQL migration is applied.
+  return error?.message ?? null;
+ }
+
+ /** Connect an accepted audit row to the durable opportunity only after
+  * deduplication has resolved its canonical id. */
+ async linkRunItem(runId: string | null, opportunity: NormalizedOpportunity, opportunityId: string) {
+  if (!runId) return null;
+  const { error } = await this.client.from("discovery_run_items").update({ opportunity_id: opportunityId })
+   .eq("run_id", runId)
+   .eq("source_key", opportunity.sourceKey)
+   .eq("external_id", opportunity.externalId)
+   .eq("content_hash", opportunity.contentHash)
+   .eq("disposition", "accepted");
   return error?.message ?? null;
  }
 
@@ -267,15 +281,37 @@ export class Db {
   return out;
  }
 
- async loadContextCandidates(userId: string, limit: number, refreshExisting = false, prefs = assessmentPreferences({})): Promise<{
+ async loadContextCandidates(
+  userId: string, limit: number, refreshExisting = false,
+  prefs = assessmentPreferences({}), runId: string | null = null,
+ ): Promise<{
   candidates: ContextCandidate[]; total: number;
  }> {
-  const { data, error } = await this.client.from("opportunities")
+  let runOrder: string[] | null = null;
+  if (runId) {
+   const { data: runRows, error: runError } = await this.client.from("discovery_run_items")
+    .select("opportunity_id,score")
+    .eq("user_id", userId).eq("run_id", runId).eq("disposition", "accepted")
+    .not("opportunity_id", "is", null).order("score", { ascending: false });
+   if (runError) throw new Error("loadContextCandidates run scope: " + runError.message);
+   runOrder = [...new Set((runRows ?? []).map(row => String(row.opportunity_id)).filter(Boolean))];
+   if (!runOrder.length) return { candidates: [], total: 0 };
+  }
+
+  let query = this.client.from("opportunities")
    .select("id,role,organization,organization_url,location,city,country,url,summary,description_excerpt,score_breakdown,enrichment,salary_display,salary_is_predicted")
-   .eq("user_id", userId).is("deleted_at", null).in("status", ["New", "Shortlisted"])
-   .order("match_score", { ascending: false }).limit(2000);
+   .eq("user_id", userId).is("deleted_at", null).in("status", ["New", "Shortlisted"]);
+  query = runOrder
+   ? query.in("id", runOrder)
+   : query.order("match_score", { ascending: false }).limit(2000);
+  const { data, error } = await query;
   if (error) throw new Error("loadContextCandidates: " + error.message);
-  const eligible = ((data ?? []) as ContextCandidate[])
+  let rows = (data ?? []) as ContextCandidate[];
+  if (runOrder) {
+   const byId = new Map(rows.map(row => [row.id, row]));
+   rows = runOrder.map(id => byId.get(id)).filter((row): row is ContextCandidate => !!row);
+  }
+  const eligible = rows
    .filter(row => refreshExisting || (() => {
     const score = row.score_breakdown;
     const context = score && typeof score === "object" ? score.context : null;

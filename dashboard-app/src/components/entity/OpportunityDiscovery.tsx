@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { CheckCircle2, LoaderCircle, Radar, RotateCcw, Search, TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { buildDiscoveryRunScope } from "../../lib/discoveryRun";
+import type { DiscoveryRunItemRow, DiscoveryRunScope } from "../../lib/discoveryRun";
 import { AssessmentPreferences } from "./AssessmentPreferences";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
 
@@ -40,7 +42,9 @@ interface RestartResponse {archived?:number;batch_id?:string|null;runs_cleared?:
 
 const active = (phase: Phase) => phase === "starting" || phase === "queued" || phase === "running";
 
-export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(): void; currentCount:number }) {
+export function OpportunityDiscovery({ onComplete, currentCount }: {
+ onComplete(scope:DiscoveryRunScope|null):void; currentCount:number;
+}) {
  const [query, setQuery] = useState("");
  const [phase, setPhase] = useState<Phase>("idle");
  const [restarting,setRestarting]=useState(false);
@@ -94,6 +98,16 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
     return;
    }
 
+   const {data:runItems,error:runItemsError}=await supabase.from("discovery_run_items")
+    .select("opportunity_id,score,metadata")
+    .eq("run_id",runId).eq("disposition","accepted")
+    .not("opportunity_id","is",null).order("score",{ascending:false});
+   if(runItemsError){
+    setPhase("failed");
+    setMessage(`The crawler finished, but this run's result set could not be loaded: ${runItemsError.message}`);
+    return;
+   }
+
    const stats = row.stats ?? {};
    const matched = Number(stats.matched ?? 0);
    const created = Number(stats.created ?? 0);
@@ -107,8 +121,10 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
    setPhase("done");
    setMessage(matched
     ? `Found ${matched} match${matched === 1 ? "" : "es"} from ${checked} checked · ${created} new${contextNote}${row.status === "partial" && !contextUnavailable ? " · some sources had issues" : ""}.`
-    : `No strong query matches in ${checked} checked listing${checked === 1 ? "" : "s"}; lower-ranked discoveries were retained for review${row.status === "partial" ? "; some sources had issues" : ""}.`);
-   onComplete();
+    : `No relevant matches in ${checked} checked listing${checked === 1 ? "" : "s"}${row.status === "partial" ? "; some sources had issues" : ""}. Nothing unrelated was added by this search.`);
+   onComplete(buildDiscoveryRunScope(
+    runId,row.run_mode==="search"?"search":"discovery",row.query,(runItems??[]) as DiscoveryRunItemRow[],
+   ));
   };
   void poll();
  };
@@ -174,7 +190,7 @@ export function OpportunityDiscovery({ onComplete, currentCount }: { onComplete(
   setMessage(archived
    ?`Archived ${archived} opportunit${archived===1?"y":"ies"} as one Trash group. Enter a query to start a clean search.`
    :"Discovery history was reset. Enter a query to start a clean search.");
-  onComplete();window.dispatchEvent(new CustomEvent("dash:trash-changed"));
+  onComplete(null);window.dispatchEvent(new CustomEvent("dash:trash-changed"));
  });
 
  const Icon = phase === "done" ? CheckCircle2 : phase === "failed" ? TriangleAlert : active(phase) ? LoaderCircle : Search;

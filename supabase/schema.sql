@@ -910,6 +910,22 @@ create table if not exists opportunity_feedback (
   created_at timestamptz not null default now()
 );
 
+-- `discovery_run_items` is declared before `opportunities`, so add this
+-- relationship only after both tables exist. It lets a completed run resolve
+-- its accepted crawler sightings to canonical dashboard rows safely.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'discovery_run_items_opportunity_id_fkey'
+       and conrelid = 'public.discovery_run_items'::regclass
+  ) then
+    alter table discovery_run_items
+      add constraint discovery_run_items_opportunity_id_fkey
+      foreign key (opportunity_id) references opportunities(id) on delete set null;
+  end if;
+end $$;
+
 create table if not exists discovery_quota (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -1142,4 +1158,7 @@ create index if not exists raw_items_user_processed_idx on discovery_raw_items(u
 create index if not exists raw_items_urlhash_idx on discovery_raw_items(user_id,url_hash);
 create index if not exists discovery_runs_user_status_idx on discovery_runs(user_id,status);
 create index if not exists discovery_run_sources_run_idx on discovery_run_sources(run_id);
+create index if not exists discovery_run_items_run_opportunity_idx
+  on discovery_run_items(run_id,opportunity_id)
+  where disposition='accepted' and opportunity_id is not null;
 create index if not exists discovery_sources_user_idx on discovery_sources(user_id,enabled);

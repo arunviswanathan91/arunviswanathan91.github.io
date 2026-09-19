@@ -45,3 +45,9 @@ export const isFreshSearch = (trigger: "schedule" | "telegram" | "manual") => tr
  * person asks a fresh question because the query (and therefore relevance)
  * may have changed. */
 export const shouldEvaluate = (freshSearch: boolean, changed: boolean) => freshSearch || changed;
+
+/** Broad discovery owns the durable opportunity corpus. A focused query gets
+ * its own result ledger and must not add unrelated crawler results to that
+ * corpus merely because a source returned a wide page. */
+export const shouldPersistRunItem = (focusedSearch: boolean, queryMatched: boolean) =>
+ !focusedSearch || queryMatched;

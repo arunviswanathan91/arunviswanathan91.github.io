@@ -14,7 +14,7 @@ import { locKey } from "./normalize/location.js";
 import { salaryDisplay, salarySourceLabel, annualInr, salaryCurrencyConversion } from "./normalize/salary.js";
 import { loadInrExchangeRates } from "./currency.js";
 import { ensureDefaultSources } from "./sources/catalog/defaults.js";
-import { isFreshSearch, shouldEvaluate, termsForDiscovery, termsForRun } from "./search/query.js";
+import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery, termsForRun } from "./search/query.js";
 import { contextProviders, createContextFallback, ContextProvidersUnavailable, enrichWithFallback, type OpportunityContext } from "./enrich/context.js";
 import { enrichMetadataWithOpenRouter } from "./enrich/metadata.js";
 import { assessmentPreferences } from "./enrich/assessment.js";
@@ -41,7 +41,14 @@ export interface RunOptions {
 }
 
 const SOURCE_TIMEOUT_MS = { api: 90_000, feed: 90_000, crawl: 180_000 } as const;
-type AcceptedOpportunity = { o: NormalizedOpportunity; score: ReturnType<typeof scoreOpportunity>; queryMatched: boolean };
+type AcceptedOpportunity = {
+ o: NormalizedOpportunity;
+ /** Stable profile score stored on the shared opportunity. */
+ score: ReturnType<typeof scoreOpportunity>;
+ /** Query-specific score stored only on this run's result ledger. */
+ runScore: ReturnType<typeof scoreOpportunity>;
+ queryMatched: boolean;
+};
 interface SourceExecution { outcome: SourceOutcome; accepted: AcceptedOpportunity[] }
 
 const emptyEnrichment = (requested = 0): EnrichmentStats => ({
@@ -213,7 +220,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const summaries: OpportunitySummary[] = [];
  const summaryIds = new Set<string>();
 
- for (const { o, score, queryMatched } of accepted) {
+ for (const { o, score, runScore, queryMatched } of accepted) {
   const probe = {
    urlHash: o.urlHash,
    atsKey: o.atsKey,
@@ -229,12 +236,16 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   if (match.candidate && !match.repost) {
    deduped++;
    if (!opts.dryRun) await linkSource(
-    db, userId, match.candidate.id, profile, o, score, match.signal, match.confidence, runId,
+    db, userId, match.candidate.id, profile, o, score, match.signal, match.confidence, !focusedSearch,
    );
+   if (!opts.dryRun) {
+    const auditError = await db.linkRunItem(runId, o, match.candidate.id);
+    if (auditError) log.warn("run-item opportunity link unavailable", { error: auditError });
+   }
    // A person asking interactively wants useful current matches, including a
    // listing already found last night. Scheduled digests remain new-only.
    if (freshSearch && queryMatched && !summaryIds.has(match.candidate.id)) {
-    summaries.push(toSummary(match.candidate.id, o, score.score, profile));
+    summaries.push(toSummary(match.candidate.id, o, runScore.score, profile));
     summaryIds.add(match.candidate.id);
    }
    continue;
@@ -244,7 +255,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    created++;
    const dryId = `dry-run:${o.sourceKey}:${o.externalId}`;
    if (queryMatched) {
-    summaries.push(toSummary(dryId, o, score.score, profile));
+    summaries.push(toSummary(dryId, o, runScore.score, profile));
     summaryIds.add(dryId);
    }
    continue;
@@ -254,9 +265,11 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   const id = inserted.id;
   if (id) {
    created++;
+   const auditError = await db.linkRunItem(runId, o, id);
+   if (auditError) log.warn("run-item opportunity link unavailable", { error: auditError });
    candidates.push({ ...probe, id, titleKey: titleKey(o.title), deadline: o.deadline, status: "New" });
    if (queryMatched) {
-    summaries.push(toSummary(id, o, score.score, profile));
+    summaries.push(toSummary(id, o, runScore.score, profile));
     summaryIds.add(id);
    }
   } else {
@@ -279,7 +292,9 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const enrichment = emptyEnrichment(contextLimit);
  const providers = contextProviders(env);
  if (!opts.dryRun && providers.length && Date.now() < deadlineAt) {
-  const loaded = await db.loadContextCandidates(userId, contextLimit, !!opts.refreshContext, preferences);
+  const loaded = await db.loadContextCandidates(
+   userId, contextLimit, !!opts.refreshContext, preferences, backfill ? null : runId,
+  );
   enrichment.candidates = loaded.candidates.length;
   enrichment.pending = loaded.total;
   const contextHttp = new Http(
@@ -466,7 +481,7 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution>
   const enriched = await enrichMetadataWithOpenRouter(c.env, c.metadataHttp, toEvaluate, c.metadata);
   const audit: Array<{
    opportunity: NormalizedOpportunity; disposition: "accepted" | "ranked_low" | "excluded";
-   reason: string | null; score: number | null;
+   reason: string | null; score: number | null; metadata?: Record<string, unknown>;
   }> = [];
   for (const o of enriched) {
    base.itemsEvaluated++;
@@ -480,12 +495,20 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution>
    }
    const activeQuery = c.focusedSearch ? c.queryText : null;
    const queryVerdict = queryRelevance(o, activeQuery);
-   const score = scoreOpportunity(o, c.profile, 0, activeQuery);
+   const runScore = scoreOpportunity(o, c.profile, 0, activeQuery);
+   const score = scoreOpportunity(o, c.profile, 0, null);
    if (queryVerdict.keep) base.itemsMatched++;
-   kept.push({ o, score, queryMatched: queryVerdict.keep });
+   if (shouldPersistRunItem(c.focusedSearch, queryVerdict.keep)) {
+    kept.push({ o, score, runScore, queryMatched: queryVerdict.keep });
+   }
    audit.push({
     opportunity: o, disposition: queryDisposition(queryVerdict),
-    reason: queryVerdict.keep ? null : queryVerdict.note, score: score.score,
+    reason: queryVerdict.keep ? null : queryVerdict.note, score: runScore.score,
+    metadata: {
+     ...(o.locationMetadata ? { location: o.locationMetadata } : {}),
+     fit_reason: runScore.reason,
+     score_breakdown: scoreBreakdownWithCurrency(runScore, o, c.profile),
+    },
    });
   }
   if (!c.dryRun) {
@@ -572,7 +595,7 @@ async function linkSource(
  db: Db, userId: string, opportunityId: string,
  profile: SearchProfile,
  o: NormalizedOpportunity, score: ReturnType<typeof scoreOpportunity>,
- signal: string, confidence: number, runId: string | null,
+ signal: string, confidence: number, updateRanking: boolean,
 ) {
  await db.client.from("opportunity_sources").upsert({
   user_id: userId, opportunity_id: opportunityId, source_key: o.sourceKey, external_id: o.externalId,
@@ -592,9 +615,10 @@ async function linkSource(
  const existingContext = existingScore.context;
  const patch: Record<string, unknown> = {
   last_seen_at: now, source_count: count ?? 1,
-  match_score: score.score, fit_reason: score.reason,
-  score_breakdown: scoreBreakdownWithCurrency(score, o, profile, existingContext),
-  ...(runId ? { run_id: runId } : {}),
+  ...(updateRanking ? {
+   match_score: score.score, fit_reason: score.reason,
+   score_breakdown: scoreBreakdownWithCurrency(score, o, profile, existingContext),
+  } : {}),
  };
  // Same-listing matches can safely refresh presentation fields. This also
  // repairs titles imported before repeated HTML entities were handled.

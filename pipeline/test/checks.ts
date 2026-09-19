@@ -18,7 +18,7 @@ import type { NormalizedOpportunity, SearchProfile } from "../src/types.js";
 import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/euraxess.js";
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
-import { isFreshSearch, shouldEvaluate, termsForDiscovery, termsForRun } from "../src/search/query.js";
+import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery, termsForRun } from "../src/search/query.js";
 import { enrichMetadataLocally } from "../src/enrich/metadata.js";
 import { contextPayloadFromInteraction, hasMeaningfulContext, normalizeContextPayload, UNKNOWN } from "../src/enrich/context.js";
 import { contextProviders, createContextFallback, ContextProvidersUnavailable, openrouterRequest, parseOpenrouterContext, enrichOpportunityContext } from "../src/enrich/context.js";
@@ -443,7 +443,7 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("explicit query keeps a broader cancer postdoc as a related result", queryRelevance(related, "pancreatic cancer postdoc").keep);
  check("explicit query rejects an unrelated laser postdoc", !queryRelevance(laser, "pancreatic cancer postdoc").keep);
  check("explicit query rejects an unrelated astronomy postdoc", !queryRelevance(galaxy, "pancreatic cancer postdoc").keep);
- eq("unrelated query results are retained as ranked-low discoveries, not deleted",
+ eq("unrelated query results remain visible in the per-run audit",
   queryDisposition(queryRelevance(galaxy, "pancreatic cancer postdoc")), "ranked_low");
  check("Europe query rejects an otherwise relevant US postdoc", !queryRelevance(makeOpp({
   title: "Cancer Biology Postdoctoral Fellow", descriptionText: "Cancer research", city: "New York", country: "US", region: "North America",
@@ -472,6 +472,8 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("scheduled runs remain incremental", !isFreshSearch("schedule"));
  check("fresh searches rescore unchanged listings", shouldEvaluate(true, false));
  check("scheduled runs skip unchanged listings", !shouldEvaluate(false, false));
+ check("focused search persists only its accepted matches", shouldPersistRunItem(true, true) && !shouldPersistRunItem(true, false));
+ check("broad discovery persists every hard-filtered crawler result", shouldPersistRunItem(false, false));
 }
 
 // ---- metadata repair before geography filtering ----
