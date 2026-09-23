@@ -422,7 +422,7 @@ async function enrichCityFacts(
   ? citySchema
   : schemaObject({ sections: schemaObject(Object.fromEntries(requestedKeys.map(key => [key, claimSchema]))) });
  const facts = evidenceFacts(evidence.filter(e => e.kind !== "visa" && e.kind !== "tax"), 4_000, 1_600, 1_200);
- const prompt = `${cityFactsInstructions()}\nEMPLOYER: ${JSON.stringify({ organisation: candidate.organization, city: candidate.city, location: candidate.location, country: candidate.country })}\nEVIDENCE:\n${facts}\nReturn exactly the JSON shape described by this schema: ${JSON.stringify(schema)}`;
+ const prompt = `${cityFactsInstructions(requestedKeys.includes("population"))}\nEMPLOYER: ${JSON.stringify({ organisation: candidate.organization, city: candidate.city, location: candidate.location, country: candidate.country })}\nEVIDENCE:\n${facts}\nReturn exactly the JSON shape described by this schema: ${JSON.stringify(schema)}`;
  const { payload, model } = await requestJsonCompletion(env, http, provider, prompt, schema, 700);
  const rawSections = payload && typeof payload === "object" && !Array.isArray(payload)
   && typeof (payload as Record<string, unknown>).sections === "object"
