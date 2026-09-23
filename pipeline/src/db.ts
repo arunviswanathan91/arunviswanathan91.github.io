@@ -330,6 +330,30 @@ export class Db {
   if (error) throw new Error("saveOpportunityContext: " + error.message);
  }
 
+ /** Shared, profile-independent AI facts about an institution/city, reused
+  *  across every opportunity and user with the same (organization, city,
+  *  country) instead of regenerated per opportunity. Degrades to "always
+  *  regenerate" (same as before this cache existed) if the migration in
+  *  supabase/institution-facts.sql hasn't been applied yet -- missing-table
+  *  errors are swallowed rather than failing the run. */
+ async loadInstitutionFacts(key: string): Promise<Record<string, unknown> | null> {
+  const { data, error } = await this.client.from("institution_facts")
+   .select("sections").eq("cache_key", key).maybeSingle();
+  if (error) {
+   if (/relation .* does not exist/i.test(error.message)) return null;
+   throw new Error("loadInstitutionFacts: " + error.message);
+  }
+  return (data?.sections as Record<string, unknown> | undefined) ?? null;
+ }
+
+ async saveInstitutionFacts(key: string, sections: Record<string, unknown>, provider: string, model: string): Promise<void> {
+  const { error } = await this.client.from("institution_facts").upsert({
+   cache_key: key, sections, provider, model, updated_at: new Date().toISOString(),
+  }, { onConflict: "cache_key" });
+  if (error && !/relation .* does not exist/i.test(error.message))
+   throw new Error("saveInstitutionFacts: " + error.message);
+ }
+
  async prune(userId: string, keep = 200) {
   const { data } = await this.client.rpc("discovery_prune", { p_user_id: userId, p_keep: keep });
   return data ?? null;

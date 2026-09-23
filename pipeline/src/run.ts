@@ -15,7 +15,11 @@ import { salaryDisplay, salarySourceLabel, annualInr, salaryCurrencyConversion }
 import { loadInrExchangeRates } from "./currency.js";
 import { ensureDefaultSources } from "./sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery, termsForRun } from "./search/query.js";
-import { contextProviders, createContextFallback, ContextProvidersUnavailable, enrichWithFallback, type OpportunityContext } from "./enrich/context.js";
+import {
+ contextProviders, createContextFallback, createProviderState, ContextProvidersUnavailable, enrichWithFallback,
+ type ContextProvider, type CityFactsResult, type PersonalBriefResult,
+} from "./enrich/context.js";
+import { ProviderRateLimiter } from "./enrich/ratelimit.js";
 import { enrichMetadataWithOpenRouter } from "./enrich/metadata.js";
 import { assessmentPreferences } from "./enrich/assessment.js";
 import { sourceIssues } from "./normalize/quality.js";
@@ -304,10 +308,22 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    { ...DEFAULT_HTTP, timeoutMs: 50_000, maxRetries: 1 },
    Math.max(16, contextLimit * 10 + 4),
   );
-  const fallback = createContextFallback<OpportunityContext>(providers, (from, to, error) =>
+  // City-facts and personal-brief calls share one provider-health state and
+  // one rate limiter, so a provider disabled/paced by one call type is
+  // respected by the other, and the two together stay inside llmCallLimit
+  // rather than each getting its own budget.
+  const providerState = createProviderState();
+  const rateLimiter = new ProviderRateLimiter(env.rateLimitMs);
+  const onProviderSwitch = (from: ContextProvider, to: ContextProvider, error: unknown) =>
    log.warn("switching opportunity context provider", {
     from, to, error: error instanceof Error ? error.message.slice(0, 700) : String(error).slice(0, 700),
-   }), llmCallLimit);
+   });
+  const cityFallback = createContextFallback<CityFactsResult>(providers, onProviderSwitch, llmCallLimit, providerState, rateLimiter);
+  const personalFallback = createContextFallback<PersonalBriefResult>(providers, onProviderSwitch, llmCallLimit, providerState, rateLimiter);
+  // Institution facts (institution/place/population/climate/transport) are
+  // shared by every candidate at the same organization+city+country within
+  // this run, and persisted via db so later runs reuse them too.
+  const institutionCache = new Map<string, { sections: Record<string, unknown>; provider: ContextProvider; model: string }>();
   log.info("opportunity context providers", { providers, openrouterModel: env.openrouterModel });
   for (const candidate of loaded.candidates) {
    if (Date.now() > deadlineAt) {
@@ -318,7 +334,8 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
    enrichment.attempted++;
    try {
     const context = await enrichWithFallback(
-     env, contextHttp, candidate, fallback, preferences, profile.exchangeRates, profile.comparisonCurrency,
+     env, contextHttp, candidate, cityFallback, personalFallback, preferences, profile.exchangeRates, profile.comparisonCurrency,
+     institutionCache, db,
     );
     await db.saveOpportunityContext(candidate, context as unknown as Record<string, unknown>);
     enrichment.succeeded++;
