@@ -116,13 +116,27 @@ export function queryRelevance(o: NormalizedOpportunity, query: string | null | 
 
  // A single overlapping word (or the catch-all "broad" concept, which fires
  // on bare words like "cancer"/"oncology") used to be enough to keep a
- // listing regardless of the rest of the query. That is what made searches
+ // listing regardless of the rest of the query -- that's what made searches
  // like "pancreatic cancer postdoc Bangalore" return anything oncology-
- // adjacent. Require either majority lexical coverage of the query, or a
- // specific (non-"broad") ontology concept match.
- const coverage = wanted.length ? lexicalHits.length / wanted.length : 1;
+ // adjacent. Require either majority lexical coverage of the query, a
+ // specific (non-"broad") ontology concept match, or the query appearing as
+ // a literal phrase (an unambiguous signal on its own, so it's checked
+ // before -- not instead of -- the coverage bar).
+ //
+ // TODO(pending live query text): a real search with 0 matches across every
+ // source on 2026-09-23 suggests majority coverage is too strict for a long,
+ // multi-word technical query -- the ontology only covers this site's own
+ // seeded cancer-research topics, so anything else falls back to pure word
+ // matching, which rarely has every word appear verbatim in a listing's
+ // actual wording. Loosening the coverage bar outright (tried: >=1/3) also
+ // reopens the original bug for short 2-3 word queries (confirmed by the
+ // "generically-worded cancer postdoc" regression test), so it needs the
+ // actual failing query text to tune correctly rather than a guess.
  const specificConceptHits = conceptHits.filter(id => id !== "broad");
- const topicOk = wanted.length === 0 || coverage > 0.5 || specificConceptHits.length > 0;
+ const topicPhrase = normalize(requested.replace(POSTDOC, " "));
+ const phraseHit = topicPhrase.length > 3 && normalize(`${o.title} ${o.descriptionText}`).includes(topicPhrase);
+ const coverage = wanted.length ? lexicalHits.length / wanted.length : 1;
+ const topicOk = wanted.length === 0 || coverage > 0.5 || specificConceptHits.length > 0 || phraseHit;
  if (!roleOk || !topicOk || !location.matches) {
   return {
    keep: false, value: 0,
@@ -143,8 +157,6 @@ export function queryRelevance(o: NormalizedOpportunity, query: string | null | 
  }
 
  const titleCoverage = titleHits.length / wanted.length;
- const topicPhrase = normalize(requested.replace(POSTDOC, " "));
- const phraseHit = topicPhrase.length > 3 && normalize(`${o.title} ${o.descriptionText}`).includes(topicPhrase);
  const value = Math.min(45, Math.round(
   10 + 18 * coverage + 8 * titleCoverage + Math.min(9, conceptHits.length * 5) + (phraseHit ? 5 : 0),
  ));
