@@ -423,7 +423,14 @@ async function enrichCityFacts(
   : schemaObject({ sections: schemaObject(Object.fromEntries(requestedKeys.map(key => [key, claimSchema]))) });
  const facts = evidenceFacts(evidence.filter(e => e.kind !== "visa" && e.kind !== "tax"), 4_000, 1_600, 1_200);
  const prompt = `${cityFactsInstructions(requestedKeys.includes("population"))}\nEMPLOYER: ${JSON.stringify({ organisation: candidate.organization, city: candidate.city, location: candidate.location, country: candidate.country })}\nEVIDENCE:\n${facts}\nReturn exactly the JSON shape described by this schema: ${JSON.stringify(schema)}`;
- const { payload, model } = await requestJsonCompletion(env, http, provider, prompt, schema, 700);
+ // A live run showed OpenRouter and Groq returning genuinely empty
+ // completions at 700 tokens, not malformed JSON -- Groq's free
+ // openai/gpt-oss-20b is a reasoning model, and hidden reasoning tokens are
+ // charged against the same max_completion_tokens budget, so a tight cap
+ // sized for the visible 5-field answer can be consumed entirely before any
+ // output is ever emitted. 1,800 leaves headroom for that even though the
+ // schema itself is small.
+ const { payload, model } = await requestJsonCompletion(env, http, provider, prompt, schema, 1_800);
  const rawSections = payload && typeof payload === "object" && !Array.isArray(payload)
   && typeof (payload as Record<string, unknown>).sections === "object"
   ? (payload as Record<string, unknown>).sections as Record<string, unknown> : {};
