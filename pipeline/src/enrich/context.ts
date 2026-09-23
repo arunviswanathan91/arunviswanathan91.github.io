@@ -36,13 +36,15 @@ interface GroqResponse {
 }
 export const UNKNOWN = "Not enough reliable information collected.";
 const FIELDS = ["institution", "place", "population", "climate", "transport", "living", "inclusion"] as const;
-export type ContextProvider = "gemini" | "groq" | "openrouter" | "cerebras";
+export type ContextProvider = "gemini" | "groq" | "openrouter" | "cerebras" | "deepseek";
 
 export function contextProviders(env: Env): ContextProvider[] {
  // OpenRouter's free router selects a currently available zero-cost model that
  // supports the requested structured-output features. Groq, Gemini and
- // Cerebras remain fallbacks when the free route is busy or unavailable.
- return (["openrouter", "groq", "gemini", "cerebras"] as const).filter(provider =>
+ // Cerebras remain free fallbacks when the free route is busy or unavailable.
+ // DeepSeek is paid (not free-tier), so it's ordered last: only reached once
+ // every free option has failed or is unconfigured.
+ return (["openrouter", "groq", "gemini", "cerebras", "deepseek"] as const).filter(provider =>
   Boolean(env[`${provider}ApiKey`]?.trim()));
 }
 
@@ -238,7 +240,7 @@ export async function enrichOpportunityContext(
  const prompt = decisionPrompt(candidate, evidence, prefs, provider);
  let payload: unknown;
  let model = provider === "gemini" ? env.geminiModel : provider === "groq" ? env.groqModel
-  : provider === "cerebras" ? env.cerebrasModel : env.openrouterModel;
+  : provider === "cerebras" ? env.cerebrasModel : provider === "deepseek" ? env.deepseekModel : env.openrouterModel;
  if (provider === "openrouter") {
   if (!env.openrouterApiKey) throw new Error("OPENROUTER_API_KEY missing");
   const response = await http.postJson<GroqResponse>(
@@ -288,6 +290,26 @@ export async function enrichOpportunityContext(
   try { payload = parseStructuredJson(text); }
   catch { throw new Error("Cerebras returned invalid JSON"); }
   model = response?.model ?? model;
+ } else if (provider === "deepseek") {
+  if (!env.deepseekApiKey) throw new Error("DEEPSEEK_API_KEY missing");
+  const response = await http.postJson<GroqResponse>(
+   "https://api.deepseek.com/chat/completions",
+   {
+    model: env.deepseekModel,
+    messages: [{ role: "user", content: prompt }],
+    // Like Cerebras, treated as best-effort JSON mode rather than a
+    // strictly-enforced schema.
+    response_format: { type: "json_object" },
+    max_tokens: 2600,
+   },
+   { authorization: `Bearer ${env.deepseekApiKey}` },
+  );
+  if (response?.error) throw new Error("DeepSeek returned an API error");
+  const text = response?.choices?.[0]?.message?.content;
+  if (!text) throw new Error("DeepSeek returned an empty response");
+  try { payload = parseStructuredJson(text); }
+  catch { throw new Error("DeepSeek returned invalid JSON"); }
+  model = response?.model ?? model;
  } else {
   if (!env.geminiApiKey) throw new Error("GEMINI_API_KEY missing");
   const response = await http.postJson<Record<string, unknown>>(
@@ -321,7 +343,7 @@ async function requestJsonCompletion(
  env: Env, http: Http, provider: ContextProvider, prompt: string, schema: Record<string, unknown>, maxTokens: number,
 ): Promise<{ payload: unknown; model: string }> {
  let model = provider === "gemini" ? env.geminiModel : provider === "groq" ? env.groqModel
-  : provider === "cerebras" ? env.cerebrasModel : env.openrouterModel;
+  : provider === "cerebras" ? env.cerebrasModel : provider === "deepseek" ? env.deepseekModel : env.openrouterModel;
  if (provider === "openrouter") {
   if (!env.openrouterApiKey) throw new Error("OPENROUTER_API_KEY missing");
   const response = await http.postJson<GroqResponse>(
@@ -338,6 +360,19 @@ async function requestJsonCompletion(
   if (response?.error) throw new Error("OpenRouter returned an API error");
   const text = response?.choices?.[0]?.message?.content;
   if (!text) throw new Error("OpenRouter returned an empty response");
+  return { payload: parseStructuredJson(text), model: response?.model ?? model };
+ }
+ if (provider === "deepseek") {
+  if (!env.deepseekApiKey) throw new Error("DEEPSEEK_API_KEY missing");
+  const response = await http.postJson<GroqResponse>(
+   "https://api.deepseek.com/chat/completions",
+   { model: env.deepseekModel, messages: [{ role: "user", content: prompt }],
+    response_format: { type: "json_object" }, max_tokens: maxTokens },
+   { authorization: `Bearer ${env.deepseekApiKey}` },
+  );
+  if (response?.error) throw new Error("DeepSeek returned an API error");
+  const text = response?.choices?.[0]?.message?.content;
+  if (!text) throw new Error("DeepSeek returned an empty response");
   return { payload: parseStructuredJson(text), model: response?.model ?? model };
  }
  if (provider === "groq") {
