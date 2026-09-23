@@ -23,7 +23,14 @@ jobs:
     # identity-federation resource path, sensitive enough to keep out of
     # vars). Keeping the guard makes a missing deployment identity a visible
     # skipped job, not a broken website.
-    if: ${{ vars.GCP_PROJECT_ID != '' && secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_SERVICE_ACCOUNT != '' }}
+    #
+    # The secrets context cannot be referenced in a job-level `if:` --
+    # GitHub Actions rejects the whole workflow run at parse time if it is
+    # (silent skip -> hard failure with zero jobs). So this guard only
+    # covers the two variables; if GCP_WORKLOAD_IDENTITY_PROVIDER itself is
+    # missing, the auth step below fails loudly instead, which is still
+    # better than an inexplicable "skipped" job.
+    if: ${{ vars.GCP_PROJECT_ID != '' && vars.GCP_SERVICE_ACCOUNT != '' }}
     runs-on: ubuntu-latest
     env:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -43,6 +50,8 @@ jobs:
       - id: auth
         uses: google-github-actions/auth@v2
         with:
+          # Secrets can't be read from a job-level `if:` (see the guard
+          # above), but they're always fine to reference directly here.
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
