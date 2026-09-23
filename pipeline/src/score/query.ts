@@ -13,9 +13,31 @@ const RESEARCH_SCIENTIST = /\bresearch scientist\b/i;
 const INDUSTRY = /\b(industry|industrial|r\s*&\s*d)\b/i;
 const FACULTY = /\b(faculty|professor|lecturer)\b/i;
 const FELLOWSHIP = /\bfellowship\b/i;
-const SCANDINAVIA = new Set(["SE","NO","DK","FI"]);
-const EUROPE = new Set(["DE","NL","SE","CH","GB","FR","BE","DK","NO","FI","AT","IE","ES","IT","PT","PL","CZ"]);
+const SCANDINAVIA = new Set(["SE","NO","DK","FI","IS"]);
+// The EEA/UK/CH set research postdocs actually get advertised in -- the
+// earlier 17-country list silently dropped Greece, Hungary, Romania and
+// several others, so "in europe" excluded real European listings on
+// location alone before the topic words were ever checked.
+const EUROPE = new Set([
+ "DE","NL","SE","CH","GB","FR","BE","DK","NO","FI","AT","IE","ES","IT","PT","PL","CZ",
+ "GR","HU","RO","BG","HR","SI","SK","LU","IS","EE","LV","LT","MT","CY",
+]);
 const ASIA = new Set(["JP","CN","KR","HK","TW","SG","MY","TH","IN"]);
+/** Phrases handled by roleIntent/locationIntent as their own structured
+ *  signal. Stripped before extracting topic words so they don't also have
+ *  to appear verbatim for lexical coverage -- "post doc" (two words,
+ *  neither of which is the stopword "postdoc") used to survive into the
+ *  topic-word list as two unmatchable tokens, and "europe" already has a
+ *  dedicated, more accurate country-code check below. */
+const LOCATION_PHRASES = [
+ /\b(scandinavia|scandinavian|nordic)\b/i, /\beurope(an)?\b/i, /\b(india|indian)\b/i,
+ /\b(usa|united states|america|american)\b/i, /\b(canada|canadian)\b/i, /\b(japan|japanese)\b/i,
+ /\b(china|chinese)\b/i, /\basian?\b/i, /\baustralia(n)?\b/i, /\bnew zealand\b/i,
+ /\bkerala\b/i, /\b(bangalore|bengaluru)\b/i, /\bremote\b/i,
+];
+const ROLE_PHRASES = [POSTDOC, STAFF_SCIENTIST, RESEARCH_SCIENTIST, INDUSTRY, FACULTY, FELLOWSHIP];
+const stripIntentPhrases = (value: string) =>
+ [...ROLE_PHRASES, ...LOCATION_PHRASES].reduce((acc, re) => acc.replace(re, " "), value);
 
 const normalize = (value: string) => value
  .normalize("NFKD")
@@ -98,7 +120,7 @@ export function queryRelevance(o: NormalizedOpportunity, query: string | null | 
   (role.label === "postdoc" && POSTDOC.test(`${o.title} ${o.descriptionText.slice(0, 2500)}`));
  const location=locationIntent(requested,o);
 
- const wanted = topicTokens(requested);
+ const wanted = topicTokens(stripIntentPhrases(requested));
  const title = new Set(tokens(o.title));
  const document = new Set(tokens([
  o.title, o.descriptionText, o.organization ?? "", o.locationRaw ?? "",
@@ -123,17 +145,19 @@ export function queryRelevance(o: NormalizedOpportunity, query: string | null | 
  // a literal phrase (an unambiguous signal on its own, so it's checked
  // before -- not instead of -- the coverage bar).
  //
- // TODO(pending live query text): a real search with 0 matches across every
- // source on 2026-09-23 suggests majority coverage is too strict for a long,
- // multi-word technical query -- the ontology only covers this site's own
- // seeded cancer-research topics, so anything else falls back to pure word
- // matching, which rarely has every word appear verbatim in a listing's
- // actual wording. Loosening the coverage bar outright (tried: >=1/3) also
- // reopens the original bug for short 2-3 word queries (confirmed by the
- // "generically-worded cancer postdoc" regression test), so it needs the
- // actual failing query text to tune correctly rather than a guess.
+ // "cancer post doc in europe" (typed with "post doc" as two words) is why
+ // this needed stripIntentPhrases rather than a looser coverage number:
+ // "post"/"doc" individually aren't the stopword "postdoc", so they used to
+ // survive into `wanted` as two tokens that can never realistically appear
+ // verbatim in listing text (real postings say "postdoctoral"), and
+ // "europe" was requiring both a country-code match AND its own literal
+ // lexical hit. With 4 "topic" words but 2 of them structurally unmatchable,
+ // >50% coverage was nearly impossible to clear regardless of the actual
+ // topic overlap. Stripping role/location phrases before tokenizing (they're
+ // already checked, more accurately, by roleIntent/locationIntent) fixes
+ // that at the source instead of loosening the bar for every query.
  const specificConceptHits = conceptHits.filter(id => id !== "broad");
- const topicPhrase = normalize(requested.replace(POSTDOC, " "));
+ const topicPhrase = normalize(stripIntentPhrases(requested));
  const phraseHit = topicPhrase.length > 3 && normalize(`${o.title} ${o.descriptionText}`).includes(topicPhrase);
  const coverage = wanted.length ? lexicalHits.length / wanted.length : 1;
  const topicOk = wanted.length === 0 || coverage > 0.5 || specificConceptHits.length > 0 || phraseHit;
