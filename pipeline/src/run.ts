@@ -569,6 +569,20 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution>
    const runScore = scoreOpportunity(o, c.profile, 0, activeQuery);
    const score = scoreOpportunity(o, c.profile, 0, null);
    if (queryVerdict.keep) base.itemsMatched++;
+   // A focused search's query-relevance rejection used to vanish from the
+   // per-source rollup entirely -- itemsEvaluated counted it but neither
+   // itemsMatched nor itemsFiltered did, so "checked" and "matched + excluded"
+   // silently diverged (a jooble run could show "100 checked · 0 matched · 17
+   // excluded", leaving 83 listings unaccounted for and looking like a broken
+   // crawler when the relevance gate was actually working as intended). Only
+   // counts for a focused search: queryRelevance() always returns keep:true
+   // for a broad discovery run (activeQuery is null), so this can't double up
+   // with the hardFilter-based itemsFiltered increments above.
+   else if (c.focusedSearch) {
+    base.itemsFiltered++;
+    const reason = queryVerdict.note || "query_mismatch";
+    base.filterReasons[reason] = (base.filterReasons[reason] ?? 0) + 1;
+   }
    if (shouldPersistRunItem(c.focusedSearch, queryVerdict.keep)) {
     kept.push({ o, score, runScore, queryMatched: queryVerdict.keep });
    }
