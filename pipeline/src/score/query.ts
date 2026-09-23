@@ -114,7 +114,15 @@ export function queryRelevance(o: NormalizedOpportunity, query: string | null | 
   .map((id, i) => conceptHits.includes(id) ? queryConcepts.labels[i] : null)
   .filter((v): v is string => !!v);
 
- const topicOk = wanted.length === 0 || lexicalHits.length > 0 || conceptHits.length > 0;
+ // A single overlapping word (or the catch-all "broad" concept, which fires
+ // on bare words like "cancer"/"oncology") used to be enough to keep a
+ // listing regardless of the rest of the query. That is what made searches
+ // like "pancreatic cancer postdoc Bangalore" return anything oncology-
+ // adjacent. Require either majority lexical coverage of the query, or a
+ // specific (non-"broad") ontology concept match.
+ const coverage = wanted.length ? lexicalHits.length / wanted.length : 1;
+ const specificConceptHits = conceptHits.filter(id => id !== "broad");
+ const topicOk = wanted.length === 0 || coverage > 0.5 || specificConceptHits.length > 0;
  if (!roleOk || !topicOk || !location.matches) {
   return {
    keep: false, value: 0,
@@ -134,7 +142,6 @@ export function queryRelevance(o: NormalizedOpportunity, query: string | null | 
   };
  }
 
- const coverage = lexicalHits.length / wanted.length;
  const titleCoverage = titleHits.length / wanted.length;
  const topicPhrase = normalize(requested.replace(POSTDOC, " "));
  const phraseHit = topicPhrase.length > 3 && normalize(`${o.title} ${o.descriptionText}`).includes(topicPhrase);

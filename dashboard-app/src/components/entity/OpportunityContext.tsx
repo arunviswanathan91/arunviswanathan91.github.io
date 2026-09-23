@@ -49,7 +49,10 @@ export function OpportunityContextDetails({row}:{row:Row}){
    {context.generated_at&&<small>Updated {formatDate(context.generated_at,true)}</small>}
   </div>
   {!ready?<div className="context-pending"><Sparkles/><span>
-   Context has not been generated yet. Run the AI context backfill workflow to add it.
+   Context has not been generated yet. AI briefs are generated in small batches by a background worker,
+   not on demand — dispatch the "AI context backfill" GitHub Actions workflow (mode: backfill) to generate one
+   for this opportunity, or wait for the next scheduled run. If briefs never appear, confirm GEMINI_API_KEY,
+   GROQ_API_KEY or OPENROUTER_API_KEY is set for the discovery worker.
   </span></div>:<div className="opportunity-context-grid">
    <div className="opportunity-context-copy">
     <ContextSection icon={<Building2/>} label="Institution" value={context.institution}/>
