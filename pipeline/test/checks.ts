@@ -589,8 +589,12 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("Europe query rejects an otherwise relevant US postdoc", !queryRelevance(makeOpp({
   title: "Cancer Biology Postdoctoral Fellow", descriptionText: "Cancer research", city: "New York", country: "US", region: "North America",
  }), "cancer biology postdoc in Europe").keep);
- check("Japan query accepts a Japanese result",queryRelevance(makeOpp({country:"JP",city:"Tokyo",locationRaw:"Tokyo, Japan"}),"cancer biology postdoc in Japan").keep);
+ check("Japan query accepts a Japanese result",queryRelevance(makeOpp({country:"JP",city:"Tokyo",locationRaw:"Tokyo, Japan"}),"cancer postdoc in Japan").keep);
  check("Asia query rejects a European result",!queryRelevance(makeOpp({country:"DE",city:"Berlin",locationRaw:"Berlin, Germany"}),"cancer biology postdoc in Asia").keep);
+ check("\"post doc\" typed as two words is not left as two unmatchable topic tokens",
+  queryRelevance(makeOpp({country:"DE",city:"Berlin",locationRaw:"Berlin, Germany"}),"cancer post doc in europe").keep);
+ check("a European country missing from the old 17-country list is accepted",
+  queryRelevance(makeOpp({country:"GR",city:"Athens",locationRaw:"Athens, Greece"}),"cancer postdoc in Europe").keep);
  check("exact query match ranks above a broad cancer match",
   scoreOpportunity(exact, profile, 0, "pancreatic cancer postdoc").score >
   scoreOpportunity(related, profile, 0, "pancreatic cancer postdoc").score);
@@ -639,6 +643,11 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("catalog includes the live jobRxiv crawl", keys.includes("crawl:jobrxiv"));
  check("catalog includes EURAXESS", keys.includes("euraxess"));
  check("catalog includes ResearchersJob", keys.includes("feed:researchersjob"));
+ check("catalog includes jobs.ac.uk", keys.includes("crawl:jobsacuk"));
+ check("catalog includes Science Careers", keys.includes("crawl:sciencecareers"));
+ check("catalog includes Times Higher Education unijobs", keys.includes("crawl:timeshighereducation"));
+ check("catalog includes Nature Careers", keys.includes("crawl:naturecareers"));
+ check("catalog includes University Positions", keys.includes("crawl:universitypositions"));
  check("catalog source keys are unique", new Set(keys).size === keys.length);
 }
 
