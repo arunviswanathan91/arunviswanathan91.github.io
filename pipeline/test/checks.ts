@@ -32,7 +32,7 @@ import { Http, HttpResponseError } from "../src/http.js";
 import type { ContextCandidate } from "../src/db.js";
 import {
  assessmentInstructions, assessmentPreferences, assessmentKey, needsAssessment, normalizeAssessment, SECTION_KEYS,
- CITY_SECTION_KEYS, PERSONAL_SECTION_KEYS, citySchema, personalAssessmentSchema, type Evidence,
+ CITY_SECTION_KEYS, PERSONAL_SECTION_KEYS, citySchema, personalAssessmentSchema, cityFactsInstructions, type Evidence,
 } from "../src/enrich/assessment.js";
 import { collectDecisionEvidence, extractPopulationFact, relevantExcerpt, safeEvidenceUrl } from "../src/enrich/evidence.js";
 import { sourceIssues } from "../src/normalize/quality.js";
@@ -220,6 +220,10 @@ const decisionPayload = () => ({
  const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
  eq("Cerebras joins the fallback chain when configured",
   contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: "c", CEREBRAS_API_KEY: "d" })), ["openrouter", "cerebras"]);
+ eq("DeepSeek is ordered last since it is the only paid provider",
+  contextProviders(readEnv({ ...base, DEEPSEEK_API_KEY: "e", OPENROUTER_API_KEY: "c", CEREBRAS_API_KEY: "d" })),
+  ["openrouter", "cerebras", "deepseek"]);
+ eq("DeepSeek model defaults to deepseek-chat", readEnv({ ...base, DEEPSEEK_API_KEY: "e" }).deepseekModel, "deepseek-chat");
 
  eq("institution cache key normalizes case and whitespace",
   institutionCacheKey({ organization: " RGCB ", city: "Kochi", country: "in" }),
@@ -234,6 +238,18 @@ const decisionPayload = () => ({
  eq("extracts an infobox-style population with its year", extractPopulationFact("Population (2011) 601,574 within city limits."), "601,574 (2011)");
  eq("attaches a nearby year even when it trails the number", extractPopulationFact("The city had a population of 8,175,133 (2011 census)."), "8,175,133 (2011)");
  eq("no population figure returns null", extractPopulationFact("A pleasant city with a rich cultural history."), null);
+
+ // A live backfill run failed every attempt (Groq: "Failed to validate JSON",
+ // Gemini: "no usable institution facts") because cityFactsInstructions used
+ // to embed its own full citySchema at the end of its text, while
+ // enrichCityFacts separately appended whatever (possibly population-less)
+ // schema it actually requested -- two contradictory "return this schema"
+ // instructions in one prompt whenever population was preset from Wikipedia
+ // text. cityFactsInstructions must never embed a schema itself; the caller
+ // is the single source of truth.
+ check("city-facts instructions do not embed their own schema", !cityFactsInstructions(true).includes("Return exactly"));
+ check("dropping population from city-facts instructions drops it from the prose too",
+  cityFactsInstructions(true).includes("population") && !cityFactsInstructions(false).includes("population"));
 
  {
   const calls: number[] = [];

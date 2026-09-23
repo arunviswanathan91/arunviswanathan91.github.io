@@ -14,10 +14,15 @@ export interface Env {
  openrouterModel: string;
  cerebrasApiKey: string | null;
  cerebrasModel: string;
+ // DeepSeek: OpenAI-compatible chat completions. Unlike the other three
+ // providers this is NOT free -- it's pay-as-you-go (cheap, but billed),
+ // so it only ever gets used when DEEPSEEK_API_KEY is explicitly set.
+ deepseekApiKey: string | null;
+ deepseekModel: string;
  /** Minimum milliseconds between calls to each free-tier provider, derived
   *  from a conservative requests-per-minute assumption. Waiting this out
   *  ahead of a call is cheaper than discovering the limit via a 429. */
- rateLimitMs: Record<"openrouter" | "groq" | "gemini" | "cerebras", number>;
+ rateLimitMs: Record<"openrouter" | "groq" | "gemini" | "cerebras" | "deepseek", number>;
 }
 
 /** `value` is a requests-per-minute override; falls back to a conservative
@@ -55,11 +60,23 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   // cost guard needed since there is no paid tier to accidentally hit.
   cerebrasApiKey: env.CEREBRAS_API_KEY?.trim() || null,
   cerebrasModel: env.CEREBRAS_MODEL?.trim() || "llama3.1-8b",
+  deepseekApiKey: env.DEEPSEEK_API_KEY?.trim() || null,
+  deepseekModel: env.DEEPSEEK_MODEL?.trim() || "deepseek-chat",
   rateLimitMs: {
    openrouter: rpmToMinIntervalMs(env.OPENROUTER_RPM, 12),
-   groq: rpmToMinIntervalMs(env.GROQ_RPM, 20),
+   // A live run hit Groq's free-tier tokens-per-minute cap (8,000 TPM) well
+   // before its request-count RPM limit, since a single decision-brief call
+   // can use several thousand tokens on its own. Spacing calls further apart
+   // gives the rolling TPM window room to drain between them -- this is a
+   // coarse mitigation (ProviderRateLimiter only paces request count, not
+   // token volume), not a real token-bucket, but meaningfully reduces
+   // bursting without a bigger rework.
+   groq: rpmToMinIntervalMs(env.GROQ_RPM, 6),
    gemini: rpmToMinIntervalMs(env.GEMINI_RPM, 10),
    cerebras: rpmToMinIntervalMs(env.CEREBRAS_RPM, 20),
+   // Paid tier, not free-tier-constrained the way the others are; still
+   // pace it to avoid bursting into DeepSeek's own dynamic rate limits.
+   deepseek: rpmToMinIntervalMs(env.DEEPSEEK_RPM, 60),
   },
  };
 }
