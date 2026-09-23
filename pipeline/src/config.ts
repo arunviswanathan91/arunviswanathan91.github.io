@@ -57,7 +57,14 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   cerebrasModel: env.CEREBRAS_MODEL?.trim() || "llama3.1-8b",
   rateLimitMs: {
    openrouter: rpmToMinIntervalMs(env.OPENROUTER_RPM, 12),
-   groq: rpmToMinIntervalMs(env.GROQ_RPM, 20),
+   // A live run hit Groq's free-tier tokens-per-minute cap (8,000 TPM) well
+   // before its request-count RPM limit, since a single decision-brief call
+   // can use several thousand tokens on its own. Spacing calls further apart
+   // gives the rolling TPM window room to drain between them -- this is a
+   // coarse mitigation (ProviderRateLimiter only paces request count, not
+   // token volume), not a real token-bucket, but meaningfully reduces
+   // bursting without a bigger rework.
+   groq: rpmToMinIntervalMs(env.GROQ_RPM, 6),
    gemini: rpmToMinIntervalMs(env.GEMINI_RPM, 10),
    cerebras: rpmToMinIntervalMs(env.CEREBRAS_RPM, 20),
   },
