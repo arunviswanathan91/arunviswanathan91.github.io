@@ -39,9 +39,13 @@ Deno.serve(async (req) => {
  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
  const discoveryUrl = Deno.env.get("DISCOVERY_URL");
  const sharedSecret = Deno.env.get("DISCOVERY_SHARED_SECRET");
- const hasCloudRun = Boolean(discoveryUrl && sharedSecret);
- if (!supabaseUrl || !serviceKey || !hasCloudRun) {
-  return json({ error: "Discovery is not configured on this deployment." }, 503);
+ if (!supabaseUrl || !serviceKey) {
+  return json({ error: "Discovery is not configured on this deployment (missing Supabase service credentials)." }, 503);
+ }
+ if (!discoveryUrl || !sharedSecret) {
+  const missing = [!discoveryUrl && "DISCOVERY_URL", !sharedSecret && "DISCOVERY_SHARED_SECRET"]
+   .filter(Boolean).join(" and ");
+  return json({ error: `Discovery worker is not configured on this deployment (missing ${missing}). Deploy the discovery worker and set this Edge Function's secrets.` }, 503);
  }
  const db = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false },

@@ -94,7 +94,10 @@ export function OpportunityDiscovery({ onComplete, currentCount }: {
 
    if (row.status === "failed") {
     setPhase("failed");
-    setMessage(row.error || "Discovery failed. Check the Cloud Run logs and try again.");
+    const unreachable = row.error && /HTTP \d|fetch|network|ENOTFOUND|ECONNREFUSED|not configured/i.test(row.error);
+    setMessage(row.error
+     ? `${row.error}${unreachable ? " — check that deploy-discovery-worker.yml has run successfully (GCP repo variables set) and that DISCOVERY_URL/DISCOVERY_SHARED_SECRET match the deployed worker." : ""}`
+     : "Discovery failed. Check the Cloud Run logs and try again.");
     return;
    }
 
@@ -114,8 +117,11 @@ export function OpportunityDiscovery({ onComplete, currentCount }: {
    const checked = Number(stats.evaluated ?? stats.fetched ?? 0);
    const enriched=Number(stats.enrichment?.succeeded??0);
    const pending=Number(stats.enrichment?.pending??0);
-   const contextUnavailable=stats.degradations?.some(item=>item.includes("context enrichment unavailable"));
-   const contextNote=contextUnavailable?" · AI context unavailable on the worker"
+   const noProviderKeys=stats.degradations?.some(item=>item.includes("context enrichment unavailable"));
+   const providersFailed=stats.degradations?.some(item=>item.includes("AI providers are unavailable")||item.includes("AI call cap reached"));
+   const contextUnavailable=noProviderKeys||providersFailed;
+   const contextNote=noProviderKeys?" · AI context unavailable (no provider API key configured on the worker)"
+    :providersFailed?" · AI context unavailable this run (configured providers failed or hit their quota)"
     :enriched?` · ${enriched} AI brief${enriched===1?"":"s"}${pending?` · ${pending} pending`:""}`
     :pending?` · ${pending} AI brief${pending===1?"":"s"} pending`:"";
    setPhase("done");

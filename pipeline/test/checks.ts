@@ -467,7 +467,7 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
   descriptionText: "Research galaxy evolution and bar dynamics using astronomical observations.",
  });
  check("explicit query keeps an exact pancreatic-cancer postdoc", queryRelevance(exact, "pancreatic cancer postdoc").keep);
- check("explicit query keeps a broader cancer postdoc as a related result", queryRelevance(related, "pancreatic cancer postdoc").keep);
+ check("explicit query rejects a generically-worded cancer postdoc that never says pancreatic", !queryRelevance(related, "pancreatic cancer postdoc").keep);
  check("explicit query rejects an unrelated laser postdoc", !queryRelevance(laser, "pancreatic cancer postdoc").keep);
  check("explicit query rejects an unrelated astronomy postdoc", !queryRelevance(galaxy, "pancreatic cancer postdoc").keep);
  eq("unrelated query results remain visible in the per-run audit",
