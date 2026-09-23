@@ -643,6 +643,11 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("catalog includes the live jobRxiv crawl", keys.includes("crawl:jobrxiv"));
  check("catalog includes EURAXESS", keys.includes("euraxess"));
  check("catalog includes ResearchersJob", keys.includes("feed:researchersjob"));
+ check("catalog includes jobs.ac.uk", keys.includes("crawl:jobsacuk"));
+ check("catalog includes Science Careers", keys.includes("crawl:sciencecareers"));
+ check("catalog includes Times Higher Education unijobs", keys.includes("crawl:timeshighereducation"));
+ check("catalog includes Nature Careers", keys.includes("crawl:naturecareers"));
+ check("catalog includes University Positions", keys.includes("crawl:universitypositions"));
  check("catalog source keys are unique", new Set(keys).size === keys.length);
 }
 
