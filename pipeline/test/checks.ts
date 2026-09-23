@@ -21,12 +21,20 @@ import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery, termsForRun } from "../src/search/query.js";
 import { enrichMetadataLocally, enrichMetadataWithOpenRouter } from "../src/enrich/metadata.js";
 import { contextPayloadFromInteraction, hasMeaningfulContext, normalizeContextPayload, UNKNOWN } from "../src/enrich/context.js";
-import { contextProviders, createContextFallback, ContextProvidersUnavailable, openrouterRequest, parseOpenrouterContext, parseStructuredJson, enrichOpportunityContext } from "../src/enrich/context.js";
+import {
+ contextProviders, createContextFallback, createProviderState, ContextProvidersUnavailable, openrouterRequest,
+ parseOpenrouterContext, parseStructuredJson, enrichOpportunityContext, enrichWithFallback, institutionCacheKey,
+ type CityFactsResult, type PersonalBriefResult,
+} from "../src/enrich/context.js";
+import { ProviderRateLimiter } from "../src/enrich/ratelimit.js";
 import { readEnv } from "../src/config.js";
 import { Http, HttpResponseError } from "../src/http.js";
 import type { ContextCandidate } from "../src/db.js";
-import { assessmentInstructions, assessmentPreferences, assessmentKey, needsAssessment, normalizeAssessment, SECTION_KEYS, type Evidence } from "../src/enrich/assessment.js";
-import { collectDecisionEvidence, relevantExcerpt, safeEvidenceUrl } from "../src/enrich/evidence.js";
+import {
+ assessmentInstructions, assessmentPreferences, assessmentKey, needsAssessment, normalizeAssessment, SECTION_KEYS,
+ CITY_SECTION_KEYS, PERSONAL_SECTION_KEYS, citySchema, personalAssessmentSchema, type Evidence,
+} from "../src/enrich/assessment.js";
+import { collectDecisionEvidence, extractPopulationFact, relevantExcerpt, safeEvidenceUrl } from "../src/enrich/evidence.js";
 import { sourceIssues } from "../src/normalize/quality.js";
 import { adzunaAdapter } from "../src/sources/adzuna.js";
 import { joobleAdapter } from "../src/sources/jooble.js";
@@ -196,6 +204,96 @@ const decisionPayload = () => ({
  catch (error) { retiredUnavailable = error instanceof ContextProvidersUnavailable && error.message.includes("model retired"); }
  try { await retired(async () => { retiredCalls++; return "bad"; }); } catch { /* disabled */ }
  check("retired provider is disabled immediately with a useful final error", retiredUnavailable && retiredCalls === 1);
+}
+
+// ---- split city-facts / personal-brief enrichment ----
+{
+ eq("city + personal section keys reconstruct the full set", [...CITY_SECTION_KEYS, ...PERSONAL_SECTION_KEYS].sort(), [...SECTION_KEYS].sort());
+ check("city and personal section keys do not overlap", !CITY_SECTION_KEYS.some(key => (PERSONAL_SECTION_KEYS as readonly string[]).includes(key)));
+ eq("city schema only requests city-facing sections",
+  Object.keys((citySchema as unknown as { properties: { sections: { properties: object } } }).properties.sections.properties).sort(),
+  [...CITY_SECTION_KEYS].sort());
+ eq("personal schema only requests personal sections",
+  Object.keys((personalAssessmentSchema as unknown as { properties: { sections: { properties: object } } }).properties.sections.properties).sort(),
+  [...PERSONAL_SECTION_KEYS].sort());
+
+ const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
+ eq("Cerebras joins the fallback chain when configured",
+  contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: "c", CEREBRAS_API_KEY: "d" })), ["openrouter", "cerebras"]);
+
+ eq("institution cache key normalizes case and whitespace",
+  institutionCacheKey({ organization: " RGCB ", city: "Kochi", country: "in" }),
+  institutionCacheKey({ organization: "rgcb", city: " kochi ", country: "IN" }));
+ check("institution cache key differs across institutions",
+  institutionCacheKey({ organization: "RGCB", city: "Kochi", country: "IN" })
+  !== institutionCacheKey({ organization: "IISc", city: "Bangalore", country: "IN" }));
+ check("candidates with no organization or city are never cached",
+  institutionCacheKey({ organization: null, city: null, country: "IN" }) === null);
+
+ eq("extracts a plain population figure", extractPopulationFact("Kochi has a population of 677,381 people."), "677,381");
+ eq("extracts an infobox-style population with its year", extractPopulationFact("Population (2011) 601,574 within city limits."), "601,574 (2011)");
+ eq("attaches a nearby year even when it trails the number", extractPopulationFact("The city had a population of 8,175,133 (2011 census)."), "8,175,133 (2011)");
+ eq("no population figure returns null", extractPopulationFact("A pleasant city with a rich cultural history."), null);
+
+ {
+  const calls: number[] = [];
+  let clock = 1000;
+  const limiter = new ProviderRateLimiter({ test: 100 }, () => clock, async ms => { calls.push(ms); clock += ms; });
+  await limiter.wait("test");
+  eq("first call to a rate-limited provider does not wait", calls.length, 0);
+  clock += 10;
+  await limiter.wait("test");
+  eq("a call inside the minimum interval waits out the remainder", calls, [90]);
+  clock += 1000;
+  await limiter.wait("test");
+  eq("a call well after the interval has elapsed does not wait again", calls, [90]);
+  const unlimited = new ProviderRateLimiter({}, () => 0, async () => { throw new Error("should never sleep"); });
+  await unlimited.wait("openrouter");
+  check("a provider with no configured interval never waits", true);
+ }
+
+ {
+  const scripted = [
+   { model: "city-model", choices: [{ message: { content: JSON.stringify({ sections: {
+     institution: { text: "Leading cancer research institute.", basis: "source", source_ids: [1] },
+     place: { text: "Coastal city with a strong biotech sector.", basis: "source", source_ids: [1] },
+     population: { text: "600,000", basis: "source", source_ids: [1] },
+     climate: { text: "Tropical, monsoon season June to September.", basis: "general", source_ids: [] },
+     transport: { text: "Metro and bus network.", basis: "general", source_ids: [] },
+    } }) } }] },
+   { model: "personal-model", choices: [{ message: { content: JSON.stringify(decisionPayload()) } }] },
+   { model: "personal-model", choices: [{ message: { content: JSON.stringify(decisionPayload()) } }] },
+  ];
+  let callIndex = 0;
+  const fakeHttp = {
+   get: async () => ({ ok: true, body: "<main><p>Institution and city background text for evidence.</p></main>", headers: {} }),
+   getJson: async () => ({ query: { pages: { "1": {
+    title: "Test City", fullurl: "https://en.wikipedia.org/wiki/Test_City",
+    extract: "Test City is a coastal city. Population (2011) 600,000. It has a tropical climate and a metro system.",
+   } } } }),
+   postJson: async () => scripted[callIndex++] ?? scripted[scripted.length - 1],
+  } as unknown as Http;
+  const env = readEnv({ ...base, OPENROUTER_API_KEY: "key" });
+  const state = createProviderState();
+  const cityFallback = createContextFallback<CityFactsResult>(["openrouter"], () => {}, Infinity, state);
+  const personalFallback = createContextFallback<PersonalBriefResult>(["openrouter"], () => {}, Infinity, state);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cache = new Map<string, { sections: Record<string, unknown>; provider: any; model: string }>();
+  const prefs = assessmentPreferences({});
+  const candidateA: ContextCandidate = {
+   id: "inst-a", role: "Postdoc A", organization: "Test Institute", organization_url: null,
+   location: "Test City, IN", city: "Test City", country: "IN", url: "https://example.org/a",
+   summary: "Listing A", description_excerpt: null, score_breakdown: null, enrichment: null,
+  };
+  const candidateB: ContextCandidate = { ...candidateA, id: "inst-b", role: "Postdoc B", url: "https://example.org/b", summary: "Listing B" };
+  const resultA = await enrichWithFallback(env, fakeHttp, candidateA, cityFallback, personalFallback, prefs, null, null, cache);
+  const resultB = await enrichWithFallback(env, fakeHttp, candidateB, cityFallback, personalFallback, prefs, null, null, cache);
+  eq("institution facts are generated once and reused for the next opportunity at the same institution", callIndex, 3);
+  eq("cached institution facts keep their text for the second opportunity", resultB.institution, resultA.institution);
+  eq("first institution brief keeps its real source citation", resultA.brief?.sections.institution.basis, "source");
+  eq("cached institution brief drops the now-stale source citation instead of misattributing it", resultB.brief?.sections.institution.basis, "general");
+  check("the personal brief is still requested fresh for every opportunity", resultA.brief?.sections.role.text === resultB.brief?.sections.role.text);
+ }
 }
 
 eq("strips utm params", canonicalizeUrl("https://x.com/job/1?utm_source=fb&utm_campaign=x"), "https://x.com/job/1");

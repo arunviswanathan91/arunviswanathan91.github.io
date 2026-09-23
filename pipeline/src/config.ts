@@ -12,6 +12,20 @@ export interface Env {
  groqModel: string;
  openrouterApiKey: string | null;
  openrouterModel: string;
+ cerebrasApiKey: string | null;
+ cerebrasModel: string;
+ /** Minimum milliseconds between calls to each free-tier provider, derived
+  *  from a conservative requests-per-minute assumption. Waiting this out
+  *  ahead of a call is cheaper than discovering the limit via a 429. */
+ rateLimitMs: Record<"openrouter" | "groq" | "gemini" | "cerebras", number>;
+}
+
+/** `value` is a requests-per-minute override; falls back to a conservative
+ *  free-tier assumption when unset or not a positive number. */
+function rpmToMinIntervalMs(value: string | undefined, fallbackRpm: number): number {
+ const rpm = Number(value);
+ const effective = Number.isFinite(rpm) && rpm > 0 ? rpm : fallbackRpm;
+ return Math.ceil(60_000 / effective);
 }
 
 /** Fails loudly and early rather than half way through a run. */
@@ -37,6 +51,16 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   groqModel: env.GROQ_MODEL ?? "openai/gpt-oss-20b",
   openrouterApiKey: env.OPENROUTER_API_KEY?.trim() || null,
   openrouterModel: env.OPENROUTER_MODEL?.trim() || "openrouter/free",
+  // Cerebras: OpenAI-compatible chat completions, generous free tier, no
+  // cost guard needed since there is no paid tier to accidentally hit.
+  cerebrasApiKey: env.CEREBRAS_API_KEY?.trim() || null,
+  cerebrasModel: env.CEREBRAS_MODEL?.trim() || "llama3.1-8b",
+  rateLimitMs: {
+   openrouter: rpmToMinIntervalMs(env.OPENROUTER_RPM, 12),
+   groq: rpmToMinIntervalMs(env.GROQ_RPM, 20),
+   gemini: rpmToMinIntervalMs(env.GEMINI_RPM, 10),
+   cerebras: rpmToMinIntervalMs(env.CEREBRAS_RPM, 20),
+  },
  };
 }
 

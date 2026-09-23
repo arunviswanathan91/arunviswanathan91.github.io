@@ -82,6 +82,27 @@ async function wikiEvidence(http: Http, query: string, kind: "institution" | "pl
  });
 }
 
+/** A Wikipedia city article almost always states its population plainly
+ *  ("population of 8,443,675", "population: 12.3 million (2021)"). Pulling
+ *  it out with a regex is free and more reliable than spending a model call
+ *  asking it to reread the same sentence -- used to skip (or fill) the
+ *  "population" field of the institution-facts AI call whenever it hits. */
+export function extractPopulationFact(text: string): string | null {
+ // A year in parens can appear either right after "population" (infobox
+ // style: "Population (2021) 8,443,675") or after the number ("population
+ // of 677,381 (2011 census)"); either way it must not be mistaken for the
+ // population figure itself, so it is matched and excluded explicitly.
+ const match = text.match(/population\s*(?:\((\d{4})\))?[^\d]{0,20}([\d][\d,.\s]{2,}\d)(?:\s*(million|billion))?/i);
+ if (!match) return null;
+ const [full, leadingYear, numberRaw, scale] = match;
+ const number = `${numberRaw!.trim().replace(/\s+/g, ",")}${scale ? ` ${scale}` : ""}`;
+ const trailingYear = leadingYear
+  ? null
+  : text.slice(match.index!, match.index! + full!.length + 20).match(/\((\d{4})[^)]*\)/)?.[1];
+ const year = leadingYear ?? trailingYear;
+ return year ? `${number} (${year})` : number;
+}
+
 export async function collectDecisionEvidence(http: Http, candidate: ContextCandidate) {
  const evidence: Evidence[] = [];
  const add = (item: Evidence | null) => { if (item && !evidence.some(e => e.url === item.url && e.kind === item.kind)) evidence.push(item); };
