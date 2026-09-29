@@ -6,6 +6,13 @@ export interface Env {
  telegramBotToken: string | null;
  userId: string | null;
  firecrawlApiKey: string | null;
+ /** Base URL of a self-hosted Crawl4AI instance (deployed by the "Deploy
+  *  Crawl4AI renderer" step in .github/workflows/deploy-discovery-worker.yml),
+  *  tried before Firecrawl since it's free at this pipeline's call volume --
+  *  Firecrawl stays configured as the fallback-of-the-fallback for when a
+  *  cold-started container times out. */
+ crawl4aiUrl: string | null;
+ crawl4aiApiToken: string | null;
  geminiApiKey: string | null;
  geminiModel: string;
  groqApiKey: string | null;
@@ -47,6 +54,8 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   telegramBotToken: env.TELEGRAM_BOT_TOKEN ?? null,
   userId: env.DISCOVERY_USER_ID ?? null,
   firecrawlApiKey: env.FIRECRAWL_API_KEY ?? null,
+  crawl4aiUrl: env.CRAWL4AI_URL ?? null,
+  crawl4aiApiToken: env.CRAWL4AI_API_TOKEN ?? null,
   geminiApiKey: env.GEMINI_API_KEY ?? null,
   // Gemini rejects 2.5 Flash for newly provisioned API users and directs them
   // to this stable model. Keep the exact model override available for future

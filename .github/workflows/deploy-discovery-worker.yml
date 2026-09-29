@@ -46,6 +46,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      CRAWL4AI_API_TOKEN: ${{ secrets.CRAWL4AI_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +59,42 @@ jobs:
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
+
+      # Deployed straight from the public Docker Hub image -- no build step,
+      # no Cloud Build cost. Free-tier-shaped on purpose: min-instances 0
+      # (scale to zero, no idle billing) and max-instances 1 (bounds
+      # worst-case cost if it were ever hammered). CRAWL4AI_API_TOKEN is
+      # optional and unset until you add it as a repo secret; Crawl4AI's
+      # docker server is expected to require it as a bearer token on real
+      # requests once set, but that contract was NOT verified against a live
+      # instance from this sandbox (its network egress is restricted) --
+      # confirm at "<url>/docs" after first deploy. Until that secret is
+      # set, this service has no request-level auth of its own beyond
+      # whatever the image itself defaults to.
+      - name: Deploy Crawl4AI renderer
+        if: vars.DISABLE_CRAWL4AI != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra_env=()
+          if [ -n "${CRAWL4AI_API_TOKEN:-}" ]; then
+            extra_env+=(--set-env-vars "CRAWL4AI_API_TOKEN=${CRAWL4AI_API_TOKEN}")
+          fi
+          gcloud run deploy crawl4ai-renderer \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --image docker.io/unclecode/crawl4ai:0.8.6 \
+            --port 11235 \
+            --memory 4Gi --cpu 2 \
+            --min-instances 0 --max-instances 1 --concurrency 1 \
+            --timeout 60 \
+            --allow-unauthenticated \
+            "${extra_env[@]}"
+          crawl4ai_url="$(gcloud run services describe crawl4ai-renderer \
+            --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
+            --format='value(status.url)')"
+          echo "CRAWL4AI_URL=${crawl4ai_url}" >> "$GITHUB_ENV"
+          echo "Deployed crawl4ai-renderer at ${crawl4ai_url} -- set this as the CRAWL4AI_URL repo variable so discover.yml's cron run (which does not go through this Cloud Run deploy) can use it too."
 
       - name: Build, test and deploy Cloud Run
         shell: bash
@@ -105,8 +142,17 @@ jobs:
           sync_secret gemini-api-key GEMINI_API_KEY
           sync_secret cerebras-api-key CEREBRAS_API_KEY
           sync_secret deepseek-api-key DEEPSEEK_API_KEY
+          sync_secret crawl4ai-api-token CRAWL4AI_API_TOKEN
+
+          # CRAWL4AI_URL comes from the "Deploy Crawl4AI renderer" step above
+          # when it ran, or from vars.CRAWL4AI_URL as a fallback (e.g. a repo
+          # that set DISABLE_CRAWL4AI but still has a renderer deployed
+          # separately, or a rerun that skips redeploying it).
+          crawl4ai_url="${CRAWL4AI_URL:-${{ vars.CRAWL4AI_URL }}}"
 
           secret_csv="$(IFS=,; printf '%s' "${secret_mappings[*]}")"
+          worker_env_vars="SUPABASE_URL=${SUPABASE_URL},OPENROUTER_MODEL=openrouter/free"
+          if [ -n "$crawl4ai_url" ]; then worker_env_vars="${worker_env_vars},CRAWL4AI_URL=${crawl4ai_url}"; fi
           gcloud run deploy "$CLOUD_RUN_SERVICE" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
@@ -116,7 +162,7 @@ jobs:
             --timeout 600 \
             --concurrency 1 \
             --max-instances 1 \
-            --set-env-vars "SUPABASE_URL=${SUPABASE_URL},OPENROUTER_MODEL=openrouter/free" \
+            --set-env-vars "$worker_env_vars" \
             --update-secrets "$secret_csv"
 
       - name: Verify deployed worker is reachable
