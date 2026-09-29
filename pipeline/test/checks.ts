@@ -17,6 +17,7 @@ import { formatDigest } from "../src/sinks/telegram.js";
 import type { NormalizedOpportunity, SearchProfile } from "../src/types.js";
 import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/euraxess.js";
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
+import { makeCrawl4aiRenderer } from "../src/sources/crawl4ai.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery, termsForRun } from "../src/search/query.js";
 import { enrichMetadataLocally, enrichMetadataWithOpenRouter } from "../src/enrich/metadata.js";
@@ -843,6 +844,11 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
 
  check("makeRenderer returns null with no api key", makeRenderer(null, 5) === null);
  check("makeRenderer returns a function once a key is set", typeof makeRenderer("key", 5) === "function");
+
+ const fakeNext = async () => "fallback-html";
+ check("makeCrawl4aiRenderer with no url and no fallback is null", makeCrawl4aiRenderer(null, null, null) === null);
+ check("makeCrawl4aiRenderer with no url passes through the fallback renderer unchanged", makeCrawl4aiRenderer(null, null, fakeNext) === fakeNext);
+ check("makeCrawl4aiRenderer with a url but no fallback still returns a function", typeof makeCrawl4aiRenderer("https://crawl4ai.example", null, null) === "function");
 }
 
 // Captured failure shapes: keep external calls stubbed and exercise adapters,

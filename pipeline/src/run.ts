@@ -3,6 +3,7 @@ import { Http, DEFAULT_HTTP } from "./http.js";
 import { RunLogger } from "./log.js";
 import { readEnv, FIRECRAWL_MAX_PER_RUN, SCHEDULE_CAPS, INTERACTIVE_CAPS } from "./config.js";
 import { makeRenderer } from "./sources/firecrawl.js";
+import { makeCrawl4aiRenderer } from "./sources/crawl4ai.js";
 import { makeAdapter } from "./sources/registry.js";
 import { SourceConfigError } from "./sources/types.js";
 import { hardFilter, scoreOpportunity, feedbackBiasFor } from "./score/score.js";
@@ -158,7 +159,10 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const http = new Http(DEFAULT_HTTP, caps.maxHttpRequests);
  // One shared budget for the whole run, so N crawl sources each hitting a
  // JS-rendered seed can't multiply into N x FIRECRAWL_MAX_PER_RUN calls.
- const renderer = makeRenderer(env.firecrawlApiKey, FIRECRAWL_MAX_PER_RUN);
+ // Crawl4AI (free at this call volume) is tried first; Firecrawl is the
+ // fallback-of-the-fallback for a cold-started Crawl4AI container that
+ // times out. See sources/crawl4ai.ts.
+ const renderer = makeCrawl4aiRenderer(env.crawl4aiUrl, env.crawl4aiApiToken, makeRenderer(env.firecrawlApiKey, FIRECRAWL_MAX_PER_RUN));
  const bySource: Record<string, SourceOutcome> = {};
  const degradations: string[] = [];
  const metadata = emptyMetadata();
