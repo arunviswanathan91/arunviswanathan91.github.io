@@ -4,6 +4,7 @@ import { locKey, looksRemote, normalizeCountry, parseLocation, regionOf } from "
 import { classifyType } from "../normalize/type.js";
 import { orgKey } from "../dedupe/keys.js";
 import { salaryFromText } from "../normalize/salary.js";
+import { extractDeadlineFact } from "../normalize/deadline.js";
 import type { NormalizedOpportunity, SalaryEvidence } from "../types.js";
 
 export interface BuildInput {
@@ -57,6 +58,12 @@ export function buildOpportunity(input: BuildInput): NormalizedOpportunity | nul
  const salary = input.salary ?? salaryFromText(description);
  const opportunityType = classifyType(title, description);
  const org = input.organization?.trim() || null;
+ // Most sources' structured data never sets a deadline (validThrough is
+ // optional and widely skipped) -- fall back to reading one out of the
+ // prose so discovery_prune's deadline-based expiry can actually act on
+ // these listings instead of every one of them riding the coarser 60-day
+ // last-seen fallback regardless of how genuinely stale it is.
+ const deadline = input.deadline ?? extractDeadlineFact(description);
 
  return {
   sourceKey: input.sourceKey,
@@ -76,7 +83,7 @@ export function buildOpportunity(input: BuildInput): NormalizedOpportunity | nul
   country: country,
   isRemote,
   postedAt: input.postedAt ?? null,
-  deadline: input.deadline ?? null,
+  deadline,
   employmentType: input.employmentType ?? null,
   opportunityType,
   descriptionText: excerpt(description, 20000),
@@ -86,12 +93,12 @@ export function buildOpportunity(input: BuildInput): NormalizedOpportunity | nul
    orgKey: orgKey(org),
    locKey: locKey(city ?? null, country, isRemote),
    employmentType: input.employmentType ?? null,
-   deadline: input.deadline ?? null,
+   deadline,
    salaryMin: salary?.min ?? null,
    salaryMax: salary?.max ?? null,
    currency: salary?.currency ?? null,
    description,
   }),
-  completeness: completenessOf({ title, organization: org, deadline: input.deadline ?? null, type: opportunityType, salary }),
+  completeness: completenessOf({ title, organization: org, deadline, type: opportunityType, salary }),
  };
 }
