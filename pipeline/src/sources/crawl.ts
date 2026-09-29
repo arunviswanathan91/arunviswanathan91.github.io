@@ -14,10 +14,12 @@ import type { NormalizedOpportunity, RawItem } from "../types.js";
  * framework, no headless browser and no model is needed to read them.
  *
  * A seed page that renders only via JavaScript (no JobPosting markup, no links
- * to follow in the raw HTML) gets one Firecrawl-rendered retry via
- * ctx.renderer before being given up on -- see sources/firecrawl.ts. That tier
- * is optional: with no FIRECRAWL_API_KEY set, ctx.renderer is null and such
- * pages are simply skipped, exactly as before it existed.
+ * to follow in the raw HTML) gets one rendered retry via ctx.renderer before
+ * being given up on -- see sources/crawl4ai.ts (tried first, free) and
+ * sources/firecrawl.ts (its fallback-of-the-fallback). Both tiers are
+ * optional and compose transparently behind the single ctx.renderer
+ * function: with neither configured, ctx.renderer is null and such pages
+ * are simply skipped, exactly as before either existed.
  */
 export function crawlAdapter(sourceKey: string): SourceAdapter {
  let seedUrls: string[] = [];
@@ -76,7 +78,11 @@ export function crawlAdapter(sourceKey: string): SourceAdapter {
      if (rendered) {
       body = rendered;
       postings = findJobPostings(extractJsonLd(body));
-      ctx.log(`${sourceKey}: ${url} rendered via Firecrawl`, { postings: postings.length });
+      // ctx.renderer composes Crawl4AI and Firecrawl transparently (see the
+      // header comment above), so which tier actually served this can't be
+      // named here without threading that back through the return value --
+      // not worth the plumbing for a debug log line.
+      ctx.log(`${sourceKey}: ${url} rendered via JS fallback`, { postings: postings.length });
      }
     }
     for (const node of postings) {
