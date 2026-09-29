@@ -46,7 +46,6 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-      CRAWL4AI_API_TOKEN: ${{ secrets.CRAWL4AI_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,26 +59,43 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: Resolve the discovery worker's runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_service_account="$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
+            --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
+          if [ -z "$runtime_service_account" ]; then
+            project_number="$(gcloud projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')"
+            runtime_service_account="${project_number}-compute@developer.gserviceaccount.com"
+          fi
+          echo "RUNTIME_SERVICE_ACCOUNT=${runtime_service_account}" >> "$GITHUB_ENV"
+
       # Deployed straight from the public Docker Hub image -- no build step,
       # no Cloud Build cost. Free-tier-shaped on purpose: min-instances 0
       # (scale to zero, no idle billing) and max-instances 1 (bounds
-      # worst-case cost if it were ever hammered). CRAWL4AI_API_TOKEN is
-      # optional and unset until you add it as a repo secret; Crawl4AI's
-      # docker server is expected to require it as a bearer token on real
-      # requests once set, but that contract was NOT verified against a live
-      # instance from this sandbox (its network egress is restricted) --
-      # confirm at "<url>/docs" after first deploy. Until that secret is
-      # set, this service has no request-level auth of its own beyond
-      # whatever the image itself defaults to.
+      # worst-case cost if it were ever hammered).
+      #
+      # Deliberately IAM-authenticated (no --allow-unauthenticated), not
+      # gated by Crawl4AI's own /token flow -- a live test against a real
+      # deployed instance showed an unauthenticated POST to /crawl succeeds
+      # outright, so that vendor mechanism does not actually gate the
+      # endpoint this pipeline calls. Cloud Run's own IAM check, which
+      # happens before a request ever reaches the container, is what
+      # actually protects this. roles/run.invoker is granted below to the
+      # two identities that need to call it: the discovery worker itself
+      # (which mints its own short-lived Google identity token from the
+      # Cloud Run metadata server at request time -- see
+      # sources/crawl4ai.ts) and the deploy service account (which
+      # discover.yml's nightly cron also authenticates as via the same
+      # Workload Identity Federation provider, to mint a token for its own,
+      # non-GCP-hosted run).
       - name: Deploy Crawl4AI renderer
         if: vars.DISABLE_CRAWL4AI != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          extra_env=()
-          if [ -n "${CRAWL4AI_API_TOKEN:-}" ]; then
-            extra_env+=(--set-env-vars "CRAWL4AI_API_TOKEN=${CRAWL4AI_API_TOKEN}")
-          fi
           gcloud run deploy crawl4ai-renderer \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
@@ -88,13 +104,18 @@ jobs:
             --memory 4Gi --cpu 2 \
             --min-instances 0 --max-instances 1 --concurrency 1 \
             --timeout 60 \
-            --allow-unauthenticated \
-            "${extra_env[@]}"
+            --no-allow-unauthenticated
           crawl4ai_url="$(gcloud run services describe crawl4ai-renderer \
             --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
             --format='value(status.url)')"
+          gcloud run services add-iam-policy-binding crawl4ai-renderer \
+            --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
+            --member="serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" --role=roles/run.invoker >/dev/null
+          gcloud run services add-iam-policy-binding crawl4ai-renderer \
+            --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
+            --member="serviceAccount:${{ vars.GCP_SERVICE_ACCOUNT }}" --role=roles/run.invoker >/dev/null
           echo "CRAWL4AI_URL=${crawl4ai_url}" >> "$GITHUB_ENV"
-          echo "Deployed crawl4ai-renderer at ${crawl4ai_url} -- set this as the CRAWL4AI_URL repo variable so discover.yml's cron run (which does not go through this Cloud Run deploy) can use it too."
+          echo "Deployed crawl4ai-renderer (IAM-authenticated) at ${crawl4ai_url} -- set this as the CRAWL4AI_URL repo variable so discover.yml's cron run (which does not go through this Cloud Run deploy) can use it too."
 
       - name: Build, test and deploy Cloud Run
         shell: bash
@@ -104,13 +125,7 @@ jobs:
           npm ci --no-audit --no-fund --prefix pipeline
           npm run check --prefix pipeline
 
-          runtime_service_account="$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
-            --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
-            --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
-          if [ -z "$runtime_service_account" ]; then
-            project_number="$(gcloud projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')"
-            runtime_service_account="${project_number}-compute@developer.gserviceaccount.com"
-          fi
+          runtime_service_account="$RUNTIME_SERVICE_ACCOUNT"
 
           secret_mappings=(
             "SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest"
@@ -142,7 +157,6 @@ jobs:
           sync_secret gemini-api-key GEMINI_API_KEY
           sync_secret cerebras-api-key CEREBRAS_API_KEY
           sync_secret deepseek-api-key DEEPSEEK_API_KEY
-          sync_secret crawl4ai-api-token CRAWL4AI_API_TOKEN
 
           # CRAWL4AI_URL comes from the "Deploy Crawl4AI renderer" step above
           # when it ran, or from vars.CRAWL4AI_URL as a fallback (e.g. a repo

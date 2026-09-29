@@ -33,6 +33,7 @@ on:
 
 permissions:
   contents: write            # heartbeat commit only, see the last step
+  id-token: write            # only used to mint the Crawl4AI identity token below
 
 concurrency:
   group: discovery
@@ -59,6 +60,32 @@ jobs:
         working-directory: pipeline
         run: npm run build
 
+      # crawl4ai-renderer is IAM-authenticated (see deploy-discovery-worker.yml),
+      # and this run -- unlike the Cloud Run worker -- has no GCP metadata
+      # server to mint a token from automatically, since it's a plain GitHub
+      # Actions runner. Mint one explicitly via the same Workload Identity
+      # Federation provider the deploy workflow already uses, scoped to
+      # CRAWL4AI_URL as its audience. Skips cleanly (empty token, tier just
+      # unused this run) if CRAWL4AI_URL or the GCP identity vars aren't set.
+      - id: crawl4ai_auth
+        if: vars.CRAWL4AI_URL != '' && vars.GCP_PROJECT_ID != '' && vars.GCP_SERVICE_ACCOUNT != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: vars.CRAWL4AI_URL != '' && vars.GCP_PROJECT_ID != '' && vars.GCP_SERVICE_ACCOUNT != ''
+
+      - id: crawl4ai_token
+        if: vars.CRAWL4AI_URL != '' && vars.GCP_PROJECT_ID != '' && vars.GCP_SERVICE_ACCOUNT != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(gcloud auth print-identity-token --audiences="${{ vars.CRAWL4AI_URL }}")"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
       - name: Discover or backfill
         working-directory: pipeline
         env:
@@ -80,7 +107,7 @@ jobs:
           # CRAWL4AI_URL as a repo variable once, after deploy-discovery-
           # worker.yml's "Deploy Crawl4AI renderer" step first prints it.
           CRAWL4AI_URL: ${{ vars.CRAWL4AI_URL }}
-          CRAWL4AI_API_TOKEN: ${{ secrets.CRAWL4AI_API_TOKEN }}
+          CRAWL4AI_API_TOKEN: ${{ steps.crawl4ai_token.outputs.token }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: openrouter/free
