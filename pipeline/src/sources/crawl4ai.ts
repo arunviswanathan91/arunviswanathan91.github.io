@@ -9,18 +9,47 @@
  * Crawl4AI container is still spinning up its headless browser (can take
  * 15-30s from scale-to-zero) and times out.
  *
- * IMPORTANT: this assumes Crawl4AI's Docker server's REST contract as of the
- * 0.8.x line -- a synchronous POST /crawl accepting {urls:[...]} and
- * returning {results:[{url,html|cleaned_html,success}]}. That contract has
- * changed across Crawl4AI releases before and could again; this module was
- * written without a live deployed instance to verify against (this
- * environment's network egress is sandboxed). Confirm the actual shape
- * against your deployed container's own FastAPI docs at `<url>/docs` on
- * first real deploy, and adjust `parseResponse` below if it doesn't match --
- * a wrong assumption fails safe (returns null, same as no renderer
- * configured) rather than breaking the run, but it also means this tier
- * silently does nothing until confirmed working.
+ * Confirmed against a live deployed instance: POST /crawl (synchronous --
+ * distinct from the async /crawl/job) with {urls:[...]} returns
+ * {success, results:[{url, html, cleaned_html, success, ...}]}, matching
+ * parseResponse() below.
+ *
+ * Crawl4AI's own /token endpoint (request a JWT via email + a configured
+ * api_token) turned out NOT to gate /crawl at all -- a live test sent an
+ * unauthenticated request straight through. So the deployed Cloud Run
+ * service is IAM-authenticated instead (no --allow-unauthenticated; see
+ * .github/workflows/deploy-discovery-worker.yml), which Cloud Run enforces
+ * before a request ever reaches the container, regardless of what the
+ * vendor image itself does or doesn't check. That means every caller needs
+ * a Google-signed identity token scoped to this service as the audience:
+ * fetchMetadataIdentityToken() mints one automatically when this code is
+ * itself running on Cloud Run (the discovery worker); a caller that isn't
+ * on GCP infrastructure (discover.yml's nightly cron, a plain GitHub
+ * Actions runner) has no metadata server to ask, so it mints its own via
+ * `gcloud auth print-identity-token` in the workflow and supplies it as
+ * apiToken instead.
  */
+
+const METADATA_IDENTITY_URL =
+ "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity";
+
+/** Only resolves when actually running on Cloud Run (or other GCP compute) --
+ *  the metadata server is unreachable everywhere else, including a plain
+ *  GitHub Actions runner, so this fails fast (2s timeout) and safely (null)
+ *  off-GCP rather than hanging. */
+async function fetchMetadataIdentityToken(audience: string): Promise<string | null> {
+ try {
+  const res = await fetch(`${METADATA_IDENTITY_URL}?audience=${encodeURIComponent(audience)}`, {
+   headers: { "Metadata-Flavor": "Google" },
+   signal: AbortSignal.timeout(2_000),
+  });
+  if (!res.ok) return null;
+  const token = (await res.text()).trim();
+  return token || null;
+ } catch {
+  return null;
+ }
+}
 
 interface Crawl4aiResult {
  url?: string;
@@ -42,8 +71,9 @@ export async function crawl4aiRender(
  baseUrl: string, url: string, apiToken: string | null = null, timeoutMs = 25_000,
 ): Promise<string | null> {
  try {
+  const token = apiToken ?? await fetchMetadataIdentityToken(baseUrl);
   const headers: Record<string, string> = { "content-type": "application/json" };
-  if (apiToken) headers.authorization = `Bearer ${apiToken}`;
+  if (token) headers.authorization = `Bearer ${token}`;
   const res = await fetch(`${baseUrl.replace(/\/$/, "")}/crawl`, {
    method: "POST",
    headers,

@@ -12,6 +12,12 @@ export interface Env {
   *  Firecrawl stays configured as the fallback-of-the-fallback for when a
   *  cold-started container times out. */
  crawl4aiUrl: string | null;
+ /** A pre-minted Google identity token (see sources/crawl4ai.ts), only
+  *  needed by a caller that isn't itself running on GCP -- the discovery
+  *  worker mints its own from the Cloud Run metadata server automatically
+  *  and never sets this. discover.yml's nightly cron (a plain GitHub
+  *  Actions runner) mints one via `gcloud auth print-identity-token` and
+  *  passes it through as CRAWL4AI_API_TOKEN instead. */
  crawl4aiApiToken: string | null;
  geminiApiKey: string | null;
  geminiModel: string;
