@@ -9,7 +9,7 @@ import { extractJsonLd, findJobPostings, readJobPosting } from "../src/normalize
 import { orgKey, titleTokens, jaccard, simhash, hamming, simhashBands } from "../src/dedupe/keys.js";
 import { matchCandidate, type Candidate } from "../src/dedupe/cascade.js";
 import { topicMatch } from "../src/score/ontology.js";
-import { hardFilter, scoreOpportunity } from "../src/score/score.js";
+import { hardFilter, scoreOpportunity, aggregateFeedbackBias, feedbackBiasFor } from "../src/score/score.js";
 import { queryDisposition, queryRelevance } from "../src/score/query.js";
 import { buildOpportunity } from "../src/sources/build.js";
 import { parseFeed } from "../src/sources/feed.js";
@@ -412,6 +412,9 @@ check("postdoc is not senior leadership", !isSeniorLeadership("Postdoctoral Fell
  const eurDecimal = salaryFromText("Salary: €3.204,50 per month gross");
  check("European decimal salary remains precise", !!eurDecimal && eurDecimal.min === 3204.5 && eurDecimal.period === "month");
  check("no salary mentioned returns null", salaryFromText("A wonderful opportunity to join our team.") === null);
+ const tvl = salaryFromText("Salary is paid according to TV-L 13, approx €4,100 per month gross.");
+ check("a named public pay scale mentioned alongside a real figure is captured", !!tvl && tvl.min === 4100 && tvl.currency === "EUR" && tvl.period === "month");
+ check("a bare pay-scale name with no adjacent figure still returns null", salaryFromText("Salary is paid according to TV-L 13, per the collective agreement.") === null);
  eq("annualInr converts usd with the fetched rate", annualInr({ min: 60000, max: 60000, currency: "USD", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null },rates), 60000 * 84);
  eq("foreign salary is not guessed when rates are unavailable", annualInr({ min: 60000, max: 60000, currency: "USD", period: "year", isPredicted: false, extractedFrom: "text", confidence: 1, evidence: null }), null);
  eq("rate conversion works between two non-INR currencies",rateBetween(rates,"EUR","USD"),92/84);
@@ -680,6 +683,26 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("score is within 0..100", scandi.score >= 0 && scandi.score <= 100);
  check("fit_reason is a non-empty deterministic string", scandi.reason.length > 20 && scandi.reason.includes("Topic"));
  check("fit label matches score band", (scandi.score >= 70) === (scandi.fit === "Strong") || scandi.fit !== "Strong" || scandi.score >= 70);
+}
+
+{
+ const rows = [
+  { org_key: "acme-labs", action: "dismissed" }, { org_key: "acme-labs", action: "dismissed" },
+  { org_key: "acme-labs", action: "dismissed" }, { org_key: "acme-labs", action: "dismissed" },
+  { org_key: "acme-labs", action: "dismissed" }, { org_key: "acme-labs", action: "dismissed" },
+  { org_key: "acme-labs", action: "dismissed" },
+  { org_key: "good-institute", action: "tracked" }, { org_key: "good-institute", action: "shortlisted" },
+  { org_key: "never-judged", action: "expired" }, { org_key: null, action: "dismissed" },
+ ];
+ const bias = aggregateFeedbackBias(rows);
+ check("repeatedly dismissed organizations get a negative bias", (bias.get("acme-labs") ?? 0) < 0);
+ check("negative bias is clamped rather than unbounded", bias.get("acme-labs") === -12);
+ check("shortlisted+tracked organizations get a positive bias", (bias.get("good-institute") ?? 0) > 0);
+ check("staleness (expired) carries no preference signal", !bias.has("never-judged"));
+ check("feedback with no org_key is not attributed to a null bucket", !bias.has(null as unknown as string));
+ eq("an organization with no feedback history has no bias", feedbackBiasFor(makeOpp({ organization: "Untouched University" }), bias), 0);
+ check("feedbackBiasFor looks up by normalized org key, not raw organization text",
+  feedbackBiasFor(makeOpp({ organization: "Good Institute" }), new Map([["good-institute", 5]])) === 5);
 }
 
 // ---- build pipeline glue ----

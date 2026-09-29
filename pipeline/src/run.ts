@@ -5,7 +5,7 @@ import { readEnv, FIRECRAWL_MAX_PER_RUN, SCHEDULE_CAPS, INTERACTIVE_CAPS } from 
 import { makeRenderer } from "./sources/firecrawl.js";
 import { makeAdapter } from "./sources/registry.js";
 import { SourceConfigError } from "./sources/types.js";
-import { hardFilter, scoreOpportunity } from "./score/score.js";
+import { hardFilter, scoreOpportunity, feedbackBiasFor } from "./score/score.js";
 import { queryDisposition, queryRelevance } from "./score/query.js";
 import { matchCandidate, type Candidate } from "./dedupe/cascade.js";
 import { orgKey, simhash, simhashBands, titleKey } from "./dedupe/keys.js";
@@ -106,6 +106,11 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const userId = await db.resolveUserId(opts.userId ?? env.userId ?? null);
  const profile = await db.loadProfile(userId);
  const preferences = assessmentPreferences(profile.assessmentPreferences, profile.terms);
+ // Read back this account's own shortlist/track/dismiss history and turn it
+ // into a modest per-organization ranking nudge (see feedbackBiasFor). Never
+ // fatal to the run: a failed read just means no bias this run, same as
+ // before this existed.
+ const feedbackBias = opts.dryRun ? new Map<string, number>() : await db.loadFeedbackBias(userId).catch(() => new Map<string, number>());
  profile.terms = focusedSearch
   ? termsForRun(preferences.interests.length ? preferences.interests : profile.terms, queryText)
   : termsForDiscovery();
@@ -180,7 +185,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   const execution = await runSource(row, {
    db, http, renderer, profile, caps, deadlineAt, log, userId, runId,
    dryRun: !!opts.dryRun, freshSearch, focusedSearch, queryText,
-   env, metadataHttp, metadata,
+   env, metadataHttp, metadata, feedbackBias,
   });
   const outcome = execution.outcome;
   bySource[row.source_key] = outcome;
@@ -374,7 +379,11 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
 
  if (enrichment.failed) degradations.push(`${enrichment.failed} context enrichment failure(s)`);
 
- if (!opts.dryRun && !backfill) await db.prune(userId);
+ if (!opts.dryRun && !backfill) {
+  await db.prune(userId);
+  try { await db.syncDeadlineReminders(userId); }
+  catch (error) { log.warn("deadline reminder sync failed", { error: error instanceof Error ? error.message : String(error) }); }
+ }
 
  const anyOk = Object.values(bySource).some(s => s.status === "ok" || s.status === "partial");
  const status: RunResult["status"] = backfill
@@ -411,6 +420,7 @@ interface SourceCtx {
  log: RunLogger; userId: string; runId: string | null; dryRun: boolean; freshSearch: boolean;
  focusedSearch: boolean; queryText: string | null;
  env: ReturnType<typeof readEnv>; metadataHttp: Http; metadata: MetadataStats;
+ feedbackBias: Map<string, number>;
 }
 
 async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution> {
@@ -577,8 +587,9 @@ async function runSource(row: SourceRow, c: SourceCtx): Promise<SourceExecution>
    }
    const activeQuery = c.focusedSearch ? c.queryText : null;
    const queryVerdict = queryRelevance(o, activeQuery);
-   const runScore = scoreOpportunity(o, c.profile, 0, activeQuery);
-   const score = scoreOpportunity(o, c.profile, 0, null);
+   const bias = feedbackBiasFor(o, c.feedbackBias);
+   const runScore = scoreOpportunity(o, c.profile, bias, activeQuery);
+   const score = scoreOpportunity(o, c.profile, bias, null);
    if (queryVerdict.keep) base.itemsMatched++;
    // A focused search's query-relevance rejection used to vanish from the
    // per-source rollup entirely -- itemsEvaluated counted it but neither
