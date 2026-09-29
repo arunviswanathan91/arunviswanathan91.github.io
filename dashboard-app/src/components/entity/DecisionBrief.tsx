@@ -92,6 +92,7 @@ export function DecisionBriefView({context,currencyConversion}:{context:Opportun
   <header className="brief-heading"><div><Sparkles/><span><strong>Your opportunity brief</strong><small>Research, relocation & finances in one place</small></span></div>
    {context.generated_at&&<small>Assessed {formatDate(context.generated_at)}</small>}
   </header>
+  {brief.topic&&<p className="brief-topic">{brief.topic}</p>}
   <section className={`brief-fit fit-${verdict}`}>
    <div className="brief-block-heading"><Compass/><h3>{fitLabels[verdict]??fitLabels.unknown}</h3><small>AI assessment</small></div>
    <p>{brief.fit?.reason}</p>

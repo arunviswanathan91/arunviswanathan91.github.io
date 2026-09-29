@@ -689,6 +689,7 @@ kbd{padding:1px 5px;border:1px solid var(--border-strong);border-bottom-width:2p
 .brief-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .brief-heading>div{display:flex;align-items:center;gap:9px}.brief-heading span{display:grid}.brief-heading strong{font-size:var(--f-md)}
 .brief-heading small{color:var(--text-3)}.brief-heading svg,.brief-block-heading>svg{width:20px;height:20px;flex:none;color:var(--accent)}
+.brief-topic{margin:0;color:var(--text-2);font-size:var(--f-sm)}
 .brief-block-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.brief-block-heading small{margin-left:auto;color:var(--text-3)}
 .brief-fit{padding:16px;border:1px solid var(--accent-border);background:var(--accent-soft);border-radius:var(--r-3)}
 .brief-fit.fit-weak{background:var(--tone-amber-bg);border-color:var(--border-strong)}.brief-fit>p{margin-top:9px}

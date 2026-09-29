@@ -35,6 +35,7 @@ import {
  CITY_SECTION_KEYS, PERSONAL_SECTION_KEYS, citySchema, personalAssessmentSchema, cityFactsInstructions, type Evidence,
 } from "../src/enrich/assessment.js";
 import { collectDecisionEvidence, extractPopulationFact, relevantExcerpt, safeEvidenceUrl } from "../src/enrich/evidence.js";
+import { extractDeadlineFact } from "../src/normalize/deadline.js";
 import { sourceIssues } from "../src/normalize/quality.js";
 import { adzunaAdapter } from "../src/sources/adzuna.js";
 import { joobleAdapter } from "../src/sources/jooble.js";
@@ -48,6 +49,7 @@ const eq = (name: string, a: unknown, b: unknown) =>
  check(name, JSON.stringify(a) === JSON.stringify(b), `got ${JSON.stringify(a)} want ${JSON.stringify(b)}`);
 
 const decisionPayload = () => ({
+ topic: "Bacterial flagellar motor assembly and regulation.",
  fit: { verdict: "weak", reason: "Bacterial flagella do not directly match the selected cancer research topics.", strengths: ["Microscopy methods may transfer."], gaps: ["No tumour biology focus stated."] },
  sections: Object.fromEntries(SECTION_KEYS.map(key => [key, { text: key === "role" ? "Bacterial molecular microbiology research." : "", basis: key === "role" ? "listing" : "unknown", source_ids: key === "role" ? [1] : [] }])),
  money: { currency: "EUR", gross: { low: 2500, high: 3000, basis: "estimate", source_ids: [], note: "Guaranteed 50% FTE; illustrative estimate only" }, deductions: { low: 500, high: 900, basis: "estimate", source_ids: [], note: "Estimated employee deductions" }, rent: null, essentials: null, upfront: null, contract_percent: 50, salary_basis: "typical_estimate", assumptions: ["One person, shared housing; no temporary increase included"] },
@@ -59,6 +61,8 @@ const decisionPayload = () => ({
  const evidence: Evidence[] = [{ label: "Vacancy", url: "https://example.org/job", kind: "listing", text: "Research fellow with 50 % part-time employment; increase by 50% expected temporarily." }];
  const result = normalizeAssessment(decisionPayload(), evidence, prefs);
  eq("decision assessment keeps semantic fit distinct from role score", result.fit.verdict, "weak");
+ eq("topic is carried through as a plain string", result.topic, "Bacterial flagellar motor assembly and regulation.");
+ eq("missing topic defaults to empty string, not a crash", normalizeAssessment({ ...decisionPayload(), topic: undefined }, evidence, prefs).topic, "");
  eq("guaranteed part-time FTE is kept", result.money.contract_percent, 50);
  eq("unknown rent stays unknown", result.money.rent, null);
  eq("preferences fingerprint stored with each brief", result.profile_key, assessmentKey(prefs));
@@ -159,7 +163,7 @@ const decisionPayload = () => ({
  eq("OpenRouter request uses official chat endpoint", postedUrl, "https://openrouter.ai/api/v1/chat/completions");
  check("OpenRouter integration sends the free router", (postedBody as { model: string }).model === "openrouter/free");
  eq("saved context records the model selected by the router", [result.provider, result.model], ["openrouter", "google/gemma-3-27b-it:free"]);
- eq("provider output becomes a versioned decision brief",result.brief?.version,4);
+ eq("provider output becomes a versioned decision brief",result.brief?.version,5);
  eq("rich request retains zero price ceiling",(postedBody as ReturnType<typeof openrouterRequest>).provider.max_price,{prompt:0,completion:0,request:0});
  let placeholdersRejected = false;
  const placeholders = { postJson: async () => ({ choices: [{ message: { content: JSON.stringify(Object.fromEntries(Object.keys(payload).map(key => [key, UNKNOWN]))) } }] }) } as unknown as Http;
@@ -238,6 +242,21 @@ const decisionPayload = () => ({
  eq("extracts an infobox-style population with its year", extractPopulationFact("Population (2011) 601,574 within city limits."), "601,574 (2011)");
  eq("attaches a nearby year even when it trails the number", extractPopulationFact("The city had a population of 8,175,133 (2011 census)."), "8,175,133 (2011)");
  eq("no population figure returns null", extractPopulationFact("A pleasant city with a rich cultural history."), null);
+
+ eq("extracts a written deadline with a full month name",
+  extractDeadlineFact("Closing date: 15 October 2026. Apply via the portal."), new Date("2026-10-15").toISOString());
+ eq("extracts an ordinal day without tripping on the suffix",
+  extractDeadlineFact("Apply by 1st October 2026 to be considered."), new Date("2026-10-01").toISOString());
+ eq("extracts month-first date phrasing",
+  extractDeadlineFact("Application deadline: October 15, 2026."), new Date("October 15, 2026").toISOString());
+ eq("extracts an ISO-style date",
+  extractDeadlineFact("Applications close on 2026-10-15 at midnight."), new Date("2026-10-15").toISOString());
+ eq("a date with no deadline phrase nearby is not treated as a deadline",
+  extractDeadlineFact("The lab was founded in 2010 and moved buildings on 15 October 2015."), null);
+ eq("no deadline phrase or date returns null",
+  extractDeadlineFact("A well-funded postdoc position in a friendly lab."), null);
+ check("a deadline phrase whose year is implausibly far away is discarded",
+  extractDeadlineFact("Application deadline: 15 October 1850.") === null);
 
  // A live backfill run failed every attempt (Groq: "Failed to validate JSON",
  // Gemini: "no usable institution facts") because cityFactsInstructions used

@@ -13,6 +13,7 @@ export type MoneyKey = typeof moneyKeys[number];
 export interface DecisionBrief {
  version: number;
  preferences: AssessmentPreferences;
+ topic?: string;
  fit: { verdict: "direct" | "transferable" | "weak" | "unknown"; reason: string; strengths: string[]; gaps: string[] };
  sections: Record<string, Claim>;
  money: Record<MoneyKey, MoneyRange | null> & { currency: string | null; contract_percent: number | null; salary_basis: string; assumptions: string[] };
