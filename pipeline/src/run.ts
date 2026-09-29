@@ -299,8 +299,19 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const enrichment = emptyEnrichment(contextLimit);
  const providers = contextProviders(env);
  if (!opts.dryRun && providers.length && Date.now() < deadlineAt) {
+  // Only an interactive focused search scopes enrichment to this run's own
+  // finds -- the user is waiting on that exact query's results. A scheduled
+  // or manual discovery run used to do the same thing, which meant its
+  // enrichment budget only ever touched tonight's new listings and never
+  // revisited the backlog of opportunities earlier nights didn't get to
+  // (discovery routinely finds more matches than the 5-8 per-run enrichment
+  // cap). That backlog only shrank on an explicit backfill run, which
+  // nothing schedules automatically -- so most saved opportunities sat
+  // permanently unenriched. Scanning the full backlog (same as backfill)
+  // for every non-focused trigger means each run's enrichment slots go
+  // toward the oldest/highest-scoring unenriched opportunity, new or old.
   const loaded = await db.loadContextCandidates(
-   userId, contextLimit, !!opts.refreshContext, preferences, backfill ? null : runId,
+   userId, contextLimit, !!opts.refreshContext, preferences, focusedSearch ? runId : null,
   );
   enrichment.candidates = loaded.candidates.length;
   enrichment.pending = loaded.total;
