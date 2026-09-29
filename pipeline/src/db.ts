@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Env } from "./config.js";
 import { assessmentPreferences, needsAssessment } from "./enrich/assessment.js";
+import { aggregateFeedbackBias } from "./score/score.js";
 import type { NormalizedOpportunity, RunMode, SearchProfile, SourceOutcome } from "./types.js";
 import type { Candidate } from "./dedupe/cascade.js";
 
@@ -77,6 +78,18 @@ export class Db {
    maxHttpRequests: d.max_http_requests ?? 250,
    assessmentPreferences: assessmentPreferences(d.ontology_overrides?.assessment_preferences, d.terms ?? []),
   };
+ }
+
+ /** Every triage decision (shortlist/track/dismiss) is recorded by a DB
+  *  trigger specifically to weight future ranking -- see aggregateFeedbackBias.
+  *  Capped to the most recent 2000 events so a long-lived account's ranking
+  *  nudge tracks recent taste rather than being dominated by ancient history. */
+ async loadFeedbackBias(userId: string): Promise<Map<string, number>> {
+  const { data, error } = await this.client
+   .from("opportunity_feedback").select("org_key,action")
+   .eq("user_id", userId).order("created_at", { ascending: false }).limit(2000);
+  if (error) throw new Error("loadFeedbackBias: " + error.message);
+  return aggregateFeedbackBias((data ?? []) as { org_key: string | null; action: string }[]);
  }
 
  async loadSources(userId: string): Promise<SourceRow[]> {
@@ -357,5 +370,14 @@ export class Db {
  async prune(userId: string, keep = 200) {
   const { data } = await this.client.rpc("discovery_prune", { p_user_id: userId, p_keep: keep });
   return data ?? null;
+ }
+
+ /** Optional: see supabase/opportunity-deadline-reminders.sql. Silently a
+  *  no-op on a database that hasn't run that migration yet, same pattern as
+  *  loadInstitutionFacts -- deadline reminders are a nice-to-have, never a
+  *  reason to fail a run. */
+ async syncDeadlineReminders(userId: string): Promise<void> {
+  const { error } = await this.client.rpc("sync_opportunity_deadline_reminders", { p_user_id: userId });
+  if (error && !/function .* does not exist/i.test(error.message)) throw new Error("syncDeadlineReminders: " + error.message);
  }
 }

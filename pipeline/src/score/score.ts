@@ -1,6 +1,7 @@
 import { queryRelevance } from "./query.js";
 import { annualInr } from "../normalize/salary.js";
 import { isSeniorLeadership, JUNK_TITLE, requiredPostPhdYears } from "../normalize/type.js";
+import { orgKey } from "../dedupe/keys.js";
 import type { NormalizedOpportunity, Scored, SearchProfile } from "../types.js";
 
 export interface FilterVerdict { keep: boolean; reason?: string }
@@ -98,6 +99,34 @@ function recencyScore(o: NormalizedOpportunity): { value: number; note: string }
 }
 
 const NON_ENGLISH = /\b(wir suchen|stellenangebot|arbeitgeber|mitarbeiter|forschungsgruppe|nous recherchons|offre d'emploi)\b/i;
+
+// Every triage decision is recorded (opportunity_feedback, via a DB trigger)
+// specifically "to weight future ranking" -- but nothing ever read it back
+// until this. 'expired' is staleness, not a judgement, and carries no signal.
+// 'tracked' outweighs 'shortlisted' as the stronger positive commitment.
+const FEEDBACK_WEIGHTS: Record<string, number> = { dismissed: -2, shortlisted: 2, tracked: 3 };
+// Modest on purpose relative to the 0-100 score range (topic alone can swing
+// 45) -- this nudges ranking based on your own history with an organisation,
+// it never gates a listing the way hardFilter/queryRelevance do.
+const FEEDBACK_BIAS_MIN = -12, FEEDBACK_BIAS_MAX = 8;
+
+export function aggregateFeedbackBias(rows: Array<{ org_key: string | null; action: string }>): Map<string, number> {
+ const totals = new Map<string, number>();
+ for (const row of rows) {
+  const weight = FEEDBACK_WEIGHTS[row.action];
+  if (!weight || !row.org_key) continue;
+  totals.set(row.org_key, (totals.get(row.org_key) ?? 0) + weight);
+ }
+ for (const [key, value] of totals) {
+  totals.set(key, Math.max(FEEDBACK_BIAS_MIN, Math.min(FEEDBACK_BIAS_MAX, value)));
+ }
+ return totals;
+}
+
+export function feedbackBiasFor(o: NormalizedOpportunity, bias: Map<string, number>): number {
+ const key = orgKey(o.organization);
+ return key ? bias.get(key) ?? 0 : 0;
+}
 
 export function scoreOpportunity(
  o: NormalizedOpportunity,

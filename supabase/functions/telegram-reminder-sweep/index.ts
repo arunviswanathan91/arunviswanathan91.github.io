@@ -15,8 +15,22 @@ Deno.serve(async(req)=>{
  // Ignore "function not found" until the one-time trash.sql migration is applied.
  await db.rpc("purge_expired_trash");
 
- const {data:due,error}=await db.from("reminders").select("id,title,body,user_id,project_id,task_id,person_id")
-  .lte("remind_at",new Date().toISOString()).eq("done",false).is("notified_at",null).limit(100);
+ // opportunity_id only exists once opportunity-deadline-reminders.sql has been
+ // run; this Edge Function redeploys and starts polling on every push
+ // regardless of whether that optional one-time migration has happened yet,
+ // so a column-not-found here must degrade instead of breaking every other
+ // reminder type. Retry without it rather than fail the whole sweep.
+ let due:any[]|null=null;
+ let error:{message:string}|null=null;
+ {
+  const wide=await db.from("reminders").select("id,title,body,user_id,project_id,task_id,person_id,opportunity_id")
+   .lte("remind_at",new Date().toISOString()).eq("done",false).is("notified_at",null).limit(100);
+  if(wide.error&&/column .*opportunity_id.* does not exist/i.test(wide.error.message)){
+   const narrow=await db.from("reminders").select("id,title,body,user_id,project_id,task_id,person_id")
+    .lte("remind_at",new Date().toISOString()).eq("done",false).is("notified_at",null).limit(100);
+   due=narrow.data;error=narrow.error;
+  } else { due=wide.data;error=wide.error; }
+ }
  if(error)return json({ok:false,error:error.message},500);
 
  let sent=0;
@@ -31,7 +45,10 @@ Deno.serve(async(req)=>{
   }
   const text=`⏰ ${reminder.title}${reminder.body?`\n${reminder.body}`:""}${contact?`\nContact: ${contact}`:""}\n\nThis reminder was sent only to you.`;
   const base=Deno.env.get("DASHBOARD_URL")??"https://arunviswanathan91.github.io/dashboard/";
-  const url=reminder.project_id?`${base.replace(/#.*$/,"").replace(/\/$/,"")}/#/project/${reminder.project_id}`:`${base.replace(/#.*$/,"").replace(/\/$/,"")}/#/reminders`;
+  const root=base.replace(/#.*$/,"").replace(/\/$/,"");
+  const url=reminder.project_id?`${root}/#/project/${reminder.project_id}`
+   :reminder.opportunity_id?`${root}/#/opportunities`
+   :`${root}/#/reminders`;
   const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
    chat_id:chatId,text,reply_markup:{inline_keyboard:[[{text:"Open workspace",url}]]},
   })});

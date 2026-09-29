@@ -85,9 +85,13 @@ export function salaryFromText(text: string): SalaryEvidence | null {
   }
  }
 
- // Single figure: "Salary: ₹75,000 per month"
+ // Single figure: "Salary: ₹75,000 per month", or a named public pay scale
+ // ("TV-L 13, approx. €4,100/month") -- the scale name itself is never
+ // trusted as a number, only used to widen which sentences count as a
+ // salary statement; the actual figure still has to be a real adjacent
+ // currency-tagged amount, same bar as the plain "salary:" case.
  const single = window.match(
-  /(?:salary|stipend|remuneration|fellowship amount)[^.\n]{0,40}?([₹$€£¥]|INR|USD|EUR|GBP|Rs\.?)\s*([\d][\d.,]*)[^.\n]{0,20}/i
+  /(?:salary|stipend|remuneration|fellowship amount|pay\s*scale|salary\s*scale|spine\s*point|tv-?l|tv[öo]d)[^.\n]{0,40}?([₹$€£¥]|INR|USD|EUR|GBP|Rs\.?)\s*([\d][\d.,]*)[^.\n]{0,20}/i
  );
  if (single) {
   const sign = single[1];
