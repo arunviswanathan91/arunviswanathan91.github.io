@@ -3,6 +3,7 @@ import { FolderKanban, Inbox, Radar } from "lucide-react";
 import { useData, useEntityTable, useUi } from "../../lib/store";
 import { applyQuery } from "../../lib/query";
 import { fieldByKey } from "../../entities/types";
+import { POSTDOC_TYPES } from "../../entities";
 import { Toolbar } from "./Toolbar";
 import { Board } from "./Board";
 import { Table } from "./Table";
@@ -26,6 +27,10 @@ export function EntityView({def}:{def:EntityDef}){
  const {valueCtx,inputCtx}=useEntityCtx(def);
  const [composer,setComposer]=useState<Record<string,unknown>|null>(null);
  const [researchFit,setResearchFit]=useState("all");
+ const [roleScope,setRoleScope]=useState<"postdoc"|"all">(()=>{
+  try{return localStorage.getItem("dash:opportunities-role-scope")==="all"?"all":"postdoc"}catch{return "postdoc"}
+ });
+ useEffect(()=>{try{localStorage.setItem("dash:opportunities-role-scope",roleScope)}catch{/* per-browser convenience only */}},[roleScope]);
  const [discoveryScope,setDiscoveryScope]=useState<DiscoveryRunScope|null>(null);
 
  const query=ui.queries[def.key];
@@ -36,7 +41,9 @@ export function EntityView({def}:{def:EntityDef}){
   ?applyDiscoveryRunScope(table.rows,discoveryScope):table.rows,[def.key,table.rows,discoveryScope]);
  const rows=useMemo(()=>applyQuery(def,viewRows,query,{
   scope:ui.scope,tagsFor:(e,id)=>tags.idsFor(e,id),
- }).filter(row=>def.key!=="opportunities"||includeResearchFit(contextFor(row).brief?.fit?.verdict,researchFit)),[def,viewRows,query,ui.scope,tags,researchFit]);
+ }).filter(row=>def.key!=="opportunities"||roleScope==="all"||POSTDOC_TYPES.includes(row.opportunity_type as typeof POSTDOC_TYPES[number]))
+  .filter(row=>def.key!=="opportunities"||includeResearchFit(contextFor(row).brief?.fit?.verdict,researchFit)),
+  [def,viewRows,query,ui.scope,tags,researchFit,roleScope]);
 
  const groupField=query.groupBy?fieldByKey(def,query.groupBy):null;
  const layout=query.layout==="swipe"&&def.key==="opportunities"?"swipe":query.layout==="board"&&groupField?"board":"table";
@@ -108,6 +115,16 @@ export function EntityView({def}:{def:EntityDef}){
 
   <Toolbar def={def} query={query} shown={rows.length} total={table.rows.length} tags={tags.tags}
    onChange={patch=>ui.setQuery(def.key,patch)} onNew={()=>startNew()} onRefresh={()=>void table.refetch(true)}/>
+  {def.key==="opportunities"&&<div className="research-fit-filter" aria-label="Opportunity type view">
+   <span>Showing</span>
+   <div className="seg" role="group" aria-label="Opportunity type">
+    <button className={roleScope==="postdoc"?"active":""} aria-pressed={roleScope==="postdoc"}
+     onClick={()=>setRoleScope("postdoc")}>Postdoc opportunities</button>
+    <button className={roleScope==="all"?"active":""} aria-pressed={roleScope==="all"}
+     onClick={()=>setRoleScope("all")}>All types</button>
+   </div>
+   <small>{roleScope==="postdoc"?"Postdoc and Fellowship listings only.":"Every opportunity type discovery found."}</small>
+  </div>}
   {def.key==="opportunities"&&<div className="research-fit-filter"><span>AI research fit</span>
    <SelectMenu label="Filter by AI research fit" value={researchFit} onChange={setResearchFit} options={[
     {value:"all",label:"All opportunities"},{value:"relevant",label:"Direct & transferable fit"},{value:"weak",label:"Weak research fit"},{value:"pending",label:"Not assessed yet"},

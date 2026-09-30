@@ -206,6 +206,11 @@ export const reads:EntityDef={
 
 export const OPPORTUNITY_STATUS=["New","Shortlisted","Tracked","Dismissed","Expired"] as const;
 export const OPPORTUNITY_KIND=["Postdoc","Research scientist","Industry R&D","Fellowship","Staff scientist","Faculty","Other"] as const;
+// Postdoctoral fellowships are routinely classified "Fellowship" rather than
+// "Postdoc" (see pipeline/src/score/query.ts's roleIntent, which treats the
+// two as one category) -- kept in sync with that pairing so the dashboard's
+// own postdoc view means the same thing as the pipeline's postdoc search.
+export const POSTDOC_TYPES=["Postdoc","Fellowship"] as const;
 export const OPPORTUNITY_FIT=["Strong","Good","Maybe","Weak"] as const;
 export const DISMISS_REASON=["Not relevant","Wrong location","Too junior","Too senior","Salary too low","Deadline too soon","Visa/eligibility","Organisation","Already applied","Other"] as const;
 export const OPPORTUNITY_REGION=["Kerala","Bengaluru","Rest of India","Remote","Europe","North America","Asia-Pacific","Other"] as const;
