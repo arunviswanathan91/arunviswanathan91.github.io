@@ -61,7 +61,13 @@ export class Db {
    id: d.id ?? null,
    userId,
    terms: d.terms?.length ? d.terms : ["pancreatic cancer postdoc", "cancer immunology postdoctoral", "tumour microenvironment researcher"],
-   types: d.types?.length ? d.types : ["Postdoc", "Research scientist", "Industry R&D", "Fellowship"],
+   // Postdoc opportunities are the actual goal; "Fellowship" is included
+   // because postdoctoral fellowships are routinely classified that way
+   // (see roleIntent() in score/query.ts, which treats the two identically).
+   // Research scientist / Industry R&D are permanent-role types, not postdocs,
+   // and were never something discovery_profiles.types could actually be
+   // narrowed away from -- there is no dashboard control for this field.
+   types: d.types?.length ? d.types : ["Postdoc", "Fellowship"],
    homeCity: d.home_city ?? "Thiruvananthapuram",
    indiaCities: d.india_cities ?? [],
    // An empty list is valid for a remote-only search. Never infer search
