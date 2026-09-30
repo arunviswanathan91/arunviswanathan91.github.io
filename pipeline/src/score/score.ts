@@ -1,6 +1,6 @@
 import { queryRelevance } from "./query.js";
 import { annualInr } from "../normalize/salary.js";
-import { isSeniorLeadership, JUNK_TITLE, requiredPostPhdYears } from "../normalize/type.js";
+import { isSeniorLeadership, JUNK_TITLE, requiredPostPhdYears, STUDENT_TITLE } from "../normalize/type.js";
 import { orgKey } from "../dedupe/keys.js";
 import type { NormalizedOpportunity, Scored, SearchProfile } from "../types.js";
 
@@ -19,7 +19,7 @@ export function hardFilter(o: NormalizedOpportunity, p: SearchProfile): FilterVe
  // Keep genuinely unclassified research jobs for recall, but do not let the
  // catch-all `Other` type smuggle explicit student positions into a postdoc run.
  if (o.opportunityType === "Other" && !p.types.includes("Other") &&
-     /\b(ph\.?d\.?|doctoral (student|candidate)|research scholar|jrf|srf)\b/i.test(o.title)) {
+     STUDENT_TITLE.test(o.title)) {
   return { keep: false, reason: "type_excluded" };
  }
  if (!p.types.includes(o.opportunityType) && o.opportunityType !== "Other") {

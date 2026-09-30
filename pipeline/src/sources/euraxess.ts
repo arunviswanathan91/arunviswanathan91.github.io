@@ -1,4 +1,5 @@
 import { parseEuraxessJob, typeFromResearcherProfile } from "../normalize/euraxess.js";
+import { STUDENT_TITLE } from "../normalize/type.js";
 import { sha256 } from "../normalize/text.js";
 import { sameSiteLinks } from "./links.js";
 import { buildOpportunity } from "./build.js";
@@ -85,7 +86,12 @@ export function euraxessAdapter(sourceKey: string): SourceAdapter {
    });
    if (!built) return null;
    // EURAXESS self-reports the EU researcher career stage (R1-R4), which is a
-   // more reliable postdoc signal than guessing from the title text.
+   // more reliable postdoc signal than guessing from the title text -- except
+   // when the title unambiguously says this is a PhD/doctoral studentship.
+   // That field has been observed mislabeling actual PhD postings as R2
+   // ("Recognised Researcher" / postdoc-equivalent), which silently promoted
+   // student positions into a postdoc-only search.
+   if (STUDENT_TITLE.test(built.title)) return built;
    const fromProfile = typeFromResearcherProfile(job.researcherProfile);
    return fromProfile ? { ...built, opportunityType: fromProfile } : built;
   },
