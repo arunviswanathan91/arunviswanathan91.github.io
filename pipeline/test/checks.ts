@@ -16,6 +16,7 @@ import { parseFeed } from "../src/sources/feed.js";
 import { formatDigest } from "../src/sinks/telegram.js";
 import type { NormalizedOpportunity, SearchProfile } from "../src/types.js";
 import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/euraxess.js";
+import { euraxessAdapter } from "../src/sources/euraxess.js";
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { makeCrawl4aiRenderer } from "../src/sources/crawl4ai.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
@@ -787,6 +788,22 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  eq("euraxess: R4 maps to Faculty", typeFromResearcherProfile("Leading Researcher (R4)"), "Faculty");
  eq("euraxess: unrecognised profile maps to null (falls back to title heuristic)", typeFromResearcherProfile("Something else"), null);
  eq("euraxess: no page fields at all returns null, not a garbage object", parseEuraxessJob("<html><body>no title here</body></html>"), null);
+
+ // A live run surfaced a EURAXESS posting titled "PhD student position..."
+ // whose Researcher Profile field was (incorrectly) R2 -- which used to
+ // silently promote it to "Postdoc" and let it through a postdoc-only
+ // search. The title's own PhD-student wording must win.
+ const mislabeled = euraxessAdapter("euraxess").normalize({
+  externalId: "x1", url: "https://euraxess.ec.europa.eu/jobs/1",
+  fetchedAt: new Date().toISOString(),
+  payload: {
+   title: "PhD student position in Cancer Biology", organization: "Test University",
+   department: null, country: "Sweden", city: "Stockholm", deadline: null, postedAt: null,
+   researcherProfile: "Recognised Researcher (R2)", contractType: null,
+   description: "Join our lab studying tumour immunology.",
+  },
+ }, { now: new Date(), cursorIn: {}, log: () => {} } as unknown as SourceContext);
+ eq("euraxess: mislabeled R2 on a PhD-student title stays Other, not Postdoc", mislabeled?.opportunityType, "Other");
 }
 
 // ---- telegram digest formatting ----

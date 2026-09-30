@@ -4,9 +4,16 @@ import type { OpportunityKind } from "../types.js";
 export const JUNK_TITLE =
  /\b(intern(ship)?|trainee|apprentice|summer (student|school)|master'?s? (thesis|student)|bachelor|b\.?tech project|lab (assistant|technician)|data entry|field (worker|officer)|sales executive|business development|customer support|delivery|research update|career options with|weekly (job|career) roundup|jobs? roundup|newsletter)\b/i;
 
+/** An unambiguous PhD/doctoral-studentship title -- a stronger signal than
+ *  any source's own self-reported career-stage metadata, which can be stale
+ *  or simply wrong (see sources/euraxess.ts, which used to let a mislabeled
+ *  EU researcher-profile field promote postings with this exact title
+ *  pattern to "Postdoc"). */
+export const STUDENT_TITLE = /\b(ph\.?d\.?|doctoral (student|candidate)|research scholar|jrf|srf)\b/i;
+
 const RULES: [RegExp, OpportunityKind][] = [
  [/\b(post[- ]?doc(toral)?|postdoctoral (fellow|researcher|associate|scientist)|pdra?)\b/i, "Postdoc"],
- [/\b(phd|doctoral (student|candidate)|research scholar|jrf|srf)\b/i, "Other"],
+ [STUDENT_TITLE, "Other"],
  [/\b(professor|group leader|principal investigator|faculty|lecturer|reader|chair)\b/i, "Faculty"],
  [/\b(fellowship|fellow programme|early career (award|fellow))\b/i, "Fellowship"],
  [/\b(staff scientist|senior scientist|research staff)\b/i, "Staff scientist"],
