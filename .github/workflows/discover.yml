@@ -67,8 +67,19 @@ jobs:
       # Federation provider the deploy workflow already uses, scoped to
       # CRAWL4AI_URL as its audience. Skips cleanly (empty token, tier just
       # unused this run) if CRAWL4AI_URL or the GCP identity vars aren't set.
+      #
+      # continue-on-error on all three steps is deliberate: this whole block
+      # exists only for an optional, best-effort render tier. A live failure
+      # here (e.g. "Invalid account type for --audiences" the first time
+      # this ran, before --impersonate-service-account was added below) once
+      # took the entire nightly discovery run down with it via set -e,
+      # despite having nothing to do with actual discovery/enrichment. An
+      # empty token just means Crawl4AI's calls fail fast and fall through
+      # to Firecrawl -- the same safe degradation as if it weren't
+      # configured at all.
       - id: crawl4ai_auth
         if: vars.CRAWL4AI_URL != '' && vars.GCP_PROJECT_ID != '' && vars.GCP_SERVICE_ACCOUNT != ''
+        continue-on-error: true
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -76,13 +87,22 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
         if: vars.CRAWL4AI_URL != '' && vars.GCP_PROJECT_ID != '' && vars.GCP_SERVICE_ACCOUNT != ''
+        continue-on-error: true
 
       - id: crawl4ai_token
         if: vars.CRAWL4AI_URL != '' && vars.GCP_PROJECT_ID != '' && vars.GCP_SERVICE_ACCOUNT != ''
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          token="$(gcloud auth print-identity-token --audiences="${{ vars.CRAWL4AI_URL }}")"
+          # A Workload Identity Federation principal can't mint an
+          # audience-scoped ID token directly -- it has to impersonate the
+          # target service account, which this workflow's WIF provider is
+          # already authorized to do (see deploy-discovery-worker.yml's own
+          # IAM setup).
+          token="$(gcloud auth print-identity-token \
+            --impersonate-service-account="${{ vars.GCP_SERVICE_ACCOUNT }}" \
+            --audiences="${{ vars.CRAWL4AI_URL }}")"
           echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
