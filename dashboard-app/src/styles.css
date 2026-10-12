@@ -1190,3 +1190,5 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
  .swipe-controls>.secondary{grid-column:auto}
  .swipe-card{padding:18px 16px}
 }
+
+.clippings-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.clippings-toolbar input{flex:1;min-width:220px}.clipping-card{border:1px solid var(--border,#cbd5d1);border-radius:14px;padding:24px;margin:18px 0;max-width:960px}.clipping-card h2{font-size:1.15rem}.clipping-card blockquote{border-left:4px solid #e5b93e;margin:18px 0;padding:12px 18px;background:rgba(229,185,62,.1);white-space:pre-wrap;overflow-wrap:anywhere}.clipping-card label{display:block;margin:12px 0}.clipping-card textarea{width:100%;min-height:70px}.clipping-card small{overflow-wrap:anywhere}

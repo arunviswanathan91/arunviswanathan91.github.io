@@ -13,6 +13,7 @@ import { CommandPalette } from "./CommandPalette";
 import { ProjectComposer } from "./ProjectComposer";
 import { ProjectView } from "./projects/ProjectView";
 import { PublicationView } from "./publications/PublicationView";
+import { ClippingsView } from "./ClippingsView";
 import { TrashView } from "./TrashView";
 import type { EntityKey } from "../entities/types";
 
@@ -61,7 +62,7 @@ function Shell(){
  const currentProject=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;
  const currentPublication=ui.publicationId?tables.publications.byId.get(ui.publicationId):null;
  const sharedPublication=projectOnly&&sharedProject&&currentPublication?.project_id===sharedProject.id?currentPublication:null;
- const title=ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
+ const title=ui.view==="clippings"?"Clippings":ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
   ui.view==="publication"?(String(currentPublication?.title??"")||"Publication"):ENTITIES[ui.view as EntityKey].plural;
 
  useEffect(()=>{
@@ -106,6 +107,7 @@ function Shell(){
      :projectOnly&&sharedProject?<ProjectView projectId={sharedProject.id} accessRole={membership?.role}/>
      :projectOnly?<div className="empty-state"><p>This shared project is unavailable.</p></div>
      :ui.view==="home"?<HomeView/>
+     :ui.view==="clippings"?<ClippingsView/>
      :ui.view==="settings"?<SettingsView/>
      :ui.view==="trash"?<TrashView/>
      :ui.view==="project"&&typeof ui.scope==="string"?<ProjectView projectId={ui.scope}/>
