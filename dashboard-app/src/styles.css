@@ -1191,4 +1191,9 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
  .swipe-card{padding:18px 16px}
 }
 
-.clippings-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.clippings-toolbar input{flex:1;min-width:220px}.clipping-card{border:1px solid var(--border,#cbd5d1);border-radius:14px;padding:24px;margin:18px 0;max-width:960px}.clipping-card h2{font-size:1.15rem}.clipping-card blockquote{border-left:4px solid #e5b93e;margin:18px 0;padding:12px 18px;background:rgba(229,185,62,.1);white-space:pre-wrap;overflow-wrap:anywhere}.clipping-card label{display:block;margin:12px 0}.clipping-card textarea{width:100%;min-height:70px}.clipping-card small{overflow-wrap:anywhere}
+.clippings-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.clippings-toolbar input{flex:1;min-width:220px}
+.clippings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr));gap:14px;align-items:start}
+.clipping-card{border:1px solid var(--border,#cbd5d1);border-radius:12px;padding:16px;background:rgba(229,185,62,.035);min-width:0}
+.clipping-card h2{font-size:12px;line-height:1.4;margin:0 0 10px;font-weight:600;overflow-wrap:anywhere;opacity:.8}
+.clipping-card blockquote{font-size:12px;line-height:1.65;margin:0 0 14px;padding:0;border:0;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:9;overflow:hidden}
+.clipping-card blockquote.expanded{display:block}.clipping-actions{display:flex;gap:12px;align-items:center;font-size:11px}.clipping-details-button{margin-left:auto;background:transparent;border:0;color:inherit;padding:3px;cursor:pointer;font-size:11px}.clipping-details{border-top:1px solid var(--border,#cbd5d1);margin-top:12px;padding-top:12px;font-size:12px}.clipping-reference{font-size:12px;line-height:1.5}.clipping-card label{display:block;margin:10px 0}.clipping-card .input{font-size:12px}.clipping-card textarea{width:100%;min-height:65px}.clipping-card small{overflow-wrap:anywhere}
