@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Home, Inbox, Moon, PanelLeftClose, PanelLeftOpen, Plus, Send, Settings, Sun, SunMoon, Trash2 } from "lucide-react";
+import { Check, Highlighter, Home, Inbox, Moon, PanelLeftClose, PanelLeftOpen, Plus, Send, Settings, Sun, SunMoon, Trash2 } from "lucide-react";
 import { useData, useUi } from "../lib/store";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
 import type { Theme, ViewKey } from "../lib/store";
@@ -71,6 +71,7 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
      <def.icon/><span className="nav-text">{def.plural}</span><span className="nav-count">{counts[key]}</span>
     </button>;
    })}
+   <button className={ui.view==="clippings"?"active":""} title="Clippings" onClick={()=>go("clippings")}><Highlighter/><span className="nav-text">Clippings</span></button>
    <button className={ui.view==="trash"?"active":""} aria-current={ui.view==="trash"?"page":undefined}
     title={collapsed?"Trash":undefined} onClick={()=>go("trash")}>
     <Trash2/><span className="nav-text">Trash</span><span className="nav-count">{trashItems.rows.length}</span>

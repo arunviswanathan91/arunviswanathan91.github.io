@@ -46,7 +46,7 @@ export interface TrashBatch extends Row{
  id:string;user_id:string;batch_type:string;title:string;item_count:number;
  metadata:Record<string,unknown>;deleted_at:string;purge_at:string;
 }
-export type ViewKey=EntityKey|"home"|"project"|"publication"|"settings"|"trash";
+export type ViewKey=EntityKey|"clippings"|"home"|"project"|"publication"|"settings"|"trash";
 export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
 
@@ -111,7 +111,7 @@ const initialRoute=():{view:ViewKey;scope:Scope;publicationId:string|null}=>{
  if(project)return {view:"project",scope:project[1],publicationId:null};
  const publication=hash.match(/^publication\/([0-9a-f-]+)$/i);
  if(publication)return {view:"publication",scope:"all",publicationId:publication[1]};
- const view=(hash&&(hash==="home"||hash==="settings"||hash==="trash"||ENTITY_ORDER.includes(hash as EntityKey))?hash:"home") as ViewKey;
+ const view=(hash&&(hash==="clippings"||hash==="home"||hash==="settings"||hash==="trash"||ENTITY_ORDER.includes(hash as EntityKey))?hash:"home") as ViewKey;
  return {view,scope:"all",publicationId:null};
 };
 
