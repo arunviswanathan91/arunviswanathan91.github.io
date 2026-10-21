@@ -1,7 +1,8 @@
+import { EditToggle } from "../ui/EditToggle";
 import { useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useData } from "../../lib/store";
-import { fromInput, toInput } from "../../lib/format";
+import { formatDate, fromInput, toInput } from "../../lib/format";
 import { SelectMenu } from "../ui/SelectMenu";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
 
@@ -12,6 +13,8 @@ const NODE_STATUS=["Pending","In progress","Waiting","Done"] as const;
 export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:{publicationId:string;canEdit?:boolean;canDelete?:boolean}){
  const {userId,people,projectPeople,publicationNodes,tables}=useData();
  const {ask,confirmation}=useConfirmDialog();
+ const [editingId,setEditingId]=useState<string|null>(null);
+ const editing=editingId===publicationId&&canEdit;
  const [title,setTitle]=useState("");
  const publication=tables.publications.byId.get(publicationId)??null;
  const nodes=useMemo(()=>publicationNodes.rows.filter(n=>n.publication_id===publicationId)
@@ -42,9 +45,11 @@ export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:
   <div className="workflow-heading">
    <div><span className="field-label" id="publication-workflow-heading">Custom paper nodes</span>
     <p className="muted-note">Add, assign, date and reorder the work steps specific to this paper.</p></div>
+   {canEdit&&<EditToggle editing={editing} onChange={value=>setEditingId(value?publicationId:null)} label="paper steps"/>}
   </div>
   <div className="publication-nodes">
    {nodes.map((node,index)=><article className={"publication-node node-"+node.status.toLowerCase().replaceAll(" ","-")} key={node.id}>
+    {editing?<>
     <div className="publication-node-head">
      <input className="node-title" defaultValue={node.title} aria-label="Step name"
       disabled={!canEdit}
@@ -65,10 +70,11 @@ export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:
     <input className="input input-compact node-notes" defaultValue={node.notes??""} placeholder="Notes or expected output" disabled={!canEdit}
      aria-label={`${node.title} notes`} onBlur={e=>{const notes=e.target.value.trim()||null;if(notes!==node.notes)void publicationNodes.update(node.id,{notes})}}/>
     {node.status==="Done"&&<span className="node-done"><Check/>Complete</span>}
+    </>:<div className="detail-summary"><strong>{node.title}</strong><span>{node.status}</span><span>{people.byId.get(node.assignee_id??"")?.name||"Unassigned"}</span><span>{node.due_at?formatDate(node.due_at):"No due date"}</span>{node.notes&&<p>{node.notes}</p>}</div>}
    </article>)}
    {!nodes.length&&<p className="workflow-empty">No custom steps yet. Examples: analysis, figures, co-author review, preprint and submission.</p>}
   </div>
-  {canEdit&&<div className="workflow-add">
+  {editing&&<div className="workflow-add">
    <input className="input" value={title} placeholder="Add a custom step…" aria-label="New paper step"
     onChange={e=>setTitle(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void add()}}}/>
    <button type="button" className="secondary" disabled={!title.trim()} onClick={()=>void add()}><Plus/>Add step</button>

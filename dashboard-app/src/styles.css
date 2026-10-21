@@ -1199,3 +1199,10 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .clipping-card blockquote.expanded{display:block}.clipping-actions{display:flex;gap:12px;align-items:center;font-size:11px}.clipping-details-button{margin-left:auto;background:transparent;border:0;color:inherit;padding:3px;cursor:pointer;font-size:11px}.clipping-details{border-top:1px solid var(--border,#cbd5d1);margin-top:12px;padding-top:12px;font-size:12px}.clipping-reference{font-size:12px;line-height:1.5}.clipping-card label{display:block;margin:10px 0}.clipping-card .input{font-size:12px}.clipping-card textarea{width:100%;min-height:65px}.clipping-card small{overflow-wrap:anywhere}
 
 .clipping-delete-button{border:0;background:transparent;color:#d76767;font:inherit;padding:3px;cursor:pointer}.clipping-delete-button:disabled{opacity:.5;cursor:wait}
+
+/* Readable summaries remain inert until Edit is explicitly selected. */
+.detail-summary{display:grid;gap:14px;min-width:0}
+.detail-summary p{margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.detail-value{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;flex:1;padding:6px 0}
+.detail-value .clamp-1{display:block;-webkit-line-clamp:unset;white-space:pre-wrap;overflow:visible}
+.publication-node>.detail-summary{grid-column:1/-1}

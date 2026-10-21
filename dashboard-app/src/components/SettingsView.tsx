@@ -1,3 +1,4 @@
+import { EditToggle } from "./ui/EditToggle";
 import { useEffect, useState } from "react";
 import { Archive, ArchiveRestore, RefreshCw, Send, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -14,6 +15,8 @@ const generateCode=()=>{
 
 export function SettingsView(){
  const {userId,projects,tags,chatId,refreshTelegram,deleteProject}=useData();
+ const [editing,setEditing]=useState<Record<string,boolean>>({});
+ const toggle=(key:string)=> <EditToggle editing={!!editing[key]} onChange={value=>setEditing(v=>({...v,[key]:value}))} label={key}/>;
  const [code,setCode]=useState<string|null>(null);
  const [expiresAt,setExpiresAt]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);
@@ -69,7 +72,8 @@ export function SettingsView(){
 
   <div className="settings-grid">
    <section className="panel">
-    <header className="panel-head"><h2>Profile</h2></header>
+    <header className="panel-head"><h2>Profile</h2>{toggle("Profile")}</header>
+    {editing.Profile?<>
     <div className="field">
      <label className="field-label" htmlFor="display-name">Display name</label>
      <input id="display-name" className="input" value={displayName} placeholder="Your name"
@@ -87,7 +91,7 @@ export function SettingsView(){
       options={[{value:"14",label:"14 days"},{value:"30",label:"30 days"}]}
       onChange={value=>void saveTrashRetention(value==="14"?14:30)}/>
      <small className="muted-note">Changing this also updates the removal date of items already in Trash.</small>
-    </div>
+    </div> </>:<div className="detail-summary"><strong>{displayName||"No display name"}</strong><span>{timezone}</span><span>Deleted items kept for {trashRetention} days</span></div>}
    </section>
 
    <section className="panel">
@@ -103,7 +107,8 @@ export function SettingsView(){
    </section>
 
    <section className="panel">
-    <header className="panel-head"><h2>Projects</h2></header>
+    <header className="panel-head"><h2>Projects</h2>{toggle("Projects")}</header>
+    {editing.Projects?<>
     <div className="manage-list">
      {projects.rows.map(p=><div className="manage-row" key={p.id}>
       <input className="input input-compact" value={names[p.id]??p.name}
@@ -120,11 +125,12 @@ export function SettingsView(){
        <Trash2/></button>
      </div>)}
      {!projects.rows.length&&<p className="muted-note">No projects yet.</p>}
-    </div>
+    </div> </>:<div className="detail-summary">{projects.rows.map(p=><div key={p.id}><strong>{p.name}</strong><span className="muted-note"> · {p.status}</span></div>)}{!projects.rows.length&&<p>No projects yet.</p>}</div>}
    </section>
 
    <section className="panel">
-    <header className="panel-head"><h2>Tags</h2></header>
+    <header className="panel-head"><h2>Tags</h2>{toggle("Tags")}</header>
+    {editing.Tags?<>
     <div className="manage-list">
      {tags.tags.map(t=><div className="manage-row" key={t.id}>
       <input className="input input-compact" defaultValue={t.name} aria-label={`Rename ${t.name}`}
@@ -137,7 +143,7 @@ export function SettingsView(){
        <Trash2/></button>
      </div>)}
      {!tags.tags.length&&<p className="muted-note">No tags yet — add one from any record.</p>}
-    </div>
+    </div> </>:<div className="detail-summary">{tags.tags.map(t=><div key={t.id}><strong>{t.name}</strong><span className="muted-note"> · {tags.usage.get(t.id)??0} uses</span></div>)}{!tags.tags.length&&<p>No tags yet.</p>}</div>}
    </section>
   </div>
  {confirmation}</div>;

@@ -1,3 +1,5 @@
+import { EditToggle } from "../ui/EditToggle";
+import { FieldValue } from "../entity/FieldValue";
 import { useState } from "react";
 import { ExternalLink, Mail, Trash2 } from "lucide-react";
 import { useData, useEntityTable } from "../../lib/store";
@@ -21,7 +23,9 @@ export function Drawer({def,row,onClose,canEdit=true,canDelete=true,hiddenFields
 }){
  const table=useEntityTable(def.key);
  const {tags}=useData();
- const {inputCtx}=useEntityCtx(def);
+ const {inputCtx,valueCtx}=useEntityCtx(def);
+ const [editingId,setEditingId]=useState<string|null>(null);
+ const editing=editingId=== row.id && canEdit;
  const scopedInputCtx=people?{...inputCtx,people}:inputCtx;
  const {ask,confirmation}=useConfirmDialog();
  const [gmailFieldKey,setGmailFieldKey]=useState<string|null>(null);
@@ -56,16 +60,17 @@ export function Drawer({def,row,onClose,canEdit=true,canDelete=true,hiddenFields
     </div>
     {canDelete&&<button type="button" className="danger-button" onClick={()=>remove(close)}><Trash2/>Move to Trash</button>}
    </div>}>
+   <div className="panel-head"><h2>Details</h2>{canEdit&&<EditToggle editing={editing} onChange={value=>setEditingId(value?row.id:null)} label="record details"/>}</div>
    <div className="record-edit-grid">
     {def.key==="publications"&&<PublicationLifecycle publication={row} canEdit={canEdit} canReassign={canDelete}/>} 
     {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
      <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
      <div className="field-with-action">
-      <FieldInput field={f} value={valueOf(f)} ctx={scopedInputCtx} disabled={!canEdit} onCommit={v=>commit(f,v)}/>
+      {editing?<FieldInput field={f} value={valueOf(f)} ctx={scopedInputCtx} disabled={!canEdit} onCommit={v=>commit(f,v)}/>:<div className="detail-value">{f.kind==="longtext"?String(row[f.key]||"—"):f.kind==="url"&&!safeUrl(f)?String(row[f.key]||"—"):<FieldValue field={f} row={row} ctx={valueCtx} mode="cell"/>}</div>}
       {safeUrl(f)&&
        <a className="icon-button" href={safeUrl(f)!} target="_blank" rel="noopener noreferrer"
         title="Open link" aria-label={`Open ${f.label}`}><ExternalLink/></a>}
-      {canEdit&&f.kind==="url"&&f.gmailSearch&&
+      {editing&&f.kind==="url"&&f.gmailSearch&&
        <button type="button" className="icon-button" title="Find in Gmail" aria-label="Find in Gmail"
         onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
      </div>

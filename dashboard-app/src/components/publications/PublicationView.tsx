@@ -1,3 +1,5 @@
+import { EditToggle } from "../ui/EditToggle";
+import { FieldValue } from "../entity/FieldValue";
 import { ArrowLeft, ExternalLink, Mail, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ENTITIES } from "../../entities";
@@ -21,7 +23,8 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
 }){
  const {userId,tables,tags,projects}=useData();
  const ui=useUi();
- const {inputCtx}=useEntityCtx(def);
+ const {inputCtx,valueCtx}=useEntityCtx(def);
+ const [editingId,setEditingId]=useState<string|null>(null);
  const [gmailFieldKey,setGmailFieldKey]=useState<string|null>(null);
  const {ask,confirmation}=useConfirmDialog();
  const publication=tables.publications.byId.get(publicationId)??null;
@@ -39,6 +42,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
 
  const isOwner=publication.user_id===userId;
  const canEdit=isOwner||accessRole==="editor";
+ const editing=editingId===publicationId&&canEdit;
  const editable=def.fields.filter(f=>f.drawer!==false&&isEditable(f)&&f.key!=="stage"&&f.key!=="project_id"&&(isOwner||f.kind!=="tags"));
  const stamps=def.fields.filter(f=>f.kind==="stamp"&&f.drawer!==false);
  const valueOf=(f:FieldDef)=>f.kind==="tags"&&def.tagEntity?tags.idsFor(def.tagEntity,publication.id):publication[f.key];
@@ -75,15 +79,15 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
    </main>
 
    <aside className="panel publication-details">
-    <header className="panel-head"><h2>Paper details</h2><span className="muted-note">Autosaved</span></header>
+    <header className="panel-head"><h2>Paper details</h2>{canEdit&&<EditToggle editing={editing} onChange={value=>setEditingId(value?publication.id:null)} label="paper details"/>}</header>
     <div className="publication-details-grid">
      {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
       <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
       <div className="field-with-action">
-       <FieldInput field={f} value={valueOf(f)} ctx={inputCtx} disabled={!canEdit} onCommit={value=>commit(f,value)}/>
+       {editing?<FieldInput field={f} value={valueOf(f)} ctx={inputCtx} disabled={!canEdit} onCommit={value=>commit(f,value)}/>:<div className="detail-value">{f.kind==="longtext"?String(publication[f.key]||"—"):f.kind==="url"&&!safeUrl(f)?String(publication[f.key]||"—"):<FieldValue field={f} row={publication} ctx={valueCtx} mode="cell"/>}</div>}
        {safeUrl(f)&&<a className="icon-button" href={safeUrl(f)!} target="_blank" rel="noopener noreferrer"
         title="Open link" aria-label={`Open ${f.label}`}><ExternalLink/></a>}
-       {canEdit&&f.kind==="url"&&f.gmailSearch&&<button type="button" className="icon-button" title="Find in Gmail"
+       {editing&&f.kind==="url"&&f.gmailSearch&&<button type="button" className="icon-button" title="Find in Gmail"
         aria-label="Find in Gmail" onClick={()=>setGmailFieldKey(f.key)}><Mail/></button>}
       </div>
      </div>)}

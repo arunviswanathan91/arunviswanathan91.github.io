@@ -1,7 +1,8 @@
+import { EditToggle } from "../ui/EditToggle";
 import { useMemo, useState } from "react";
 import {
  ArrowLeft, ArrowRight, BookMarked, CalendarClock, ExternalLink,
- FileText, FlaskConical, FolderKanban, Link2, Mail, Pencil, Plus, Send, Trash2, UserRound, Users,
+ FileText, FlaskConical, FolderKanban, Mail, Pencil, Plus, Send, Trash2, UserRound, Users,
 } from "lucide-react";
 import { ENTITIES, TASK_STATUS } from "../../entities";
 import { formatDate } from "../../lib/format";
@@ -87,28 +88,31 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
     onClick={()=>setTab(t.key)}>{t.label}{t.count!==undefined&&<span>{t.count}</span>}</button>)}
   </nav>
 
-  {tab==="overview"&&<ProjectOverview project={project} canEdit={canEdit} isOwner={isOwner}/>} 
+  {tab==="overview"&&<ProjectOverview key={project.id} project={project} canEdit={canEdit} isOwner={isOwner}/>}
   {tab==="work"&&<ProjectBoard project={project} stages={stages} tasks={projectTasks}
-   canEdit={canEdit} onAdd={stageId=>newEntity("tasks",{stage_id:stageId})} onOpen={id=>ui.openDrawer("tasks",id)} onManage={()=>setManageStages(true)}/>} 
+   canEdit={canEdit} onAdd={stageId=>newEntity("tasks",{stage_id:stageId})} onOpen={id=>ui.openDrawer("tasks",id)} onManage={()=>setManageStages(true)}/>}
   {tab==="publications"&&<ProjectPublications project={project} direct={directPapers} related={relatedPapers}
-   canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("publications")} onOpen={ui.openPublication}/>} 
+   canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("publications")} onOpen={ui.openPublication}/>}
   {tab==="reads"&&<ProjectReads project={project} rows={projectReads}
-   canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("reads")} onOpen={id=>ui.openDrawer("reads",id)}/>} 
+   canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("reads")} onOpen={id=>ui.openDrawer("reads",id)}/>}
   {tab==="people"&&<ProjectPeople projectId={projectId} isOwner={isOwner} onAdd={()=>setPerson({person:"new"})}
-   onEdit={(selected,membershipId)=>setPerson({person:selected,membershipId})}/>} 
+   onEdit={(selected,membershipId)=>setPerson({person:selected,membershipId})}/>}
 
-  {manageStages&&canEdit&&<StageManager project={project} stages={stages} tasks={projectTasks} isOwner={isOwner} onClose={()=>setManageStages(false)}/>} 
-  {person&&isOwner&&<PersonEditor projectId={projectId} person={person.person} membershipId={person.membershipId} onClose={()=>setPerson(null)}/>} 
+  {manageStages&&canEdit&&<StageManager project={project} stages={stages} tasks={projectTasks} isOwner={isOwner} onClose={()=>setManageStages(false)}/>}
+  {person&&isOwner&&<PersonEditor projectId={projectId} person={person.person} membershipId={person.membershipId} onClose={()=>setPerson(null)}/>}
   {composer&&canEdit&&<Composer def={ENTITIES[composer.key]} seed={composer.seed} hiddenFields={isOwner?[]:["project_id","tags"]}
-   people={projectPeople} onClose={()=>setComposer(null)} onSubmit={submitEntity}/>} 
+   people={projectPeople} onClose={()=>setComposer(null)} onSubmit={submitEntity}/>}
   {drawer&&drawerRow&&<Drawer def={ENTITIES[drawer.entity]} row={drawerRow} canEdit={canEdit} canDelete={isOwner}
-   people={projectPeople} hiddenFields={isOwner?[]:["project_id","tags"]} onClose={ui.closeDrawer}/>} 
+   people={projectPeople} hiddenFields={isOwner?[]:["project_id","tags"]} onClose={ui.closeDrawer}/>}
  </div>;
 }
 
 function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:boolean;isOwner:boolean}){
  const {projects,projectLinks,projectFields,tables,tags}=useData();
  const {ask,confirmation}=useConfirmDialog();
+ const [overviewEdit,setOverviewEdit]=useState(false);
+ const [linksEdit,setLinksEdit]=useState(false);
+ const [fieldsEdit,setFieldsEdit]=useState(false);
  const links=projectLinks.rows.filter(l=>l.project_id===project.id).sort((a,b)=>a.position-b.position);
  const fields=projectFields.rows.filter(f=>f.project_id===project.id).sort((a,b)=>a.position-b.position);
  const documents=tables.documents.rows.filter(r=>r.project_id===project.id);
@@ -130,7 +134,8 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
 
  return <><div className="project-overview-grid">
   <section className="panel project-summary-panel">
-   <header className="panel-head"><h2>Overview</h2><span className="muted-note">Autosaved</span></header>
+   <header className="panel-head"><h2>Overview</h2>{canEdit&&<EditToggle editing={overviewEdit} onChange={setOverviewEdit} label="project overview"/>}</header>
+   {overviewEdit&&canEdit?<>
    <div className="field"><label className="field-label" htmlFor="project-objective">Objective</label>
     <textarea id="project-objective" className="input" rows={3} defaultValue={project.objective??""}
      placeholder="What result should this project produce?" disabled={!canEdit}
@@ -155,19 +160,27 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
       onCreate={async name=>{const tag=await tags.create(name);if(tag)void tags.setFor("project",project.id,[...selectedTags,tag.id])}}/>
      :<><TagChips ids={selectedTags} byId={tags.byId}/><span className="muted-note">Project tags are managed by the owner.</span></>}
    </div>
+   </>:<div className="detail-summary">
+   <div><span className="field-label">Objective</span><p>{project.objective||"No objective yet."}</p></div>
+   <div><span className="field-label">Description</span><p>{project.description||"No description yet."}</p></div>
+   <div className="project-detail-grid"><div><span className="field-label">Phase</span><p>{project.phase||"Planning"}</p></div>
+   <div><span className="field-label">Start date</span><p>{project.start_date?formatDate(project.start_date):"Not set"}</p></div>
+   <div><span className="field-label">Target date</span><p>{project.target_date?formatDate(project.target_date):"Not set"}</p></div></div>
+   <div><span className="field-label">Project tags</span>{selectedTags.length?<TagChips ids={selectedTags} byId={tags.byId}/>:<p>No tags yet.</p>}</div>
+  </div>}
   </section>
 
   <div className="project-overview-side">
    <section className="panel">
-    <header className="panel-head"><h2>Project links</h2><Link2/></header>
+    <header className="panel-head"><h2>Project links</h2>{canEdit&&<EditToggle editing={linksEdit} onChange={setLinksEdit} label="project links"/>}</header>
     <div className="resource-list">
      {links.map(link=><div className="resource-row" key={link.id}>
       <a href={safeHttp(link.url)??undefined} target="_blank" rel="noopener noreferrer"><ExternalLink/><span>{link.label}</span></a>
-      {isOwner&&<button className="icon-button" onClick={()=>ask({title:"Move project link to Trash?",message:`“${link.label}” can be restored from Trash.`,confirmLabel:"Move to Trash"},()=>projectLinks.remove(link.id).then(()=>{}))} aria-label={`Move ${link.label} to Trash`}><Trash2/></button>}
+      {linksEdit&&isOwner&&<button className="icon-button" onClick={()=>ask({title:"Move project link to Trash?",message:`“${link.label}” can be restored from Trash.`,confirmLabel:"Move to Trash"},()=>projectLinks.remove(link.id).then(()=>{}))} aria-label={`Move ${link.label} to Trash`}><Trash2/></button>}
      </div>)}
      {!links.length&&<p className="muted-note">Add Drive folders, repositories, protocols or datasets.</p>}
     </div>
-    {canEdit&&<div className="compact-add-grid">
+    {linksEdit&&canEdit&&<div className="compact-add-grid">
      <input className="input input-compact" value={linkLabel} placeholder="Label" aria-label="Link label" onChange={e=>setLinkLabel(e.target.value)}/>
      <input className="input input-compact" type="url" value={linkUrl} placeholder="https://…" aria-label="Link URL" onChange={e=>setLinkUrl(e.target.value)}/>
      <button className="secondary" disabled={!linkLabel.trim()||!safeHttp(linkUrl.trim())} onClick={()=>void addLink()}><Plus/>Add</button>
@@ -175,9 +188,10 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
    </section>
 
    <section className="panel">
-    <header className="panel-head"><h2>Custom details</h2><Pencil/></header>
+    <header className="panel-head"><h2>Custom details</h2>{canEdit&&<EditToggle editing={fieldsEdit} onChange={setFieldsEdit} label="custom details"/>}</header>
     <div className="resource-list">
      {fields.map(field=><div className="custom-field-row" key={field.id}>
+      {fieldsEdit&&canEdit?<>
       <input className="input input-compact" defaultValue={field.label} aria-label="Custom field name"
        disabled={!canEdit}
        onBlur={e=>{const label=e.target.value.trim();if(label&&label!==field.label)void projectFields.update(field.id,{label})}}/>
@@ -185,9 +199,11 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
        disabled={!canEdit}
        onBlur={e=>{const value=e.target.value.trim()||null;if(value!==field.value)void projectFields.update(field.id,{value})}}/>
       {isOwner&&<button className="icon-button" onClick={()=>ask({title:"Move custom detail to Trash?",message:`“${field.label}” can be restored from Trash.`,confirmLabel:"Move to Trash"},()=>projectFields.remove(field.id).then(()=>{}))} aria-label={`Move ${field.label} to Trash`}><Trash2/></button>}
+      </>:<><strong>{field.label}</strong><span className="detail-value">{field.value||"—"}</span></>}
      </div>)}
+     {!fields.length&&<p className="muted-note">No custom details yet.</p>}
     </div>
-    {canEdit&&<div className="compact-add-grid">
+    {fieldsEdit&&canEdit&&<div className="compact-add-grid">
      <input className="input input-compact" value={fieldLabel} placeholder="Field name" aria-label="New custom field name" onChange={e=>setFieldLabel(e.target.value)}/>
      <input className="input input-compact" value={fieldValue} placeholder="Value" aria-label="New custom field value" onChange={e=>setFieldValue(e.target.value)}/>
      <button className="secondary" disabled={!fieldLabel.trim()} onClick={()=>void addField()}><Plus/>Add</button>
@@ -267,7 +283,7 @@ function ProjectPublications({project,direct,related,canEdit,isOwner,onAdd,onOpe
     {relation==="tag"&&<span className="badge tone-violet">Related by tag</span>}</div>
    <button className="project-paper-title" onClick={()=>onOpen(paper.id)}>{paper.title}</button>
    {paper.venue&&<p className="subtitle">{paper.venue}</p>}
-   {tagIds.length>0&&<TagChips ids={tagIds} byId={tags.byId} max={4}/>} 
+   {tagIds.length>0&&<TagChips ids={tagIds} byId={tags.byId} max={4}/>}
    <div className="paper-progress"><span>{nodes.length?`${done} of ${nodes.length} custom steps complete`:"No custom steps yet"}</span>
     {relation==="tag"&&isOwner&&<button className="link-button" onClick={()=>void tables.publications.update(paper.id,{project_id:project.id})}>Link directly</button>}</div>
   </article>;

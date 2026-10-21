@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { EditToggle } from "../ui/EditToggle";
 import { Check, FolderKanban, History, Inbox, Tag } from "lucide-react";
 import { PUBLICATION_STAGE } from "../../entities";
 import type { Row } from "../../entities/types";
@@ -25,6 +27,8 @@ const possibleOutcomes=(stage:string)=>stage==="Under Review"?"Revision requeste
 export function PublicationLifecycle({publication,canEdit=true,canReassign=true}:{publication:Row;canEdit?:boolean;canReassign?:boolean}){
  const {projects,tables,publicationStageEvents,tags}=useData();
  const ui=useUi();
+ const [editingId,setEditingId]=useState<string|null>(null);
+ const editing=editingId===publication.id&&canEdit;
  const stage=String(publication.stage||"Idea");
  const events=publicationStageEvents.rows.filter(e=>e.publication_id===publication.id)
   .sort((a,b)=>b.created_at.localeCompare(a.created_at));
@@ -55,18 +59,19 @@ export function PublicationLifecycle({publication,canEdit=true,canReassign=true}
      {publication.venue&&<span>{publication.venue}</span>}
      <span className={directProject?"paper-project-link":"paper-project-link is-inbox"}>
       {directProject?<FolderKanban/>:<Inbox/>}
-      {canReassign?<SelectMenu className="paper-project-select" value={publication.project_id??""} label="Assign paper to project"
+      {editing&&canReassign?<SelectMenu className="paper-project-select" value={publication.project_id??""} label="Assign paper to project"
         options={[{value:"",label:"Inbox — assign a project"},...projects.rows.filter(p=>p.status==="Active"||p.id===publication.project_id)
          .map(p=>({value:p.id,label:p.name}))]}
         onChange={projectId=>void tables.publications.update(publication.id,{project_id:projectId||null})}/>:<span>{directProject?.name??"Inbox"}</span>}
      </span>
     </div>
    </div>
-   <label className="paper-stage-control"><span>Update stage</span>
+   <div>{canEdit&&<EditToggle editing={editing} onChange={value=>setEditingId(value?publication.id:null)} label="publication stage and project"/>}
+   {editing&&<label className="paper-stage-control"><span>Update stage</span>
     <SelectMenu className="paper-stage-select" value={stage} label="Update publication stage" disabled={!canEdit}
      options={PUBLICATION_STAGE.map(value=>({value,label:value}))}
      onChange={value=>void tables.publications.update(publication.id,{stage:value})}/>
-   </label>
+   </label>}</div>
   </header>
 
   <div className="paper-stage-scroll">
@@ -92,7 +97,7 @@ export function PublicationLifecycle({publication,canEdit=true,canReassign=true}
     return <span className="paper-related-project" key={project.id}>
      <button onClick={()=>openProject(project.id)}>{project.name}</button>
      <small>{shared.join(", ")}</small>
-     <button className="link-button" onClick={()=>void tables.publications.update(publication.id,{project_id:project.id})}>Link directly</button>
+     {editing&&<button className="link-button" onClick={()=>void tables.publications.update(publication.id,{project_id:project.id})}>Link directly</button>}
     </span>;
    })}</div>:<p className="muted-note">Give the paper and a project the same tag to relate them without moving the paper.</p>}
   </div>}

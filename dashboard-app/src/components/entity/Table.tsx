@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { EditToggle } from "../ui/EditToggle";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { isEditable } from "../../entities/types";
 import { FieldValue } from "./FieldValue";
@@ -7,7 +9,7 @@ import type { ValueCtx } from "./FieldValue";
 import type { InputCtx } from "./FieldInput";
 import type { EntityDef, FieldDef, QuickAction, Row, SortSpec } from "../../entities/types";
 
-/** Enum/bool/project cells render their editor directly, so "inline editing" needs no edit mode. */
+/** Inline controls are revealed only for the row explicitly being edited. */
 const INLINE=new Set(["enum","bool","project"]);
 const columnWidth=(field:FieldDef)=>{
  const weighted=(field.table??1)*80;
@@ -24,8 +26,9 @@ export function Table({def,columns,rows,ctx,inputCtx,sort,selection,onSort,onTog
  onSort(key:string):void;onToggle(id:string):void;onOpen(id:string):void;
  onCommit(row:Row,field:FieldDef,value:any):void;onToggleAll():void;onQuickAction(row:Row,action:QuickAction):void;
 }){
+ const [editingId,setEditingId]=useState<string|null>(null);
  const allChecked=rows.length>0&&selection.length===rows.length;
- const hasActions=!!def.quickActions?.length;
+ const hasActions=!!def.quickActions?.length||columns.some(f=>INLINE.has(f.kind)&&isEditable(f));
  return <div className="table-card">
   <table>
    <thead><tr>
@@ -50,12 +53,13 @@ export function Table({def,columns,rows,ctx,inputCtx,sort,selection,onSort,onTog
        aria-label={`Select ${String(row[def.titleField]??"row")}`}/>
      </td>
      {columns.map(f=><td key={f.key} style={{minWidth:columnWidth(f)}}>
-      {INLINE.has(f.kind)&&isEditable(f)
+      {editingId===row.id&&INLINE.has(f.kind)&&isEditable(f)
        ?<FieldInput field={f} value={f.kind==="tags"?ctx.tagIds(row.id):row[f.key]} ctx={inputCtx} compact
          onCommit={v=>onCommit(row,f,v)}/>
        :<FieldValue field={f} row={row} ctx={ctx} mode="cell"/>}
      </td>)}
      {hasActions&&<td className="col-actions">
+      {columns.some(f=>INLINE.has(f.kind)&&isEditable(f))&&<EditToggle editing={editingId===row.id} onChange={value=>setEditingId(value?row.id:null)} label={String(row[def.titleField]??"record")}/>}
       <QuickActions actions={def.quickActions} row={row} onRun={action=>onQuickAction(row,action)}/>
      </td>}
     </tr>)}
