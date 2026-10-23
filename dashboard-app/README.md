@@ -187,3 +187,19 @@ this dashboard app talks to the pipeline directly — they only share the Supaba
 Dragging a card to **Tracked** on the Opportunities board automatically creates a matching row in
 Jobs (via a database trigger, `fn_opportunity_to_job` in `schema.sql`) — no extra step needed to
 start tracking an application you've decided to pursue.
+
+### Paper notes
+
+Publication workspaces include **Paper notes** below the custom workflow steps.
+Use **Add note**, paste plain text or Markdown, and choose **Save note**. Cards open
+in reading mode; **Edit**, **Preview**, and **Download .md** are available in the
+reader. Files are private UTF-8 Markdown in the `paper-notes` storage bucket,
+under `<publication UUID>/<note UUID>.md`. The first heading stores the title;
+the pasted body is preserved verbatim. Notes are limited to 2 MB each.
+
+For a new installation, run `supabase/publication-notes.sql` after the main
+schema, Trash and project-collaboration setup. Read/edit permissions follow the
+paper and project roles; only the paper owner can permanently delete a note.
+No service-role key is used in the client. Notes for trashed papers are inaccessible
+until the paper is restored. Storage files are not automatically purged when a
+paper is permanently removed; remove or download notes first if needed.

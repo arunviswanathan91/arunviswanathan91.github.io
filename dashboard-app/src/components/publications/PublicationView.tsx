@@ -1,3 +1,4 @@
+import { PublicationNotes } from "./PublicationNotes";
 import { EditToggle } from "../ui/EditToggle";
 import { FieldValue } from "../entity/FieldValue";
 import { ArrowLeft, ExternalLink, Mail, Trash2 } from "lucide-react";
@@ -76,6 +77,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
     <section className="panel publication-workflow-panel">
      <PublicationWorkflow publicationId={publication.id} canEdit={canEdit} canDelete={isOwner}/>
     </section>
+    <PublicationNotes key={publication.id} publicationId={publication.id} canEdit={canEdit} canDelete={isOwner}/>
    </main>
 
    <aside className="panel publication-details">
