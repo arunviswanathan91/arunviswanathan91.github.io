@@ -1,3 +1,5 @@
+import { SECTIONS, toneStyle, type SectionId } from "../extended/lib/sections";
+import { href } from "../extended/lib/route";
 import { useMemo, useState } from "react";
 import { Check, Highlighter, Home, Inbox, Moon, PanelLeftClose, PanelLeftOpen, Plus, Send, Settings, Sun, SunMoon, Trash2 } from "lucide-react";
 import { useData, useUi } from "../lib/store";
@@ -62,13 +64,17 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
      <button className="link-button" onClick={()=>setShowArchived(v=>!v)}>{showArchived?"Hide archived":"Show archived"}</button>}
    </div>
 
-   <p className="nav-label">Workspace</p>
+   <p className="nav-label">Research & planning</p>
+   {(["projects","tasks","papers","notes","meetings","deadlines","search"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className="extension-nav" href={href(key)} style={toneStyle(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{key==="tasks"?"Task planner":key==="projects"?"Project overview":item.label}</span></a>})}
+   <p className="nav-label">Personal</p>
+   {(["budget","loans","habits"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className="extension-nav" href={href(key)} style={toneStyle(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span></a>})}
+   <p className="nav-label">Workflows</p>
    {ENTITY_ORDER.map(key=>{
     const def=ENTITIES[key];
     const active=ui.view===key||(key==="publications"&&ui.view==="publication");
     return <button key={key} className={active?"active":""} aria-current={active?"page":undefined}
      title={collapsed?def.plural:undefined} onClick={()=>go(key as ViewKey)}>
-     <def.icon/><span className="nav-text">{def.plural}</span><span className="nav-count">{counts[key]}</span>
+     <span className="sec-chip"><def.icon/></span><span className="nav-text">{key==="tasks"?"Task board":def.plural}</span><span className="nav-count">{counts[key]}</span>
     </button>;
    })}
    <button className={ui.view==="clippings"?"active":""} title="Clippings" onClick={()=>go("clippings")}><Highlighter/><span className="nav-text">Clippings</span></button>

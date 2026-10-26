@@ -9,7 +9,7 @@ import type { ViewKey } from "../lib/store";
 
 const DUE_FIELDS:Partial<Record<EntityKey,string>>={tasks:"due_at",publications:"due_at",jobs:"deadline",reminders:"remind_at",opportunities:"deadline"};
 
-export function HomeView(){
+export function HomeView({compact=false}:{compact?:boolean}){
  const {tables,projects}=useData();
  const ui=useUi();
 
@@ -44,7 +44,7 @@ export function HomeView(){
   project?"Open work assigned to this project.":"Everything open across the workspace.";
 
  return <div className="entity-view">
-  <div className="view-head">
+  {!compact&&<div className="view-head">
    <div>
     <p className="kicker">{new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</p>
     <h1>{heading}</h1>
@@ -52,6 +52,7 @@ export function HomeView(){
    </div>
   </div>
 
+  }
   <section className="stat-grid">
    {stats.map(s=><button key={s.key} className="stat-card" onClick={()=>ui.setView(s.key as ViewKey)}>
     <s.def.icon/>

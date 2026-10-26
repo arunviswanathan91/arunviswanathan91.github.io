@@ -5,12 +5,15 @@ import { ENTITIES, ENTITY_ORDER } from "../entities";
 import type { EntityKey } from "../entities/types";
 import type { ViewKey } from "../lib/store";
 
+import { useSearch, resultHref, KIND } from "../extended/modules/search/Search";
+import { SECTIONS } from "../extended/lib/sections";
 interface Item{id:string;group:string;label:string;hint?:string;icon?:any;run():void}
 
 export function CommandPalette(){
  const {tables}=useData();
  const ui=useUi();
  const [term,setTerm]=useState("");
+ const {hits}=useSearch(term);
  const [active,setActive]=useState(0);
  const inputRef=useRef<HTMLInputElement>(null);
  const dialogRef=useRef<HTMLDialogElement>(null);
@@ -35,6 +38,8 @@ export function CommandPalette(){
    out.push({id:"new:"+key,group:"Create",label:`New ${def.singular}`,icon:Plus,
     run:()=>{ui.setView(key as ViewKey);requestAnimationFrame(()=>document.dispatchEvent(new CustomEvent("dash:new",{detail:key})))}});
   }
+  for(const [key,section] of Object.entries(SECTIONS)){out.push({id:"tool:"+key,group:"Go to",label:section.label,icon:section.icon,run:()=>{window.location.hash="#/tools/"+key}})}
+  for(const hit of hits??[])out.push({id:`find:remote:${hit.kind}:${hit.id}`,group:"Workspace search",label:hit.title,hint:KIND[hit.kind].label,icon:KIND[hit.kind].icon,run:()=>{window.location.hash=resultHref(hit)}});
   const q=term.trim().toLowerCase();
   if(q){
    for(const key of ENTITY_ORDER){
@@ -49,7 +54,7 @@ export function CommandPalette(){
    }
   }
   return out;
- },[term,tables,ui]);
+ },[term,tables,ui,hits]);
 
  const filtered=useMemo(()=>{
   const q=term.trim().toLowerCase();

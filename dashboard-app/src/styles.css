@@ -1232,3 +1232,14 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .paper-note-prose th,.paper-note-prose td{border:1px solid var(--border);padding:8px 12px;white-space:normal}
 .paper-note-prose a{text-decoration:underline}
 @media(max-width:600px){.paper-note-prose{font-size:16px;padding:8px 0 24px}.paper-note-toolbar{padding:12px}.paper-note-dialog .modal-actions{flex-wrap:wrap}}
+
+:root{  --sec-home: #2f6b4f;      --sec-home-soft: #dcebe2;      --sec-home-ink: #1d4a35;
+  --sec-projects: #6b5bb5;  --sec-projects-soft: #ece8f8;  --sec-projects-ink: #3c3489;
+  --sec-tasks: #2f6fa8;     --sec-tasks-soft: #e2edf8;     --sec-tasks-ink: #0c447c;
+  --sec-papers: #b2852a;    --sec-papers-soft: #f6e9c8;    --sec-papers-ink: #5f4307;
+  --sec-notes: #3d7d8f;     --sec-notes-soft: #dcebf0;     --sec-notes-ink: #154552;
+  --sec-meetings: #b5476f;  --sec-meetings-soft: #f8e3eb;  --sec-meetings-ink: #72243e;
+  --sec-deadlines: #c2552f; --sec-deadlines-soft: #f8e4db; --sec-deadlines-ink: #712b13;
+  --sec-money: #5b8a3a;     --sec-money-soft: #e6f0da;     --sec-money-ink: #2c5212;
+  --sec-habits: #8a6f4e;    --sec-habits-soft: #efe6d8;    --sec-habits-ink: #4a3a28;}
+.sidebar .sec-chip{display:inline-grid;place-items:center;min-width:30px;height:30px;border-radius:9px;background:var(--tone-soft,var(--accent-soft));color:var(--tone,var(--accent))}.sidebar .sec-chip svg{width:17px;height:17px}.sidebar .extension-nav{display:flex;gap:10px;align-items:center;padding:8px 10px;text-decoration:none;color:var(--text);border-radius:9px}.sidebar .extension-nav:hover{background:var(--surface-2)}.sidebar.collapsed .extension-nav .nav-text{display:none}

@@ -7,7 +7,7 @@ import type { EntityDef, EntityKey, QuickAction, Row, Tone } from "./types";
 import { dayDelta } from "../lib/format";
 
 export const TASK_STATUS=["Backlog","In progress","Review","Done"] as const;
-export const PRIORITY=["Low","Medium","High"] as const;
+export const PRIORITY=["Low","Medium","High","Urgent"] as const;
 // "Under Review"/"Revision Requested" replace the older "Submitted"/"Revision" labels
 // (renamed in place in Postgres, see schema.sql) -- the waiting-on-someone-else state is
 // what you actually track, not the instant of submission. "Accepted" is split out from
