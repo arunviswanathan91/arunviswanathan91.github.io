@@ -41,3 +41,72 @@ test("per-person net nets lending against borrowing with the same person", () =>
   assert.equal(rows[0].contact.id, "c1");
 });
 
+
+// ── EMI and credit-card statements ───────────────────────────────────────────
+import { addMonthsClamped, cardUsage, emiPlan, statementPlan } from "../src/extended/modules/loans/balance.ts";
+
+const emiLoan: Loan = { ...loan("e1", "c1", "borrowed", 12000, "INR"), account_type: "bank", emi_amount: 1000, emi_first_on: "2026-01-31", emi_tenure: 12 };
+const payOn = (loan_id: string, amount: number, paid_on: string): Payment => ({ id: `${loan_id}-${paid_on}`, loan_id, amount, paid_on, note: null });
+
+test("months are added keeping the day of month, clamped to month end", () => {
+  assert.equal(addMonthsClamped("2026-01-31", 1), "2026-02-28");
+  assert.equal(addMonthsClamped("2026-01-31", 2), "2026-03-31");
+  assert.equal(addMonthsClamped("2026-11-15", 3), "2027-02-15");
+});
+
+test("EMI plan matches repayments to instalments and finds the next due date", () => {
+  const p = emiPlan(emiLoan, [payOn("e1", 1000, "2026-01-31"), payOn("e1", 1000, "2026-02-28")], "2026-03-10")!;
+  assert.equal(p.covered, 2);
+  assert.equal(p.left, 10);
+  assert.equal(p.nextDue, "2026-03-31");
+  assert.equal(p.overdueCount, 0);
+  assert.equal(p.finalDate, "2026-12-31");
+});
+
+test("an unpaid EMI past its date makes the loan overdue", () => {
+  const paid = [payOn("e1", 1000, "2026-01-31")];
+  assert.equal(emiPlan(emiLoan, paid, "2026-03-15")!.overdueCount, 1);
+  assert.equal(emiPlan(emiLoan, paid, "2026-03-15")!.dueNow, 1000);
+  assert.equal(loanStatus(emiLoan, paid, "2026-02-28"), "open");
+  assert.equal(loanStatus(emiLoan, paid, "2026-03-15"), "overdue");
+});
+
+test("clearing the loan completes the EMI schedule", () => {
+  const p = emiPlan(emiLoan, [payOn("e1", 12000, "2026-02-01")], "2026-06-01")!;
+  assert.equal(p.left, 0);
+  assert.equal(p.nextDue, null);
+});
+
+const card: Loan = { ...loan("k1", "c1", "borrowed", 20000, "INR"), account_type: "credit_card", credit_limit: 50000, minimum_due: 1000,
+  statement_amount: 15000, statement_on: "2026-10-01", statement_due_on: "2026-10-20" };
+
+test("card statement tracks minimum due, statement balance and new spending", () => {
+  let s = statementPlan(card, [], "2026-10-10")!;
+  assert.equal(s.state, "due");
+  assert.equal(s.statementLeft, 15000);
+  assert.equal(s.unbilled, 5000);
+  s = statementPlan(card, [payOn("k1", 1000, "2026-10-05")], "2026-10-10")!;
+  assert.equal(s.state, "minimum_paid");
+  assert.equal(s.minimumLeft, 0);
+  s = statementPlan(card, [payOn("k1", 15000, "2026-10-05")], "2026-10-10")!;
+  assert.equal(s.state, "paid");
+  assert.equal(s.unbilled, 5000);
+});
+
+test("payments before the statement date do not count, and a missed minimum is overdue", () => {
+  const early = [payOn("k1", 1000, "2026-09-25")];
+  assert.equal(statementPlan(card, early, "2026-10-10")!.paid, 0);
+  assert.equal(statementPlan(card, early, "2026-10-21")!.state, "overdue");
+  assert.equal(loanStatus(card, early, "2026-10-21"), "overdue");
+  const minOnly = [payOn("k1", 1000, "2026-10-15")];
+  const s = statementPlan(card, minOnly, "2026-10-21")!;
+  assert.equal(s.state, "minimum_paid");
+  assert.equal(s.interestRisk, true);
+});
+
+test("card usage is the tracked balance against the limit", () => {
+  const u = cardUsage(card, [payOn("k1", 5000, "2026-10-05")])!;
+  assert.equal(u.used, 15000);
+  assert.equal(u.available, 35000);
+  assert.equal(u.utilization, 0.3);
+});

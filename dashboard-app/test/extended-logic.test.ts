@@ -65,3 +65,43 @@ test("recurrence descriptions", () => {
   assert.equal(describeRecurrence(null), "");
 });
 
+
+// ── Habit carry-over ─────────────────────────────────────────────────────────
+import { buildPlan, loggedMap, planStreak } from "../src/extended/modules/habits/logic.ts";
+
+const reading = { frequency: "daily" as const, weekdays: [], start_date: "2026-10-20", target: 30, carry_over: true, max_carry: null };
+const plan = (rows: { day: string; amount: number | null }[], today: string, h = reading) => buildPlan(h, loggedMap(rows), today);
+
+test("a shortfall is added to the next day and checked there", () => {
+  const days = plan([{ day: "2026-10-24", amount: 10 }], "2026-10-25", { ...reading, start_date: "2026-10-24" });
+  const sat = days.at(-2)!, sun = days.at(-1)!;
+  assert.equal(sat.state, "carried");
+  assert.equal(sun.required, 50); // 30 + 20 not done on Saturday
+  assert.equal(sun.carried, 20);
+});
+
+test("finishing the stacked amount makes the short day count towards the streak", () => {
+  const rows = [20, 21, 22, 23].map((d) => ({ day: `2026-10-${d}`, amount: 30 }));
+  const days = plan([...rows, { day: "2026-10-24", amount: 10 }, { day: "2026-10-25", amount: 50 }], "2026-10-26");
+  assert.equal(days.find((d) => d.day === "2026-10-24")!.state, "made_up");
+  assert.equal(planStreak(days), 6); // 20..25, today open
+});
+
+test("a shortfall not made up the next day is missed and breaks the streak", () => {
+  const days = plan([{ day: "2026-10-23", amount: 30 }, { day: "2026-10-24", amount: 10 }, { day: "2026-10-25", amount: 30 }], "2026-10-26", { ...reading, start_date: "2026-10-23" });
+  assert.equal(days.find((d) => d.day === "2026-10-24")!.state, "missed");
+  assert.equal(days.find((d) => d.day === "2026-10-25")!.required, 50);
+  assert.equal(planStreak(days), 0);
+});
+
+test("carry respects the cap (default one day's amount) and is off without carry_over", () => {
+  assert.equal(plan([], "2026-10-25").at(-1)!.required, 60); // missing days never stack beyond one extra day
+  assert.equal(plan([], "2026-10-21", { ...reading, max_carry: 15 }).at(-1)!.required, 45);
+  assert.equal(plan([], "2026-10-21", { ...reading, carry_over: false }).at(-1)!.required, 30);
+});
+
+test("a check-in without an amount counts as the full requirement", () => {
+  const days = plan([{ day: "2026-10-24", amount: 10 }, { day: "2026-10-25", amount: null }], "2026-10-25");
+  assert.equal(days.at(-1)!.state, "done");
+  assert.equal(days.at(-2)!.state, "made_up");
+});

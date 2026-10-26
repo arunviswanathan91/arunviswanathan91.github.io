@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Archive, ArchiveRestore, ChevronLeft, ChevronRight, Flame, Pencil, Plus, Trash2 } from "lucide-react";
-import { insert, list, remove, update, useLoad } from "../../lib/db.ts";
+import { insert, list, remove, update, upsert, useLoad } from "../../lib/db.ts";
 import { addDays, fmtDate, startOfWeek, today } from "../../lib/dates.ts";
 import { WEEKDAYS, type Habit, type HabitCheckin } from "../../lib/types.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { confirmDanger, Empty, ErrorText, Field, PageHeader } from "../../components/ui.tsx";
-import { completionRate, describeSchedule, isDue, streak } from "./logic.ts";
+import { describeSchedule, formatAmount, isDue, planFor, planRate, planStreak, type DayPlan } from "./logic.ts";
 
 export function useHabits() {
   return useLoad(async () => {
@@ -22,31 +22,94 @@ export async function toggleCheckin(habitId: string, day: string, done: boolean)
   else await insert("habit_checkins", { habit_id: habitId, day });
 }
 
-/** Today's habits as a checklist (used on the dashboard too). */
+/** Set the total done on a day. A quantity habit stores the amount; zero removes the check-in. */
+export async function logAmount(habitId: string, day: string, amount: number) {
+  if (amount <= 0) await remove("habit_checkins", { habit_id: habitId, day });
+  else await upsert("habit_checkins", { habit_id: habitId, day, amount }, "habit_id,day");
+}
+
+const planOn = (plan: DayPlan[], day: string) => plan.find((p) => p.day === day);
+
+/** Today's habits as a checklist (used on the dashboard too). A shortfall carried from yesterday raises today's amount. */
 export function TodayHabits({ habits, checkins }: { habits: Habit[]; checkins: HabitCheckin[] }) {
   const now = today();
-  const due = habits.filter((h) => !h.archived_at && isDue(h, now));
+  const rows = habits
+    .filter((h) => !h.archived_at)
+    .map((h) => {
+      const plan = planFor(h, checkins, now);
+      return { h, plan, day: planOn(plan, now) };
+    })
+    .filter((r) => r.day && r.day.required > 0);
   const [error, setError] = useState("");
-  if (!due.length) return <Empty>No habits scheduled today.</Empty>;
+  const [logging, setLogging] = useState<{ h: Habit; day: DayPlan } | null>(null);
+  if (!rows.length) return <Empty>No habits scheduled today.</Empty>;
   return (
     <>
       <ErrorText error={error} />
       <ul className="habit-today">
-        {due.map((h) => {
-          const done = checkins.some((c) => c.habit_id === h.id && c.day === now);
-          const s = streak(h, new Set(checkins.filter((c) => c.habit_id === h.id).map((c) => c.day)), now);
+        {rows.map(({ h, plan, day }) => {
+          const d = day!;
+          const done = d.state === "done";
+          const s = planStreak(plan);
           return (
             <li key={h.id} className={done ? "closed" : ""}>
-              <label>
-                <input type="checkbox" className="check" checked={done} onChange={() => void toggleCheckin(h.id, now, done).catch((e) => setError(e.message))} />
-                <span>{h.name}</span>
-              </label>
+              {h.target ? (
+                <>
+                  <span>
+                    {h.name} <span className="muted small">{formatAmount(d.logged, h.unit)} / {formatAmount(d.required, h.unit)}</span>
+                    {d.carried > 0 && <span className="badge open" title="Not finished yesterday, added to today"> +{formatAmount(d.carried, h.unit)} carried</span>}
+                  </span>
+                  <button className="small" onClick={() => setLogging({ h, day: d })}>{done ? "Edit" : "Log"}</button>
+                </>
+              ) : (
+                <label>
+                  <input type="checkbox" className="check" checked={done} onChange={() => void toggleCheckin(h.id, now, done).catch((e) => setError(e.message))} />
+                  <span>{h.name}</span>
+                </label>
+              )}
               {s > 0 && <span className="streak" title={`${s}-day streak`}><Flame size={13} /> {s}</span>}
             </li>
           );
         })}
       </ul>
+      {logging && (
+        <Modal title={`Log ${logging.h.name}`} onClose={() => setLogging(null)}>
+          <LogForm habit={logging.h} day={logging.day} onDone={() => setLogging(null)} />
+        </Modal>
+      )}
     </>
+  );
+}
+
+/** Enter the total done on one day. Falling short is fine: if the habit carries over, the rest is added to the next day. */
+function LogForm({ habit, day, onDone }: { habit: Habit; day: DayPlan; onDone: () => void }) {
+  const [amount, setAmount] = useState(String(day.logged || day.required));
+  const [error, setError] = useState("");
+  const value = Number(amount);
+  const short = Math.max(0, day.required - value);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await logAmount(habit.id, day.day, value);
+      onDone();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  return (
+    <form className="form" onSubmit={submit}>
+      <p className="muted">
+        {fmtDate(day.day, { weekday: "long", day: "numeric", month: "short" })} · needed {formatAmount(day.required, habit.unit)}
+        {day.carried > 0 && ` (${formatAmount(day.base, habit.unit)} + ${formatAmount(day.carried, habit.unit)} carried over)`}
+      </p>
+      <Field label={`Total done${habit.unit ? ` (${habit.unit})` : ""}`}>
+        <input required autoFocus type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      </Field>
+      {short > 0 && day.day < today() && habit.carry_over && <p className="muted small">{formatAmount(short, habit.unit)} short; the next day will ask for it as well.</p>}
+      {short > 0 && day.day === today() && habit.carry_over && <p className="muted small">If you stop here, {formatAmount(short, habit.unit)} is added to tomorrow.</p>}
+      <ErrorText error={error} />
+      <div className="form-actions"><button className="primary" disabled={!(value >= 0)}>Save</button></div>
+    </form>
   );
 }
 
@@ -61,7 +124,8 @@ export function HabitsView() {
   const active = habits.filter((h) => !h.archived_at);
   const archived = habits.filter((h) => h.archived_at);
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
-  const doneSet = (id: string) => new Set(checkins.filter((c) => c.habit_id === id).map((c) => c.day));
+  const planOf = (h: Habit) => planFor(h, checkins, now);
+  const [logging, setLogging] = useState<{ h: Habit; day: DayPlan } | null>(null);
 
   return (
     <section>
@@ -91,25 +155,28 @@ export function HabitsView() {
                   </thead>
                   <tbody>
                     {active.map((h) => {
-                      const done = doneSet(h.id);
+                      const plan = planOf(h);
                       return (
                         <tr key={h.id}>
                           <td>{h.name}</td>
                           {days.map((d) => {
-                            const due = isDue(h, d);
-                            const isDone = done.has(d);
+                            const p = planOn(plan, d);
                             const future = d > now;
+                            const show = future ? isDue(h, d) : !!p && (p.required > 0 || p.logged > 0);
+                            const isDone = p?.state === "done" || p?.state === "made_up";
+                            const cls = p?.state === "made_up" ? "done" : p?.state === "missed" ? "miss" : isDone ? "done" : "";
                             return (
                               <td key={d} className={d === now ? "today" : ""}>
-                                {due || isDone ? (
+                                {show ? (
                                   <button
-                                    className={`cell ${isDone ? "done" : ""}`}
+                                    className={`cell ${cls}`}
                                     disabled={future}
                                     aria-label={`${h.name} on ${d}: ${isDone ? "done" : "not done"}`}
                                     aria-pressed={isDone}
-                                    onClick={() => void toggleCheckin(h.id, d, isDone)}
+                                    title={p && h.target ? `${formatAmount(p.logged, h.unit)} of ${formatAmount(p.required, h.unit)}${p.carried ? ` (incl. ${formatAmount(p.carried, h.unit)} carried)` : ""}` : undefined}
+                                    onClick={() => (h.target && p ? setLogging({ h, day: p }) : void toggleCheckin(h.id, d, isDone))}
                                   >
-                                    {isDone ? "✓" : ""}
+                                    {h.target && p ? (p.logged > 0 ? Math.round(p.logged * 10) / 10 : "") : isDone ? "✓" : ""}
                                   </button>
                                 ) : <span className="cell off" aria-hidden>·</span>}
                               </td>
@@ -131,8 +198,8 @@ export function HabitsView() {
             {active.length === 0 ? <p className="muted small">Add a habit to see progress.</p> : (
               <ul className="habit-stats">
                 {active.map((h) => {
-                  const done = doneSet(h.id);
-                  const r = completionRate(h, done, now, 30);
+                  const plan = planOf(h);
+                  const r = planRate(plan, 30);
                   const pct = r.due ? Math.round((100 * r.done) / r.due) : 0;
                   return (
                     <li key={h.id}>
@@ -143,8 +210,8 @@ export function HabitsView() {
                           <button className="icon" aria-label={`Archive ${h.name}`} onClick={() => void update("habits", h.id, { archived_at: new Date().toISOString() })}><Archive size={13} /></button>
                         </span>
                       </div>
-                      <span className="muted small">{describeSchedule(h)} · <Flame size={12} /> {streak(h, done, now)} streak · {pct}% of last 30 days</span>
-                      <History habit={h} done={done} />
+                      <span className="muted small">{describeSchedule(h)}{h.target ? ` · ${formatAmount(h.target, h.unit)} a day${h.carry_over ? ", shortfall carries to next day" : ""}` : ""} · <Flame size={12} /> {planStreak(plan)} streak · {pct}% of last 30 days</span>
+                      <History habit={h} plan={plan} />
                     </li>
                   );
                 })}
@@ -159,7 +226,7 @@ export function HabitsView() {
                   {archived.map((h) => (
                     <li key={h.id}>
                       <div className="habit-stat-head">
-                        <span>{h.name} <span className="muted small">· {doneSet(h.id).size} check-ins kept</span></span>
+                        <span>{h.name} <span className="muted small">· {checkins.filter((c) => c.habit_id === h.id).length} check-ins kept</span></span>
                         <span className="row">
                           <button className="icon" aria-label={`Restore ${h.name}`} onClick={() => void update("habits", h.id, { archived_at: null })}><ArchiveRestore size={13} /></button>
                           <button className="icon danger" aria-label={`Delete ${h.name}`} onClick={() => confirmDanger(`Permanently delete “${h.name}” and all its history?`) && void remove("habits", { id: h.id })}><Trash2 size={13} /></button>
@@ -173,6 +240,11 @@ export function HabitsView() {
           )}
         </aside>
       </div>
+      {logging && (
+        <Modal title={`Log ${logging.h.name}`} onClose={() => setLogging(null)}>
+          <LogForm habit={logging.h} day={logging.day} onDone={() => setLogging(null)} />
+        </Modal>
+      )}
       {editing && (
         <Modal title={editing === "new" ? "New habit" : "Edit habit"} onClose={() => setEditing(null)}>
           <HabitForm habit={editing === "new" ? undefined : editing} position={habits.length} onDone={() => setEditing(null)} />
@@ -182,17 +254,20 @@ export function HabitsView() {
   );
 }
 
+const heat = (s: DayPlan["state"] | undefined) => (s === "done" || s === "made_up" ? "on" : s === "missed" ? "miss" : s === "open" || s === "carried" ? "miss" : "off");
+
 /** Last 12 weeks as a small grid: one column per week, Monday at the top. */
-function History({ habit, done }: { habit: Habit; done: Set<string> }) {
+function History({ habit, plan }: { habit: Habit; plan: DayPlan[] }) {
   const now = today();
   const start = addDays(startOfWeek(now), -77);
+  const state = new Map(plan.map((p) => [p.day, p.state]));
   const weeks = Array.from({ length: 12 }, (_, w) => Array.from({ length: 7 }, (_, d) => addDays(start, w * 7 + d)));
   return (
     <div className="heatmap" aria-label={`${habit.name}, last 12 weeks`}>
       {weeks.map((days, i) => (
         <div key={i} className="heat-col">
           {days.map((d) => (
-            <span key={d} title={d} className={`heat ${d > now ? "future" : done.has(d) ? "on" : isDue(habit, d) ? "miss" : "off"}`} />
+            <span key={d} title={d} className={`heat ${d > now ? "future" : heat(state.get(d))}`} />
           ))}
         </div>
       ))}
@@ -206,11 +281,20 @@ function HabitForm({ habit, position, onDone }: { habit?: Habit; position: numbe
   const [frequency, setFrequency] = useState<Habit["frequency"]>(habit?.frequency ?? "daily");
   const [weekdays, setWeekdays] = useState<number[]>(habit?.weekdays ?? [1, 2, 3, 4, 5]);
   const [start, setStart] = useState(habit?.start_date ?? today());
+  const [target, setTarget] = useState(habit?.target == null ? "" : String(habit.target));
+  const [unit, setUnit] = useState(habit?.unit ?? "");
+  const [carry, setCarry] = useState(habit?.carry_over ?? false);
+  const [maxCarry, setMaxCarry] = useState(habit?.max_carry == null ? "" : String(habit.max_carry));
   const [error, setError] = useState("");
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const values = { name: name.trim(), description: description.trim() || null, frequency, weekdays: frequency === "daily" ? [] : weekdays, start_date: start };
+    const values = { name: name.trim(), description: description.trim() || null, frequency, weekdays: frequency === "daily" ? [] : weekdays, start_date: start,
+      target: target === "" ? null : Number(target),
+      unit: target === "" ? null : unit.trim() || null,
+      carry_over: target !== "" && carry,
+      max_carry: target !== "" && carry && maxCarry !== "" ? Number(maxCarry) : null,
+    };
     try {
       if (habit) await update("habits", habit.id, values);
       else await insert("habits", { ...values, position });
@@ -241,6 +325,16 @@ function HabitForm({ habit, position, onDone }: { habit?: Habit; position: numbe
             return <button key={d} type="button" aria-pressed={on} className={on ? "on" : ""} onClick={() => setWeekdays((w) => (w.includes(n) ? w.filter((x) => x !== n) : [...w, n].sort()))}>{d}</button>;
           })}
         </div>
+      )}
+      <div className="grid-2">
+        <Field label="Daily amount (optional)"><input type="number" min="0.01" step="any" value={target} placeholder="e.g. 30" onChange={(e) => setTarget(e.target.value)} /></Field>
+        <Field label="Unit"><input value={unit} disabled={target === ""} placeholder="e.g. min, pages" onChange={(e) => setUnit(e.target.value)} /></Field>
+      </div>
+      {target !== "" && (
+        <>
+          <label className="check-row"><input type="checkbox" checked={carry} onChange={(e) => setCarry(e.target.checked)} /> Carry a shortfall over to the next day</label>
+          {carry && <Field label="Carry at most (optional)"><input type="number" min="0" step="any" value={maxCarry} placeholder="default: one day’s amount" onChange={(e) => setMaxCarry(e.target.value)} /></Field>}
+        </>
       )}
       <ErrorText error={error || (frequency === "weekdays" && !weekdays.length ? "Pick at least one weekday" : "")} />
       <div className="form-actions"><button className="primary" disabled={frequency === "weekdays" && !weekdays.length}>{habit ? "Save" : "Add habit"}</button></div>

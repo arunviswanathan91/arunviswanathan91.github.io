@@ -206,10 +206,19 @@ export interface Habit {
   start_date: string;
   archived_at: string | null;
   position: number;
+  /** Daily quantity (e.g. 30 with unit "min"). Null for a plain done / not done habit. */
+  target: number | null;
+  unit: string | null;
+  /** A shortfall rolls into the next day's requirement. */
+  carry_over: boolean;
+  /** Most that can be carried into one day; null = no limit. */
+  max_carry: number | null;
 }
 export interface HabitCheckin {
   habit_id: string;
   day: string;
+  /** Quantity done that day; null means the full requirement. */
+  amount: number | null;
 }
 
 export interface Attachment {
