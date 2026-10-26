@@ -27,3 +27,7 @@ Restore requires the original signed-in account. It adds or updates matching IDs
 `cd dashboard-app && npm run check` runs original tests, imported finance/habit/identifier tests, and PostgreSQL integration tests through PGlite, then builds. Database tests cover rerunnable setup, compatibility writes, recurrence deduplication, global search, account isolation and atomic backup restore.
 
 `cd pipeline && TZ=UTC npm run check` runs discovery checks in GitHub Actions' timezone.
+
+## Finance accounts
+
+Apply `supabase/finance-accounts.sql` after `workspace-extension.sql`. Budget → Categories has a separate category-name field. Loans & cards → Add loan / card supports personal loans, bank loans and credit cards. Credit cards store a display name, bank, last four digits, starting balance, optional limit, minimum due and due date. Edit changes saved details. Repayments subtract from the starting balance; spending, interest and updated statement values are manual. Do not replace the starting balance with a current balance that already subtracts recorded repayments. No full card number, CVV or bank connection is required.

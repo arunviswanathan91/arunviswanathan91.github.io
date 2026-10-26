@@ -647,3 +647,5 @@
 .extension-workspace svg{width:revert;height:revert;stroke-width:revert}
 .extension-workspace .ring svg{width:100%;height:100%}
 @media print{body.workspace-print .sidebar,body.workspace-print .topbar{display:none!important}body.workspace-print .shell{display:block}body.workspace-print .page{padding:0}body.workspace-print .extension-workspace{padding:0;background:white}}
+
+.extension-workspace .category-create{display:grid;gap:12px}.extension-workspace .category-create label{color:var(--text)}.extension-workspace .form>label{color:var(--text)}.extension-workspace input::placeholder{color:var(--muted);opacity:1}.extension-workspace .row>select{width:auto;flex:0 1 140px}.extension-workspace .row>input{min-width:120px}

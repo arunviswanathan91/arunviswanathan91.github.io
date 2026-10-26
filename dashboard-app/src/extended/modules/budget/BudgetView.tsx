@@ -233,14 +233,11 @@ function CategoryManager({ categories }: { categories: BudgetCategory[] }) {
           </ul>
         </div>
       ))}
-      <div className="row">
-        <select aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as BudgetCategory["kind"])}>
-          <option value="expense">Expense</option>
-          <option value="income">Income</option>
-        </select>
-        <input placeholder="New category, e.g. Groceries" aria-label="New category" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && name.trim() && (e.preventDefault(), void run(insert("budget_categories", { name: name.trim(), kind }).then(() => setName(""))))} />
-        <button onClick={() => name.trim() && void run(insert("budget_categories", { name: name.trim(), kind }).then(() => setName("")))}><Plus size={15} /> Add</button>
-      </div>
+      <form className="category-create" onSubmit={e=>{e.preventDefault();if(name.trim())void run(insert("budget_categories",{name:name.trim(),kind}).then(()=>setName("")))}}>
+        <label>Category name<input required placeholder="e.g. Groceries or Card repayments" aria-label="New category" value={name} onChange={e=>setName(e.target.value)} /></label>
+        <label>Category type<select value={kind} onChange={e=>setKind(e.target.value as BudgetCategory["kind"])}><option value="expense">Expense</option><option value="income">Income</option></select></label>
+        <button type="submit" disabled={!name.trim()}><Plus size={15}/> Add category</button>
+      </form>
       <ErrorText error={error} />
     </div>
   );

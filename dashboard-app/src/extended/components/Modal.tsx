@@ -7,7 +7,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
     const dialog = ref.current;
     dialog?.showModal();
     // showModal() focuses the close button; start in the first field instead.
-    dialog?.querySelector<HTMLElement>("[autofocus], input, select, textarea")?.focus();
+    dialog?.querySelector<HTMLElement>("input:not([type=hidden]), textarea")?.focus();
   }, []);
   return (
     <dialog ref={ref} className={`modal ${wide ? "wide" : ""}`} onClose={onClose} onMouseDown={(e) => e.target === ref.current && onClose()}>
