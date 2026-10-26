@@ -1,11 +1,11 @@
 // Each section's name, icon and colour, used by the menu, page headers, badges, cards and search.
 // Colours are CSS variables (see styles.css: --sec-<id>, --sec-<id>-soft, --sec-<id>-ink).
 import {
-  CalendarClock, CheckSquare, FileText, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, Users, Wallet, type LucideIcon,
+  CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, FileText, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 
 export type SectionId =
-  | "home" | "projects" | "tasks" | "papers" | "notes" | "meetings" | "deadlines" | "budget" | "loans" | "habits" | "search" | "settings";
+  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "meetings" | "deadlines" | "budget" | "loans" | "habits" | "search" | "settings";
 
 export interface Section {
   id: SectionId;
@@ -17,6 +17,8 @@ export interface Section {
 
 export const SECTIONS: Record<SectionId, Section> = {
   home: { id: "home", label: "Dashboard", icon: Home, tone: "home" },
+  agenda: { id: "agenda", label: "Agenda", icon: CalendarDays, tone: "deadlines" },
+  review: { id: "review", label: "Weekly review", icon: ClipboardCheck, tone: "home" },
   projects: { id: "projects", label: "Projects", icon: Folder, tone: "projects" },
   tasks: { id: "tasks", label: "Tasks", icon: CheckSquare, tone: "tasks" },
   papers: { id: "papers", label: "Papers", icon: FileText, tone: "papers" },

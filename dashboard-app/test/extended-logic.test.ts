@@ -91,7 +91,14 @@ test("a shortfall not made up the next day is missed and breaks the streak", () 
   const days = plan([{ day: "2026-10-23", amount: 30 }, { day: "2026-10-24", amount: 10 }, { day: "2026-10-25", amount: 30 }], "2026-10-26", { ...reading, start_date: "2026-10-23" });
   assert.equal(days.find((d) => d.day === "2026-10-24")!.state, "missed");
   assert.equal(days.find((d) => d.day === "2026-10-25")!.required, 50);
-  assert.equal(planStreak(days), 0);
+  assert.equal(days.find((d) => d.day === "2026-10-25")!.state, "done"); // its own 30 was done
+  assert.equal(planStreak(days), 1); // the 25th counts, the missed 24th stops the streak
+});
+
+test("an old miss does not snowball: only the previous day's own shortfall is carried", () => {
+  const rows = [{ day: "2026-10-21", amount: 0 }, { day: "2026-10-22", amount: 30 }, { day: "2026-10-23", amount: 30 }];
+  const days = plan(rows, "2026-10-24", { ...reading, start_date: "2026-10-21" });
+  assert.deepEqual(days.map((d) => [d.required, d.state]), [[30, "missed"], [60, "done"], [30, "done"], [30, "open"]]);
 });
 
 test("carry respects the cap (default one day's amount) and is off without carry_over", () => {
@@ -104,4 +111,49 @@ test("a check-in without an amount counts as the full requirement", () => {
   const days = plan([{ day: "2026-10-24", amount: 10 }, { day: "2026-10-25", amount: null }], "2026-10-25");
   assert.equal(days.at(-1)!.state, "done");
   assert.equal(days.at(-2)!.state, "made_up");
+});
+
+// ── Weekly targets and breaks ───────────────────────────────────────────────
+import { buildPeriodPlan, summarise } from "../src/extended/modules/habits/logic.ts";
+import type { Habit } from "../src/extended/lib/types.ts";
+
+const weekly = { frequency: "daily" as const, weekdays: [], start_date: "2026-10-05", target: 150, carry_over: true, max_carry: null, period: "week" as const };
+
+test("a weekly target counts any days and carries a short week into the next", () => {
+  // Week of 5 Oct: 100 of 150. Week of 12 Oct: 200 of 150 + 50 carried → made up. Week of 19 Oct: nothing.
+  const logged = loggedMap([{ day: "2026-10-06", amount: 60 }, { day: "2026-10-09", amount: 40 }, { day: "2026-10-14", amount: 200 }]);
+  const weeks = buildPeriodPlan(weekly, logged, "2026-10-27");
+  assert.deepEqual(weeks.map((w) => [w.start, w.required, w.logged, w.state]), [
+    ["2026-10-05", 150, 100, "made_up"],
+    ["2026-10-12", 200, 200, "done"],
+    ["2026-10-19", 150, 0, "carried"],
+    ["2026-10-26", 300, 0, "open"],
+  ]);
+});
+
+test("a break lowers the period target and keeps the streak", () => {
+  const logged = loggedMap([{ day: "2026-10-06", amount: 150 }]);
+  const pauses = [{ from: "2026-10-12", to: "2026-10-18" }, { from: "2026-10-19", to: "2026-10-21" }];
+  const weeks = buildPeriodPlan({ ...weekly, carry_over: false }, logged, "2026-10-22", "2026-10-05", pauses);
+  assert.equal(weeks[1].state, "paused");
+  assert.equal(weeks[2].base, Math.round((150 * 4 * 100) / 7) / 100); // 4 of 7 days active
+});
+
+test("paused days require nothing and hold the carry until the break ends", () => {
+  const days = plan([{ day: "2026-10-20", amount: 10 }], "2026-10-23", { ...reading, start_date: "2026-10-20" });
+  const withBreak = buildPlan({ ...reading, start_date: "2026-10-20" }, loggedMap([{ day: "2026-10-20", amount: 10 }, { day: "2026-10-23", amount: 50 }]), "2026-10-23", "2026-10-20", [{ from: "2026-10-21", to: "2026-10-22" }]);
+  assert.equal(days.at(-1)!.required, 60);
+  assert.deepEqual(withBreak.map((d) => d.state), ["made_up", "paused", "paused", "done"]);
+  assert.equal(withBreak.at(-1)!.carried, 20);
+});
+
+test("summary works for day and week habits", () => {
+  const base = { id: "h1", name: "x", description: null, archived_at: null, position: 0, unit: "min", max_carry: null } as const;
+  const week: Habit = { ...base, ...weekly };
+  const s = summarise(week, [{ habit_id: "h1", day: "2026-10-26", amount: 30 }], "2026-10-27");
+  assert.equal(s.scope, "this week");
+  assert.equal(s.now!.logged, 30);
+  const day: Habit = { ...base, ...reading, period: "day" };
+  assert.equal(summarise(day, [], "2026-10-27", [{ from: "2026-10-27", to: "2026-10-27", habit_id: "h1" }]).now!.state, "paused");
+  assert.equal(summarise(day, [], "2026-10-27", [{ from: "2026-10-27", to: "2026-10-27", habit_id: "other" }]).now!.state, "open");
 });

@@ -13,6 +13,8 @@ export function SettingsView() {
   const settings = useSettings();
   const [currency, setCurrency] = useState(settings.default_currency);
   const [timezone, setTimezone] = useState(settings.timezone);
+  const followupOf = (n: number | null | undefined) => (n === undefined ? "60" : n === null ? "" : String(n));
+  const [followup, setFollowup] = useState(followupOf(settings.publication_followup_days));
   const [saved, setSaved] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
@@ -24,7 +26,8 @@ export function SettingsView() {
   useEffect(() => {
     setCurrency(settings.default_currency);
     setTimezone(settings.timezone);
-  }, [settings.default_currency, settings.timezone]);
+    setFollowup(followupOf(settings.publication_followup_days));
+  }, [settings.default_currency, settings.timezone, settings.publication_followup_days]);
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(true);
@@ -96,7 +99,7 @@ export function SettingsView() {
               onSubmit={(e) => {
                 e.preventDefault();
                 void run("Saving…", async () => {
-                  await saveSettings({ default_currency: currency, timezone });
+                  await saveSettings({ default_currency: currency, timezone, publication_followup_days: followup === "" ? null : Math.max(1, Math.round(Number(followup))) });
                   setProgress("");
                   setSaved("Saved.");
                   setTimeout(() => setSaved(""), 2000);
@@ -112,7 +115,11 @@ export function SettingsView() {
                 <Field label="Time zone">
                   <input value={timezone} onChange={(e) => setTimezone(e.target.value)} />
                 </Field>
+                <Field label="Chase papers under review after (days)">
+                  <input type="number" min="1" step="1" value={followup} placeholder="Off" onChange={(e) => setFollowup(e.target.value)} />
+                </Field>
               </div>
+              <p className="muted small">A Telegram reminder is sent when a manuscript has been Under Review or Revision Requested this long, and again every same number of days. Leave empty to turn it off.</p>
               <div className="form-actions">
                 {saved && <span className="pos small">{saved}</span>}
                 <button className="primary" disabled={busy}>Save</button>

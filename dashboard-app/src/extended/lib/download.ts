@@ -45,3 +45,16 @@ export function downloadNotes(notes: Note[], names: { project?: (id: string) => 
   downloadBlob(new Blob([new Uint8Array(zipSync(files)).buffer], { type: "application/zip" }), `notes-${new Date().toISOString().slice(0, 10)}.zip`);
 }
 
+
+/** RFC 4180 CSV with a BOM so Excel opens UTF-8 (₹, ö) correctly. */
+export function toCsv(rows: (string | number | null | undefined)[][]): string {
+  const cell = (v: string | number | null | undefined) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return "\ufeff" + rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
+}
+
+export function downloadCsv(name: string, rows: (string | number | null | undefined)[][]) {
+  downloadBlob(new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" }), `${safeFilename(name)}-${new Date().toISOString().slice(0, 10)}.csv`);
+}

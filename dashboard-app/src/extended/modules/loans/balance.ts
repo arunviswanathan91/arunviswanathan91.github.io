@@ -24,6 +24,8 @@ export interface Loan {
   statement_amount?: number | null;
   statement_on?: string | null;
   statement_due_on?: string | null;
+  /** Net card spending recorded in the budget (expenses minus refunds), added to the balance. */
+  charged?: number;
   id: string;
   contact_id: string;
   direction: Direction;
@@ -50,9 +52,35 @@ export function paidCents(loan: Loan, payments: Payment[]): number {
   return payments.filter((p) => p.loan_id === loan.id).reduce((sum, p) => sum + cents(p.amount), 0);
 }
 
+/** Starting amount plus card spending: everything that has been owed on this account. */
+export function totalOwed(loan: Loan): number {
+  return (cents(loan.amount) + cents(loan.charged ?? 0)) / 100;
+}
+
 /** What is still outstanding on a loan, never below zero. */
 export function remaining(loan: Loan, payments: Payment[]): number {
-  return Math.max(0, cents(loan.amount) - paidCents(loan, payments)) / 100;
+  return Math.max(0, cents(totalOwed(loan)) - paidCents(loan, payments)) / 100;
+}
+
+/** Card spending entries (budget transactions linked to a card). */
+export interface Charge {
+  id: string;
+  loan_id: string;
+  kind: "income" | "expense" | "transfer";
+  description: string;
+  amount: number;
+  occurred_on: string;
+}
+
+/** Net spending per card in cents: expenses add, refunds (income) subtract. */
+export function chargedByLoan(charges: Charge[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const c of charges) {
+    const sign = c.kind === "expense" ? 1 : c.kind === "income" ? -1 : 0;
+    out[c.loan_id] = (out[c.loan_id] ?? 0) + sign * cents(c.amount);
+  }
+  for (const k of Object.keys(out)) out[k] /= 100;
+  return out;
 }
 
 export function loanStatus(loan: Loan, payments: Payment[], today: string): LoanStatus {
@@ -236,3 +264,75 @@ export function todayISO(now = new Date()): string {
   return local.toISOString().slice(0, 10);
 }
 
+
+export interface AmortisationRow {
+  n: number;
+  date: string;
+  emi: number;
+  interest: number;
+  principal: number;
+  balance: number;
+}
+
+export interface Amortisation {
+  principal: number;
+  totalInterest: number;
+  rows: AmortisationRow[];
+  /** Principal still owed after the instalments covered so far. */
+  outstandingPrincipal: number;
+  /** Interest saved by paying the outstanding principal now instead of the remaining EMIs. */
+  prepaySaving: number;
+}
+
+/**
+ * Reducing-balance schedule implied by the EMI, annual rate and tenure. The principal is derived from
+ * the EMI (P = EMI × (1 − (1 + r)^−n) / r), so it works whatever the loan's tracked amount includes.
+ */
+export function amortisation(loan: Loan, payments: Payment[], today: string): Amortisation | null {
+  const plan = emiPlan(loan, payments, today);
+  if (!plan || !loan.emi_tenure || loan.interest_rate == null || !loan.emi_first_on) return null;
+  const n = loan.emi_tenure;
+  const r = loan.interest_rate / 1200;
+  const principal = r === 0 ? plan.emi * n : (plan.emi * (1 - Math.pow(1 + r, -n))) / r;
+  const rows: AmortisationRow[] = [];
+  let balance = principal;
+  for (let i = 0; i < n; i++) {
+    const interest = balance * r;
+    const part = i === n - 1 ? balance : plan.emi - interest;
+    balance = Math.max(0, balance - part);
+    rows.push({ n: i + 1, date: addMonthsClamped(loan.emi_first_on, i), emi: round2(interest + part), interest: round2(interest), principal: round2(part), balance: round2(balance) });
+  }
+  const outstandingPrincipal = plan.covered === 0 ? round2(principal) : rows[plan.covered - 1]?.balance ?? 0;
+  const remainingEmis = rows.slice(plan.covered).reduce((sum, row) => sum + row.emi, 0);
+  return {
+    principal: round2(principal),
+    totalInterest: round2(rows.reduce((sum, row) => sum + row.interest, 0)),
+    rows,
+    outstandingPrincipal,
+    prepaySaving: round2(Math.max(0, remainingEmis - outstandingPrincipal)),
+  };
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Suggested values for the next month's statement: a month after the current one (same gap to the due date), for the balance owed now. */
+export function nextStatementDefaults(loan: Loan, payments: Payment[], today: string): { statement_on: string; statement_due_on: string; statement_amount: number; minimum_due: number } {
+  const statementOn = loan.statement_on ? addMonthsClamped(loan.statement_on, 1) : today;
+  const gap = loan.statement_on && loan.statement_due_on ? daysBetween(loan.statement_on, loan.statement_due_on) : 20;
+  const amount = remaining(loan, payments);
+  return {
+    statement_on: statementOn,
+    statement_due_on: addDaysISO(statementOn, gap),
+    statement_amount: amount,
+    // Indian issuers commonly ask for about 5 %; the user edits it to match the bill.
+    minimum_due: Math.min(amount, Math.ceil(amount * 0.05)),
+  };
+}
+
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400000);
+}
+
+function addDaysISO(day: string, n: number): string {
+  return new Date(Date.parse(`${day}T12:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+}

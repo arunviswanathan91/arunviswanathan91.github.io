@@ -3,6 +3,7 @@ import { useRoute, type Route } from "./lib/route";
 import { toneStyle, type SectionId, SECTIONS } from "./lib/sections";
 import "./styles.css";
 import { QuickAddHost } from "./components/QuickAdd.tsx";
+import { AgendaView } from "./modules/agenda/AgendaView.tsx";
 import { BudgetView } from "./modules/budget/BudgetView.tsx";
 import { DeadlinePage } from "./modules/deadlines/DeadlinePage.tsx";
 import { DeadlinesView } from "./modules/deadlines/DeadlinesView.tsx";
@@ -16,6 +17,7 @@ import { NotesView } from "./modules/notes/NotesView.tsx";
 import { PaperPage } from "./modules/papers/PaperPage.tsx";
 import { PapersView } from "./modules/papers/PapersView.tsx";
 import { PrintMeetings, PrintProject } from "./modules/print/PrintViews.tsx";
+import { ReviewView } from "./modules/review/ReviewView.tsx";
 import { ProjectPage } from "./modules/projects/ProjectPage.tsx";
 import { ProjectsView } from "./modules/projects/ProjectsView.tsx";
 import { SearchPalette, SearchView } from "./modules/search/Search.tsx";
@@ -24,6 +26,8 @@ import { TasksView } from "./modules/tasks/TasksView.tsx";
 function Page({ route }: { route: Route }) {
   const [section, id] = route.path;
   switch (section) {
+    case "agenda": return <AgendaView />;
+    case "review": return <ReviewView />;
     case "projects": return id ? <ProjectPage id={id} route={route} /> : <ProjectsView route={route} />;
     case "tasks": return <TasksView route={route} />;
     case "papers": return id ? <PaperPage id={id} /> : <PapersView route={route} />;

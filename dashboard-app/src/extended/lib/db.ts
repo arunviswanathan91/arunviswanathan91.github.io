@@ -8,7 +8,7 @@ export function sb() {
   return supabase;
 }
 
-const CHANGED = "ws:changed";
+export const CHANGED = "ws:changed";
 export function emitChange() {
   window.dispatchEvent(new Event(CHANGED));
 }

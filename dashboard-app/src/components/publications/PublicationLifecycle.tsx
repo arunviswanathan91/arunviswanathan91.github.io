@@ -43,6 +43,9 @@ export function PublicationLifecycle({publication,canEdit=true,canReassign=true}
   paperTagIds.some(tagId=>tags.idsFor("project",project.id).includes(tagId)));
  const next=String(publication.next_action||"").trim()||fallbackAction(stage);
  const outcomes=possibleOutcomes(stage);
+ const enteredAt=events.find(e=>e.to_stage===stage)?.created_at??publication.updated_at??publication.created_at;
+ const daysInStage=enteredAt?Math.max(0,Math.floor((Date.now()-Date.parse(enteredAt))/86400000)):null;
+ const waiting=(stage==="Under Review"||stage==="Revision Requested")&&daysInStage!==null&&daysInStage>=60;
 
  const history=events.map(event=>({
   id:event.id,
@@ -87,6 +90,7 @@ export function PublicationLifecycle({publication,canEdit=true,canReassign=true}
    </ol>
   </div>
 
+  {daysInStage!==null&&<p className={"paper-stage-age"+(waiting?" is-long":"")}>In {stage} for {daysInStage} day{daysInStage===1?"":"s"}{!events.some(e=>e.to_stage===stage)?" (since last edit)":""}{waiting?" — a polite note to the editor is reasonable now.":""}</p>}
   <p className="paper-next-action"><strong>Next action:</strong> {next}{outcomes&&<> · <span>Possible outcomes: {outcomes}.</span></>}</p>
 
   {canReassign&&<div className="paper-project-relations">

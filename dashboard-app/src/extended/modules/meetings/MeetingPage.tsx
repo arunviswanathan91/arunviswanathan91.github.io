@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Archive, ArchiveRestore, ArrowLeft, CheckSquare, FileDown, Plus, Trash2, UserPlus } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, CheckSquare, FileDown, ListPlus, Plus, Trash2, UserPlus } from "lucide-react";
+import { supabase as original } from "../../../lib/supabase";
 import { emitChange, getOne, insert, list, remove, rpc, update, useLoad } from "../../lib/db.ts";
-import { fromLocalInput, toLocalInput } from "../../lib/dates.ts";
+import { addDays, fmtDate, fromLocalInput, toLocalInput, today } from "../../lib/dates.ts";
+import { prepAgenda } from "./prep.ts";
 import { go, href } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
-import { MEETING_TYPE, type ActionItem, type ContactRow, type Meeting, type MeetingParticipant, type MeetingProject, type MeetingType, type Task } from "../../lib/types.ts";
+import { MEETING_TYPE, type ActionItem, type ContactRow, type Deadline, type Meeting, type MeetingParticipant, type MeetingProject, type MeetingType, type Paper, type Task } from "../../lib/types.ts";
 import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { MultiPicker, useContacts, useProjects } from "../../components/pickers.tsx";
@@ -60,6 +62,39 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
     go("meetings");
   }
 
+  // Fill the agenda from what changed since the previous meeting of this type (tasks, manuscripts, papers, deadlines).
+  async function prepare() {
+    const [prev] = await list<Meeting>("meetings", { eq: { type: m.type }, lt: ["starts_at", m.starts_at], order: [["starts_at", false]], limit: 1 });
+    const since = prev?.starts_at ?? new Date(Date.parse(m.starts_at) - 14 * 86400000).toISOString();
+    const projectIds = links?.proj.map((l) => l.project_id) ?? [];
+    const inScope = (pid: string | null) => !projectIds.length || (pid !== null && projectIds.includes(pid));
+    const now = today();
+    const [done, open, papers, deadlines, events] = await Promise.all([
+      list<Task>("tasks", { eq: { status: "done" }, gte: ["completed_at", since] }),
+      list<Task>("tasks", { in: ["status", ["todo", "in_progress"]] }),
+      list<Paper>("papers", { gte: ["finished_on", since.slice(0, 10)] }),
+      list<Deadline>("deadlines", { in: ["status", ["upcoming", "in_progress"]], lt: ["due_date", addDays(now, 31)], order: [["due_date"]] }),
+      original
+        ? original.from("publication_stage_events").select("publication_id,from_stage,to_stage,created_at,publications(title)").gte("created_at", since).order("created_at")
+        : Promise.resolve({ data: [] }),
+    ]);
+    const stageChanges = (((events as { data: unknown[] | null }).data ?? []) as { from_stage: string | null; to_stage: string; publications: { title: string } | null }[])
+      .map((e) => ({ title: e.publications?.title ?? "Manuscript", from: e.from_stage, to: e.to_stage }));
+    const text = prepAgenda({
+      since,
+      sinceLabel: prev ? `the last ${MEETING_TYPE[m.type].toLowerCase()} meeting (${fmtDate(since.slice(0, 10), { day: "numeric", month: "short" })})` : `${fmtDate(since.slice(0, 10), { day: "numeric", month: "short" })}`,
+      done: done.filter((t) => inScope(t.project_id)),
+      open: open.filter((t) => inScope(t.project_id) && ((t.due_date && t.due_date <= addDays(now, 7)) || t.priority === "high" || t.priority === "urgent")),
+      stageChanges,
+      papersRead: papers,
+      deadlines: deadlines.filter((d) => inScope(d.project_id)),
+      today: now,
+    });
+    const current = (m.agenda ?? "").trim();
+    change({ agenda: current ? `${current}\n\n${text}` : text });
+    await autosave.flush();
+  }
+
   async function exportPdf() {
     await autosave.flush();
     go("print/meetings", { ids: m.id });
@@ -72,6 +107,7 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
         <input className="title-input" aria-label="Title" value={m.title} onChange={(e) => change({ title: e.target.value })} onBlur={() => void autosave.flush()} />
         <div className="page-actions">
           <SaveIndicator status={autosave.status} error={autosave.error} />
+          <button onClick={() => void run(prepare())} title="Add what changed since the previous meeting of this type to the agenda"><ListPlus size={15} /> Prepare agenda</button>
           <button onClick={() => void exportPdf()}><FileDown size={15} /> PDF</button>
           <button className="icon" aria-label={m.archived_at ? "Unarchive" : "Archive"} onClick={() => change({ archived_at: m.archived_at ? null : new Date().toISOString() })}>
             {m.archived_at ? <ArchiveRestore size={16} /> : <Archive size={16} />}

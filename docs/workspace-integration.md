@@ -39,3 +39,28 @@ Apply `supabase/emi-statements-habit-carry.sql` after `finance-accounts.sql` (al
 - **EMI**: bank loans and borrowed personal loans accept an EMI amount, number of EMIs and first EMI date. EMIs repeat monthly; repayments are matched to them in order, so the loan shows EMIs paid / left, the next EMI date and goes overdue when an EMI date passes unpaid. "Paid back" offers the EMI as a preset amount.
 - **Credit cards**: enter the current statement (amount, statement date, due date) together with the minimum due. Payments dated on or after the statement date count towards it. The card shows statement left, minimum still to pay, new spending since the statement, credit-limit utilisation, and warns when the due date has passed with the statement unpaid. Presets: minimum due, statement, full balance. Enter each month's new statement by editing the card.
 - **Habits**: a habit can have a daily amount and unit (e.g. 30 min). Log the total done each day. With "Carry a shortfall over" on, whatever was not done is added to the next day's requirement (capped at one extra day's amount unless a limit is set). A short day counts towards the streak once the next day is completed; otherwise it is missed.
+
+## Card spending, statements, breaks and reminders
+
+Apply `supabase/card-spending-habit-periods-reminders.sql` after `emi-statements-habit-carry.sql` (rerunnable). The `telegram-reminder-sweep` function calls `ws_daily_nudges()` every minute once it is redeployed.
+
+- **Card spending**: a Budget expense can be marked "Paid with card"; it raises that card's balance (a refund as income lowers it). Cards have "Add spend" in Loans & cards. Pay the card bill with "Pay bill", not as a budget expense, so spending isn't counted twice. A new card can start at 0.
+- **Next statement**: "Enter next statement" prefills a month after the last statement, the same gap to the due date, the balance owed now and about 5 % as the minimum.
+- **EMI breakdown**: with an interest rate and number of EMIs, the loan shows principal, total interest, principal still owed, the interest saved by paying off now and a month-by-month table.
+- **Reminders**: each borrowed loan keeps one reminder in `reminders`: 2 days before the next EMI or card due date at 09:00 (settings time zone), and the day after if still unpaid. Loan reminders refresh once a day. Telegram sends them when the account is linked.
+- **Habits**: a target can be per day, per week or per month (any days). Breaks (for all habits or one) require nothing, keep streaks and hold carried amounts. Only a day's own shortfall carries, so one missed day never snowballs. The evening reminder (Habits → Evening reminder) sends one Telegram message listing habits still open.
+- **Home**: a "needs attention" row shows overdue or soon-due EMIs and card bills, overdue tasks, deadlines within 3 days, open habits and an over-budget warning.
+- **CSV**: Loans & cards and Habits each export a spreadsheet (ledger with running balance; every logged day).
+
+## Agenda, calendar feed, weekly review and planning helpers
+
+Apply `supabase/agenda-recurring-followups.sql` after `card-spending-habit-periods-reminders.sql` (rerunnable). The `calendar-feed` Edge Function is deployed by `deploy-supabase.yml` with `--no-verify-jwt`.
+
+- **Agenda** (Workspace → Agenda): one dated list from tasks, deadlines, meetings, manuscripts (`due_at`), shortlisted/tracked opportunities, every remaining EMI, unpaid card statements and recurring transactions, with overdue items on top. `ws_agenda(from, to)` backs it. Download as `.ics`, or create a private feed link (`ws_settings.calendar_token`) and subscribe in Google/Apple Calendar; "New link" or "Turn off" revokes it.
+- **Weekly review**: tasks completed, habits, money this week and month, the next 7 days, papers finished/reading, manuscripts with no next action or untouched for 30 days. "Save as note" stores it as a daily-log note with the reflection.
+- **Telegram**: `/spend 450 Groceries card:amazon cat:food date:yesterday`, `/income 52000 Salary`, `/habit read 30` (adds to today), `/habits`, `/due`.
+- **Manuscripts**: the lifecycle shows days in the current stage. After `publication_followup_days` (Settings, default 60, empty = off) under review or revision, a Telegram reminder suggests writing to the editor, repeating every same number of days. Reviewer comments become tasks linked to the paper ("Reviewer comments → tasks"), skipping ones already created.
+- **Reading timer** on a paper: survives reloads; "Stop & log" adds the minutes to today's reading habit (a minutes habit named "Read…", or chosen) and moves a "to read" paper to "reading".
+- **Recurring** (Budget → Recurring): rent, salary, subscriptions on a day of the month, optionally charged to a card. Due items are posted when the budget loads and by the daily job after 08:00 (at most 24 missed occurrences per item).
+- **Meetings**: "Prepare agenda" appends what changed since the previous meeting of the same type: tasks done, manuscript stage changes, papers read, open high-priority or due-soon tasks and deadlines in the next 30 days (limited to the meeting's projects when linked).
+- **Currencies**: Loans, Budget and Home add an "≈ all in <default currency>" estimate when more than one currency is present, using the free daily fawazahmed0 rates cached for the day; per-currency totals are unchanged.
