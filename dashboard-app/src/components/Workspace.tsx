@@ -5,6 +5,7 @@ import { StoreProvider, useData, useUi } from "../lib/store";
 import { loadRaw, save } from "../lib/persist";
 import { useHotkeys } from "../lib/keys";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
+import { Extension } from "../extended/Extension";
 import { Sidebar } from "./Sidebar";
 import { HomeView } from "./HomeView";
 import { SettingsView } from "./SettingsView";
@@ -20,7 +21,8 @@ import type { EntityKey } from "../entities/types";
 type ProjectMembership={project_id:string;role:"editor"|"viewer"};
 
 function Shell(){
- const {userId,projects,loading,notices,tables}=useData();
+ const {userId,projects,loading,notices,tables,refreshAll}=useData();
+ useEffect(()=>{const refresh=()=>refreshAll();window.addEventListener("ws:changed",refresh);return()=>window.removeEventListener("ws:changed",refresh)},[refreshAll]);
  const ui=useUi();
  const [navOpen,setNavOpen]=useState(false);
  const [sidebarCollapsed,setSidebarCollapsed]=useState(()=>loadRaw("sidebar-collapsed",false));
@@ -62,7 +64,7 @@ function Shell(){
  const currentProject=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;
  const currentPublication=ui.publicationId?tables.publications.byId.get(ui.publicationId):null;
  const sharedPublication=projectOnly&&sharedProject&&currentPublication?.project_id===sharedProject.id?currentPublication:null;
- const title=ui.view==="clippings"?"Clippings":ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
+ const title=ui.view==="extended"?"Workspace":ui.view==="clippings"?"Clippings":ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
   ui.view==="publication"?(String(currentPublication?.title??"")||"Publication"):ENTITIES[ui.view as EntityKey].plural;
 
  useEffect(()=>{
@@ -88,7 +90,7 @@ function Shell(){
     <div className="crumb">{projectOnly?<><strong>{sharedProject?.name??"Shared project"}</strong></>:<>Workspace / <strong>{title}</strong></>}</div>
     <div className="topbar-end">
      {!projectOnly&&<button className="chip-button" onClick={()=>ui.setPalette(true)} aria-label="Open command palette">
-      <Command/><span className="kbd-hint">K</span>
+      <Command/><span>Search & commands</span><span className="kbd-hint">K</span>
      </button>}
      <button className="icon-button" onClick={()=>void supabase?.auth.signOut()} aria-label="Sign out"><CircleUserRound/></button>
     </div>
@@ -106,7 +108,8 @@ function Shell(){
        returnProjectId={sharedProject.id} accessRole={membership?.role}/>
      :projectOnly&&sharedProject?<ProjectView projectId={sharedProject.id} accessRole={membership?.role}/>
      :projectOnly?<div className="empty-state"><p>This shared project is unavailable.</p></div>
-     :ui.view==="home"?<HomeView/>
+     :ui.view==="extended"?<Extension/>
+     :ui.view==="home"?(ui.scope==="all"?<><Extension home/><HomeView compact/></>:<HomeView/>)
      :ui.view==="clippings"?<ClippingsView/>
      :ui.view==="settings"?<SettingsView/>
      :ui.view==="trash"?<TrashView/>

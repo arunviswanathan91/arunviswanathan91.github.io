@@ -74,7 +74,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
 
  return <div className="project-view">
   <header className="project-head">
-   <div><p className="kicker">Scientific project</p><h1>{project.name}</h1>
+   <div><p className="kicker">Scientific project</p><h1>{project.name}</h1><a className="secondary" href={`#/tools/projects/${projectId}`}>Papers, meetings, files & PDF summary</a>
     <p className="subtitle">{project.description||"Add a description and objective for this project."}</p></div>
    <div className="project-head-actions">
     <span className="project-phase">{project.phase||"Planning"}</span>

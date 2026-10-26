@@ -46,7 +46,7 @@ export interface TrashBatch extends Row{
  id:string;user_id:string;batch_type:string;title:string;item_count:number;
  metadata:Record<string,unknown>;deleted_at:string;purge_at:string;
 }
-export type ViewKey=EntityKey|"clippings"|"home"|"project"|"publication"|"settings"|"trash";
+export type ViewKey=EntityKey|"extended"|"clippings"|"home"|"project"|"publication"|"settings"|"trash";
 export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
 
@@ -107,6 +107,7 @@ export function applyTheme(theme:Theme){
 
 const initialRoute=():{view:ViewKey;scope:Scope;publicationId:string|null}=>{
  const hash=location.hash.replace(/^#\/?/,"");
+ if(hash.startsWith("tools/"))return {view:"extended",scope:"all",publicationId:null};
  const project=hash.match(/^project\/([0-9a-f-]+)$/i);
  if(project)return {view:"project",scope:project[1],publicationId:null};
  const publication=hash.match(/^publication\/([0-9a-f-]+)$/i);

@@ -70,6 +70,7 @@ export function SettingsView(){
    <div><p className="kicker">Settings</p><h1>Workspace</h1><p className="subtitle">Profile, Telegram, projects and tags.</p></div>
   </div>
 
+  <p><a className="secondary" href="#/tools/settings">Backup, restore & finance preferences</a></p>
   <div className="settings-grid">
    <section className="panel">
     <header className="panel-head"><h2>Profile</h2>{toggle("Profile")}</header>
