@@ -73,3 +73,39 @@ The discussion overstates the clinical relevance of STAT3 inhibition in this coh
   assert.equal(pointTitle("The sample size is small. Please justify the power calculation."), "The sample size is small.");
   assert.equal(pointTitle("x".repeat(150)).length, 100);
 });
+
+import { MENU, parseDeadline, parseNote, parsePaid, parsePaper } from "../../supabase/functions/telegram-webhook/workspace.ts";
+
+test("deadline: title, due date, priority and category", () => {
+  assert.deepEqual(parseDeadline("ISMB abstract due:2026-11-02 !high cat:abstract"), { title: "ISMB abstract", due: "2026-11-02", priority: "high", category: "abstract_submission" });
+  assert.deepEqual(parseDeadline('Half-time seminar due:"next friday"'), { title: "Half-time seminar", due: "next friday", priority: null, category: null });
+  assert.equal((parseDeadline("Thesis !urgent cat:nonsense due:friday") as { category: string }).category, "other");
+  assert.ok("error" in parseDeadline("due:friday"));
+});
+
+test("note: first line is the title, hashtags become tags", () => {
+  assert.deepEqual(parseNote("Try SCENIC on the CAF subset #idea #scRNA"), { title: "Try SCENIC on the CAF subset", body: "Try SCENIC on the CAF subset", tags: ["idea", "scrna"] });
+  assert.equal((parseNote("x".repeat(120)) as { title: string }).title.length, 80);
+  assert.ok("error" in parseNote("#only"));
+});
+
+test("paper: DOI, arXiv id or link, otherwise a title", () => {
+  assert.deepEqual(parsePaper("10.1038/s41586-020-2649-2"), { doi: "10.1038/s41586-020-2649-2", arxiv: null, url: null, title: null });
+  assert.deepEqual(parsePaper("https://doi.org/10.1101/2024.01.02.573925."), { doi: "10.1101/2024.01.02.573925", arxiv: null, url: null, title: null });
+  assert.deepEqual(parsePaper("https://arxiv.org/abs/2401.01234v2"), { doi: null, arxiv: "2401.01234", url: null, title: null });
+  assert.deepEqual(parsePaper("Attention is all you need"), { doi: null, arxiv: null, url: null, title: "Attention is all you need" });
+});
+
+test("paid: the last number is the amount", () => {
+  assert.deepEqual(parsePaid("slice 6,557.17"), { loan: "slice", amount: 6557.17, date: null });
+  assert.deepEqual(parsePaid("amazon card ₹1200 date:yesterday"), { loan: "amazon card", amount: 1200, date: "yesterday" });
+  assert.ok("error" in parsePaid("6557"));
+});
+
+test("the Telegram menu follows Telegram's rules", () => {
+  assert.ok(MENU.length <= 100);
+  for (const m of MENU) {
+    assert.match(m.command, /^[a-z0-9_]{1,32}$/);
+    assert.ok(m.description.length >= 3 && m.description.length <= 256);
+  }
+});

@@ -3,13 +3,17 @@ import { BY_COMMAND, ENTITIES, ENTITY_LIST } from "./entities.ts";
 import type { BotEntity, EntityKey } from "./entities.ts";
 import { isAffirmative, isDone, parseDate, parseMessage, splitPair } from "./parse.ts";
 import { dayIn, matchByName, money, parseHabit, parseSpend } from "./money.ts";
+import { MENU, parseDeadline, parseNote, parsePaid, parsePaper } from "./workspace.ts";
 
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 const STATE_TTL=15*60*1000;
 
 const HELP=[
- "Create — everything after the command is the title:",
+ "Capture — everything after the command is the title:",
  "  /add Draft intro @Thesis #urgent !high due:friday followup:thursday assign:Maya",
+ "  /deadline ISMB abstract due:2026-11-02 !high cat:abstract",
+ "  /note Try SCENIC on the CAF subset #idea",
+ "  /paper 10.1038/s41586-020-2649-2   (DOI, arXiv id, link or title)",
  "  /pub Statin trial venue:Nature #clinical",
  "  /doc Protocol v2 @Thesis kind:Protocol",
  "  /job Acme | Postdoc #postdoc due:2026-03-01",
@@ -18,21 +22,28 @@ const HELP=[
  "",
  "Tokens: #tag  @project  !high  due:friday  followup:thursday  assign:name  field:value  in 2h",
  "",
- "Work with what's there:",
- "  /today            open tasks, numbered",
- "  /list jobs        any module, numbered",
- "  /find intro       search everything, then pick a number to edit",
- "  /done 2           complete task 2 from the last list",
- "  /tag              ask me which tag to add",
- "  /projects         list, or /projects new Thesis",
- "  /tags             list, or /tags new urgent",
- "",
- "Money & habits:",
+ "Money:",
  "  /spend 450 Groceries card:amazon cat:food   (date:yesterday, or 450 SEK …)",
  "  /income 52000 Salary",
- "  /habit read 30    add 30 to today's Read (or /habit gym to tick it)",
- "  /habits           today's habits and how far along they are",
- "  /due              what's due in the next 7 days (EMIs, cards, deadlines…)",
+ "  /paid slice 6557   record a loan or card payment",
+ "  /loans             what you owe and what's next due",
+ "",
+ "Habits:",
+ "  /habit read 30     add 30 to today's Read (or /habit gym to tick it)",
+ "  /habits            today's habits and progress",
+ "",
+ "Plan and review:",
+ "  /today             open tasks, numbered",
+ "  /due               everything due in the next 7 days",
+ "  /week              this week so far",
+ "  /list jobs         any module, numbered",
+ "  /find intro        search everything, then pick a number to edit",
+ "  /done 2            complete item 2 from the last list",
+ "  /set priority high change the item you're editing",
+ "  /tag               ask me which tag to add",
+ "  /projects         list, or /projects new Thesis",
+ "  /tags             list, or /tags new urgent",
+ "  /discover postdoc  search for opportunities now",
  "",
  "After creating or picking something, just send more tokens to update it — send \"done\" to stop.",
 ].join("\n");
@@ -57,6 +68,7 @@ Deno.serve(async(req)=>{
   const {error}=await db.from("profiles").upsert({id:row.user_id,telegram_chat_id:chatId},{onConflict:"id"});
   if(error)return send(chatId,error.code==="23505"?"This Telegram account is already linked to another profile.":"Could not link right now.");
   await db.from("telegram_link_codes").update({claimed_at:new Date().toISOString()}).eq("id",row.id);
+  await syncMenu();
   return send(chatId,"Linked. Send /help to see what I can do.");
  }
 
@@ -295,13 +307,167 @@ Deno.serve(async(req)=>{
   return send(chatId,rows.slice(0,25).map(r=>`${r.day===day?"Today":r.day.slice(5)} · ${r.title}${r.detail?` (${r.detail})`:""}`).join("\n"));
  };
 
+ // ---------- workspace: deadlines, notes, papers, loans, weekly summary ----------
+ const relative=(day:string,today:string)=>{
+  const diff=Math.round((Date.parse(day+"T12:00:00Z")-Date.parse(today+"T12:00:00Z"))/86400000);
+  return diff===0?"today":diff===1?"tomorrow":diff===-1?"yesterday":diff>0?`in ${diff} days`:`${-diff} days ago`;
+ };
+
+ const handleDeadline=async(input:string)=>{
+  const p=parseDeadline(input);
+  if("error" in p)return send(chatId,p.error);
+  if(!p.due)return send(chatId,`When is it due? Send: /deadline ${p.title} due:friday (or due:2026-11-02)`);
+  const s=await settingsRow();
+  const iso=parseDate(p.due,s.tz);
+  if(!iso)return send(chatId,`I couldn't read the date "${p.due}".`);
+  const day=dayIn(s.tz,new Date(iso));
+  const values:Record<string,unknown>={user_id:userId,title:p.title,due_date:day};
+  if(p.priority)values.priority=p.priority;
+  if(p.category)values.category=p.category;
+  const {error}=await db.from("ws_deadlines").insert(values);
+  if(error)return send(chatId,"I couldn't save that deadline: "+error.message);
+  return send(chatId,`Deadline saved: ${p.title} · ${day} (${relative(day,dayIn(s.tz))})${p.priority?` · ${p.priority}`:""}${p.category?` · ${p.category.replace(/_/g," ")}`:""}`);
+ };
+
+ const handleNote=async(input:string)=>{
+  const p=parseNote(input);
+  if("error" in p)return send(chatId,p.error);
+  const {error}=await db.from("ws_notes").insert({user_id:userId,title:p.title,body:p.body,tags:p.tags,type:"general"});
+  return send(chatId,error?"I couldn't save that note: "+error.message:`Note saved: ${p.title}${p.tags.length?" · #"+p.tags.join(" #"):""}`);
+ };
+
+ // Crossref for DOIs and the arXiv API for preprints fill in title, authors, year and venue.
+ const lookupPaper=async(p:{doi:string|null;arxiv:string|null})=>{
+  try{
+   if(p.doi){
+    const r=await fetch(`https://api.crossref.org/works/${encodeURIComponent(p.doi)}`,{headers:{"user-agent":"arun-workspace-bot/1.0"}});
+    if(!r.ok)return null;
+    const m=(await r.json()).message;
+    return {title:String(m.title?.[0]??"").trim(),authors:(m.author??[]).map((a:{given?:string;family?:string;name?:string})=>[a.given,a.family].filter(Boolean).join(" ")||a.name||"").filter(Boolean),
+     year:m.issued?.["date-parts"]?.[0]?.[0]??null,publication:m["container-title"]?.[0]??null};
+   }
+   if(p.arxiv){
+    const r=await fetch(`https://export.arxiv.org/api/query?id_list=${p.arxiv}`);
+    if(!r.ok)return null;
+    const xml=await r.text();
+    const entry=xml.split("<entry>")[1]??"";
+    const title=(entry.match(/<title>([\s\S]*?)<\/title>/)?.[1]??"").replace(/\s+/g," ").trim();
+    const authors=[...entry.matchAll(/<name>([^<]+)<\/name>/g)].map(x=>x[1].trim());
+    const year=Number(entry.match(/<published>(\d{4})/)?.[1])||null;
+    return title?{title,authors,year,publication:"arXiv"}:null;
+   }
+  }catch{/* fall back to what was typed */}
+  return null;
+ };
+
+ const handlePaper=async(input:string)=>{
+  const p=parsePaper(input);
+  if("error" in p)return send(chatId,p.error);
+  if(p.doi||p.arxiv){
+   const {data:dup}=await db.from("ws_papers").select("title,status").eq("user_id",userId).eq(p.doi?"doi":"arxiv_id",p.doi??p.arxiv).limit(1).maybeSingle();
+   if(dup)return send(chatId,`Already in your library: ${dup.title} (${String(dup.status).replace("_"," ")}).`);
+  }
+  const meta=await lookupPaper(p);
+  const title=meta?.title||p.title||p.doi||p.arxiv||p.url;
+  if(!title)return send(chatId,"I couldn't work out a title. Try /paper followed by the title.");
+  const {error}=await db.from("ws_papers").insert({user_id:userId,title,authors:meta?.authors??[],year:meta?.year??null,publication:meta?.publication??null,
+   doi:p.doi,arxiv_id:p.arxiv,url:p.url,status:"to_read"});
+  if(error)return send(chatId,"I couldn't save that paper: "+error.message);
+  const by=meta?.authors?.length?` — ${meta.authors[0]}${meta.authors.length>1?" et al.":""}`:"";
+  return send(chatId,`Added to read: ${title}${by}${meta?.year?` (${meta.year})`:""}${!meta&&(p.doi||p.arxiv)?"\n(I couldn't fetch the details; edit them on the dashboard.)":""}`);
+ };
+
+ type LoanRow={id:string;account_name:string|null;account_type:string;direction:string;amount:number;currency:string;contact_id:string};
+ const loanState=async()=>{
+  const [{data:loans},{data:contacts},{data:pays},{data:txs}]=await Promise.all([
+   db.from("ws_loans").select("id,account_name,account_type,direction,amount,currency,contact_id").eq("user_id",userId),
+   db.from("ws_contacts").select("id,name").eq("user_id",userId),
+   db.from("ws_loan_payments").select("loan_id,amount").eq("user_id",userId),
+   db.from("ws_transactions").select("loan_id,kind,amount").eq("user_id",userId).not("loan_id","is",null),
+  ]);
+  const name=(l:LoanRow)=>l.account_name||((contacts??[]) as {id:string;name:string}[]).find(c=>c.id===l.contact_id)?.name||"Loan";
+  return ((loans??[]) as LoanRow[]).map(l=>{
+   const paid=((pays??[]) as {loan_id:string;amount:number}[]).filter(x=>x.loan_id===l.id).reduce((t,x)=>t+Number(x.amount),0);
+   const charged=((txs??[]) as {loan_id:string;kind:string;amount:number}[]).filter(x=>x.loan_id===l.id).reduce((t,x)=>t+(x.kind==="expense"?1:x.kind==="income"?-1:0)*Number(x.amount),0);
+   return {...l,name:name(l),left:Math.max(0,Math.round((Number(l.amount)+charged-paid)*100)/100)};
+  });
+ };
+ const nextDue=async(today:string)=>{
+  const until=new Date(Date.parse(today+"T12:00:00Z")+60*86400000).toISOString().slice(0,10);
+  const {data}=await db.rpc("ws_agenda_for_user",{p_user:userId,p_from:new Date(Date.parse(today+"T12:00:00Z")-60*86400000).toISOString().slice(0,10),p_to:until});
+  const out=new Map<string,{day:string;detail:string|null}>();
+  for(const r of (data??[]) as {kind:string;ref_id:string;day:string;detail:string|null}[])
+   if((r.kind==="emi"||r.kind==="card")&&!out.has(r.ref_id))out.set(r.ref_id,{day:r.day,detail:r.detail});
+  return out;
+ };
+
+ const handlePaid=async(input:string)=>{
+  const p=parsePaid(input);
+  if("error" in p)return send(chatId,p.error);
+  const s=await settingsRow();
+  const loans=await loanState();
+  const loan=matchByName(loans,p.loan);
+  if(!loan)return send(chatId,`No loan or card called "${p.loan}". Yours: ${loans.map(l=>l.name).join(", ")||"none yet"}`);
+  const paidOn=p.date?(()=>{const iso=parseDate(p.date!,s.tz);return iso?dayIn(s.tz,new Date(iso)):null})():dayIn(s.tz);
+  if(!paidOn)return send(chatId,`I couldn't read the date "${p.date}".`);
+  if(p.amount>loan.left&&loan.left>0)return send(chatId,`That's more than the ${money(loan.left,loan.currency)} left on ${loan.name}. Send the exact amount, or record it on the dashboard.`);
+  const {error}=await db.from("ws_loan_payments").insert({user_id:userId,loan_id:loan.id,amount:p.amount,paid_on:paidOn,note:"Telegram"});
+  if(error)return send(chatId,"I couldn't record that: "+error.message);
+  const left=Math.max(0,Math.round((loan.left-p.amount)*100)/100);
+  const next=(await nextDue(dayIn(s.tz))).get(loan.id);
+  return send(chatId,`Recorded ${money(p.amount,loan.currency)} ${loan.direction==="lent"?"from":"to"} ${loan.name} · ${left?`${money(left,loan.currency)} left`:"settled ✓"}${next&&left?`\nNext: ${next.day}${next.detail?` (${next.detail})`:""}`:""}`);
+ };
+
+ const handleLoans=async()=>{
+  const s=await settingsRow();
+  const today=dayIn(s.tz);
+  const open=(await loanState()).filter(l=>l.left>0);
+  if(!open.length)return send(chatId,"Nothing outstanding.");
+  const due=await nextDue(today);
+  const lines=open.map(l=>{
+   const n=due.get(l.id);
+   return `${l.direction==="lent"?"↙ owes you":"↗ you owe"} ${money(l.left,l.currency)} · ${l.name}${n?` · next ${n.day} (${relative(n.day,today)})`:""}`;
+  });
+  return send(chatId,lines.join("\n")+"\n\nRecord a payment with /paid <name> <amount>.");
+ };
+
+ const handleWeek=async()=>{
+  const s=await settingsRow();
+  const today=dayIn(s.tz);
+  const dow=(new Date(today+"T12:00:00Z").getUTCDay()+6)%7;
+  const monday=new Date(Date.parse(today+"T12:00:00Z")-dow*86400000).toISOString().slice(0,10);
+  const until=new Date(Date.parse(today+"T12:00:00Z")+7*86400000).toISOString().slice(0,10);
+  const [{data:done},{data:spent},{data:coming}]=await Promise.all([
+   db.from("tasks").select("title").eq("user_id",userId).eq("status","Done").gte("completed_at",monday+"T00:00:00Z").is("deleted_at",null),
+   db.from("ws_transactions").select("amount").eq("user_id",userId).eq("kind","expense").eq("currency",s.currency).gte("occurred_on",monday),
+   db.rpc("ws_agenda_for_user",{p_user:userId,p_from:today,p_to:until}),
+  ]);
+  const doneRows=(done??[]) as {title:string}[];
+  const total=((spent??[]) as {amount:number}[]).reduce((t,x)=>t+Number(x.amount),0);
+  const next=((coming??[]) as {title:string;day:string}[]).slice(0,5);
+  return send(chatId,[
+   `Week of ${monday}`,
+   `✓ ${doneRows.length} task${doneRows.length===1?"":"s"} done${doneRows.length?": "+doneRows.slice(0,5).map(t=>t.title).join("; ")+(doneRows.length>5?"…":""):""}`,
+   `₹ Spent ${money(total,s.currency)} this week`,
+   next.length?`Coming up:\n${next.map(r=>`  ${relative(r.day,today)} · ${r.title}`).join("\n")}`:"Nothing due in the next 7 days.",
+   "",
+   "Habits: /habits · Full review on the dashboard (Weekly review).",
+  ].join("\n"));
+ };
+
  // ---------- commands ----------
  if(text.startsWith("/")){
   const [cmd,...restParts]=text.split(/\s+/);
   const rest=text.slice(cmd.length).trim();
   const command=cmd.toLowerCase();
 
-  if(command==="/help"||command==="/start")return send(chatId,HELP);
+  if(command==="/help"||command==="/start"){await syncMenu();return send(chatId,HELP)}
+  if(command==="/deadline")return handleDeadline(rest);
+  if(command==="/note")return handleNote(rest);
+  if(command==="/paper")return handlePaper(rest);
+  if(command==="/paid")return handlePaid(rest);
+  if(command==="/loans")return handleLoans();
+  if(command==="/week")return handleWeek();
 
   if(command==="/spend"||command==="/income")return handleSpend(command==="/income"?"income":"expense",rest);
   if(command==="/habit")return handleHabit(rest);
@@ -593,4 +759,10 @@ async function send(chat_id:number,text:string){
  const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{
   method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chat_id,text})});
  return json({ok:r.ok});
+}
+
+/** Keeps Telegram's "/" menu in step with what the bot understands. */
+async function syncMenu(){
+ const token=Deno.env.get("TELEGRAM_BOT_TOKEN");
+ try{await fetch(`https://api.telegram.org/bot${token}/setMyCommands`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({commands:MENU})})}catch{/* menu is optional */}
 }
