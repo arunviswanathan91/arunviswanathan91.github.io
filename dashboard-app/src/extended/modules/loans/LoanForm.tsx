@@ -115,18 +115,18 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
       {accountType === "credit_card" && <>
         <label>Last four digits (optional)<input inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={last4} onChange={e=>setLast4(e.target.value.replace(/\D/g,""))} placeholder="1234"/></label>
         <div className="grid-2"><label>Credit limit (optional)<input type="number" min="0" step="0.01" value={creditLimit} onChange={e=>setCreditLimit(e.target.value)}/></label><label>Minimum payment due (optional)<input type="number" min="0" step="0.01" value={minimumDue} onChange={e=>setMinimumDue(e.target.value)}/></label></div>
-        <fieldset className="form-group"><legend>Current statement (optional)</legend>
+        <div className="form-group" role="group" aria-label="Current statement"><strong className="form-group-title">Current statement (optional)</strong>
           <div className="grid-2"><label>Statement amount<input type="number" min="0" step="0.01" value={stmtAmount} onChange={e=>setStmtAmount(e.target.value)}/></label><label>Statement date<input type="date" required={stmtAmount !== ""} value={stmtOn} onChange={e=>setStmtOn(e.target.value)}/></label></div>
           <label>Payment due date<input type="date" min={stmtOn} value={stmtDue} onChange={e=>setStmtDue(e.target.value)}/></label>
           <p className="muted small">Payments dated on or after the statement date count towards the statement and its minimum due. Enter the new statement each month.</p>
-        </fieldset>
+        </div>
         <p className="muted small">Repayments reduce the tracked balance. New spending, interest and statement amounts must be updated manually. Only the last four digits are needed.</p>
       </>}
-      {hasEmi && <fieldset className="form-group"><legend>EMI (optional)</legend>
+      {hasEmi && <div className="form-group" role="group" aria-label="EMI"><strong className="form-group-title">EMI (optional)</strong>
         <div className="grid-2"><label>EMI amount<input type="number" min="0.01" step="0.01" value={emiAmount} onChange={e=>setEmiAmount(e.target.value)}/></label><label>Number of EMIs<input type="number" min="1" step="1" value={tenure} onChange={e=>setTenure(e.target.value)}/></label></div>
         <div className="grid-2"><label>First EMI date<input type="date" required={emiAmount !== ""} value={emiFirst} onChange={e=>setEmiFirst(e.target.value)}/></label><label>Interest rate % (optional)<input type="number" min="0" step="0.001" value={rate} onChange={e=>setRate(e.target.value)}/></label></div>
         <p className="muted small">EMIs repeat monthly on the same date. Repayments are matched to them in order; an unpaid EMI past its date marks the loan overdue. Amount above is the total you repay, including interest.</p>
-      </fieldset>}
+      </div>}
       <div className="row">
         <label className="grow">
           Date
