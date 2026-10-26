@@ -477,20 +477,31 @@ end $$;
 drop trigger if exists ws_projects_write on public.ws_projects;
 create trigger ws_projects_write instead of insert or update or delete on public.ws_projects for each row execute function ws_private.write_project();
 create or replace function ws_private.write_task() returns trigger language plpgsql security invoker set search_path='' as $$
-declare zone text; target_status public.task_status;
+declare zone text; target_status public.task_status; target_stage uuid; transition boolean;
 begin
  if TG_OP='DELETE' then perform public.move_to_trash('tasks',old.id);return old;end if;
  select coalesce(timezone,'Asia/Kolkata') into zone from public.profiles where id=auth.uid();zone:=coalesce(zone,'Asia/Kolkata');
  target_status:=case when new.status in ('done','cancelled') then 'Done'::public.task_status when new.status='in_progress' then 'In progress'::public.task_status else 'Backlog'::public.task_status end;
+ transition:=TG_OP='INSERT' or new.status is distinct from old.status or new.project_id is distinct from old.project_id;
+ if TG_OP='UPDATE' and new.status is not distinct from old.status then
+  select status into target_status from public.tasks where id=old.id;
+ end if;
+ if transition and new.project_id is not null then
+  select id into target_stage from public.project_stages where project_id=new.project_id and category=target_status and deleted_at is null order by position,id limit 1;
+  if target_stage is null then
+   insert into public.project_stages(user_id,project_id,name,category,position)
+    values(auth.uid(),new.project_id,target_status::text||' · '||left(gen_random_uuid()::text,6),target_status,100) returning id into target_stage;
+  end if;
+ end if;
  if TG_OP='INSERT' then
-  insert into public.tasks(id,user_id,title,notes,status,priority,due_at,project_id,meeting_id,deadline_id,recurrence,cancelled)
-  values(coalesce(new.id,gen_random_uuid()),auth.uid(),new.title,new.description,target_status,initcap(coalesce(new.priority,'medium')),new.due_date::timestamp at time zone zone,new.project_id,new.meeting_id,new.deadline_id,new.recurrence,coalesce(new.status='cancelled',false)) returning id into new.id;
+  insert into public.tasks(id,user_id,title,notes,status,stage_id,priority,due_at,project_id,meeting_id,deadline_id,recurrence,cancelled)
+  values(coalesce(new.id,gen_random_uuid()),auth.uid(),new.title,new.description,target_status,target_stage,initcap(coalesce(new.priority,'medium')),new.due_date::timestamp at time zone zone,new.project_id,new.meeting_id,new.deadline_id,new.recurrence,coalesce(new.status='cancelled',false)) returning id into new.id;
  else
+  -- Do not touch stage/project columns for ordinary edits: the legacy trigger derives status from them.
   update public.tasks set title=new.title,notes=new.description,
-   status=case when new.status is distinct from old.status then target_status else status end,
-   stage_id=case when new.status is distinct from old.status or new.project_id is distinct from old.project_id then null else stage_id end,
    priority=initcap(new.priority),due_at=case when new.due_date is distinct from old.due_date then new.due_date::timestamp at time zone zone else due_at end,
-   project_id=new.project_id,meeting_id=new.meeting_id,deadline_id=new.deadline_id,recurrence=new.recurrence,cancelled=new.status='cancelled' where id=old.id;
+   meeting_id=new.meeting_id,deadline_id=new.deadline_id,recurrence=new.recurrence,cancelled=new.status='cancelled' where id=old.id;
+  if transition then update public.tasks set project_id=new.project_id,stage_id=target_stage,status=target_status where id=old.id; end if;
  end if;
  if TG_OP='INSERT' or new.tags is distinct from old.tags then perform ws_private.set_tags('task',new.id,new.tags);end if;
  select * into new from public.ws_tasks where id=new.id;return new;

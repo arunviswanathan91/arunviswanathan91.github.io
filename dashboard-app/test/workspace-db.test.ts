@@ -20,8 +20,9 @@ test('workspace integration preserves existing records and enforces isolation',a
  await db.exec(`update ws_tasks set title='Changed title' where id='44444444-4444-4444-4444-444444444444'`);
  let row=(await db.query<any>(`select * from tasks where id='44444444-4444-4444-4444-444444444444'`)).rows[0];
  assert.equal(row.status,'Review');assert.equal(new Date(row.due_at).toISOString(),'2026-10-27T09:30:00.000Z');assert.equal(row.notes,'Preserve me');
- const task=(await db.query<any>(`insert into ws_tasks(title,due_date,recurrence,tags) values('Repeat','2026-10-27','{"freq":"daily","interval":1}',array['testing']) returning id`)).rows[0].id;
+ const task=(await db.query<any>(`insert into ws_tasks(title,project_id,due_date,recurrence,tags) values('Repeat','33333333-3333-3333-3333-333333333333','2026-10-27','{"freq":"daily","interval":1}',array['testing']) returning id`)).rows[0].id;
  await db.exec(`update ws_tasks set status='done' where id='${task}'`);
+ assert.equal((await db.query<any>(`select status from tasks where id='${task}'`)).rows[0].status,'Done');
  assert.equal((await db.query<any>(`select count(*)::int as n from tasks where previous_id='${task}'`)).rows[0].n,1);
  await db.exec(`update ws_tasks set status='todo' where id='${task}';update ws_tasks set status='done' where id='${task}'`);
  assert.equal((await db.query<any>(`select count(*)::int as n from tasks where previous_id='${task}'`)).rows[0].n,1);
