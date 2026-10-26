@@ -12,6 +12,7 @@ import { TagInput } from "../../components/TagInput.tsx";
 import { confirmDanger, Empty, ErrorText, SaveIndicator, Stars } from "../../components/ui.tsx";
 import { NoteRows } from "../notes/NoteRows.tsx";
 import { PaperForm } from "./PaperForm.tsx";
+import { ReadingTimer } from "./ReadingTimer.tsx";
 
 const NOTE_FIELDS: [keyof Paper, string, string][] = [
   ["summary", "Summary", "What is this paper about, in a few sentences?"],
@@ -179,6 +180,7 @@ function PaperDetail({ paper, links, notes }: { paper: Paper; links: ProjectPape
         </div>
 
         <aside className="detail-side">
+          <ReadingTimer paper={paper} />
           <div className="card pad side-fields">
             <label className="field">
               <span>Status</span>

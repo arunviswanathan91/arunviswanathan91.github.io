@@ -7,6 +7,8 @@ import { list, useLoad } from "../../lib/db.ts";
 import { downloadCsv } from "../../lib/download.ts";
 import type { BudgetCategory } from "../../lib/types.ts";
 import { TransactionForm } from "../budget/TransactionForm.tsx";
+import { combine, useFx } from "../../lib/fx.ts";
+import { useSettings } from "../../lib/settings.ts";
 import { amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
 import { useLoans } from "./useLoans.ts";
 import { LoanForm } from "./LoanForm.tsx";
@@ -28,6 +30,12 @@ export function LoansView() {
   const today = todayISO();
 
   const totals = useMemo(() => totalsByCurrency(loans, payments), [loans, payments]);
+  const base = useSettings().default_currency;
+  const fx = useFx(base, Object.keys(totals).length > 1);
+  const all = fx && {
+    owedToMe: combine(Object.fromEntries(Object.entries(totals).map(([c, t]) => [c, t.owedToMe])), fx),
+    iOwe: combine(Object.fromEntries(Object.entries(totals).map(([c, t]) => [c, t.iOwe])), fx),
+  };
   // contacts is shared with meetings, so list only people you have loans with
   const people = useMemo(() => balancesByContact(contacts.filter((c) => loans.some((l) => l.contact_id === c.id)), loans, payments, today), [contacts, loans, payments, today]);
   // The date that matters next: the next EMI, the statement due date, or the plain due date.
@@ -115,6 +123,15 @@ export function LoansView() {
             <div className="stat-line net"><span>Net</span><strong className={t.net >= 0 ? "pos" : "neg"}>{formatMoney(t.net, cur)}</strong></div>
           </div>
         ))}
+        {all && all.owedToMe !== null && all.iOwe !== null && (
+          <div className="card stat">
+            <span className="stat-cur">All ≈ {base}</span>
+            <div className="stat-line"><span>Owed to you</span><strong className="pos">{formatMoney(all.owedToMe, base)}</strong></div>
+            <div className="stat-line"><span>You owe</span><strong className="neg">{formatMoney(all.iOwe, base)}</strong></div>
+            <div className="stat-line net"><span>Net</span><strong className={all.owedToMe - all.iOwe >= 0 ? "pos" : "neg"}>{formatMoney(all.owedToMe - all.iOwe, base)}</strong></div>
+            <span className="muted small">Rates of {fx!.date}</span>
+          </div>
+        )}
       </div>
 
       <div className="loans-layout">

@@ -65,7 +65,7 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
    </div>
 
    <p className="nav-label">Research & planning</p>
-   {(["projects","tasks","papers","notes","meetings","deadlines","search"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className="extension-nav" href={href(key)} style={toneStyle(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{key==="tasks"?"Task planner":key==="projects"?"Project overview":item.label}</span></a>})}
+   {(["agenda","review","projects","tasks","papers","notes","meetings","deadlines","search"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className="extension-nav" href={href(key)} style={toneStyle(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{key==="tasks"?"Task planner":key==="projects"?"Project overview":item.label}</span></a>})}
    <p className="nav-label">Personal</p>
    {(["budget","loans","habits"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className="extension-nav" href={href(key)} style={toneStyle(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span></a>})}
    <p className="nav-label">Workflows</p>

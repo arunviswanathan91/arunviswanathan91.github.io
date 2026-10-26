@@ -260,6 +260,10 @@ export interface Settings {
   habit_pauses?: HabitPause[];
   /** "HH:MM" local time for the Telegram "habits still open" nudge; null = off. */
   habit_nudge_time?: string | null;
+  /** Secret for the calendar feed; null = feed off. */
+  calendar_token?: string | null;
+  /** Remind to chase a paper under review after this many days; null = off. */
+  publication_followup_days?: number | null;
 }
 
 export interface SearchHit {

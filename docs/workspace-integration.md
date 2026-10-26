@@ -51,3 +51,16 @@ Apply `supabase/card-spending-habit-periods-reminders.sql` after `emi-statements
 - **Habits**: a target can be per day, per week or per month (any days). Breaks (for all habits or one) require nothing, keep streaks and hold carried amounts. Only a day's own shortfall carries, so one missed day never snowballs. The evening reminder (Habits → Evening reminder) sends one Telegram message listing habits still open.
 - **Home**: a "needs attention" row shows overdue or soon-due EMIs and card bills, overdue tasks, deadlines within 3 days, open habits and an over-budget warning.
 - **CSV**: Loans & cards and Habits each export a spreadsheet (ledger with running balance; every logged day).
+
+## Agenda, calendar feed, weekly review and planning helpers
+
+Apply `supabase/agenda-recurring-followups.sql` after `card-spending-habit-periods-reminders.sql` (rerunnable). The `calendar-feed` Edge Function is deployed by `deploy-supabase.yml` with `--no-verify-jwt`.
+
+- **Agenda** (Workspace → Agenda): one dated list from tasks, deadlines, meetings, manuscripts (`due_at`), shortlisted/tracked opportunities, every remaining EMI, unpaid card statements and recurring transactions, with overdue items on top. `ws_agenda(from, to)` backs it. Download as `.ics`, or create a private feed link (`ws_settings.calendar_token`) and subscribe in Google/Apple Calendar; "New link" or "Turn off" revokes it.
+- **Weekly review**: tasks completed, habits, money this week and month, the next 7 days, papers finished/reading, manuscripts with no next action or untouched for 30 days. "Save as note" stores it as a daily-log note with the reflection.
+- **Telegram**: `/spend 450 Groceries card:amazon cat:food date:yesterday`, `/income 52000 Salary`, `/habit read 30` (adds to today), `/habits`, `/due`.
+- **Manuscripts**: the lifecycle shows days in the current stage. After `publication_followup_days` (Settings, default 60, empty = off) under review or revision, a Telegram reminder suggests writing to the editor, repeating every same number of days. Reviewer comments become tasks linked to the paper ("Reviewer comments → tasks"), skipping ones already created.
+- **Reading timer** on a paper: survives reloads; "Stop & log" adds the minutes to today's reading habit (a minutes habit named "Read…", or chosen) and moves a "to read" paper to "reading".
+- **Recurring** (Budget → Recurring): rent, salary, subscriptions on a day of the month, optionally charged to a card. Due items are posted when the budget loads and by the daily job after 08:00 (at most 24 missed occurrences per item).
+- **Meetings**: "Prepare agenda" appends what changed since the previous meeting of the same type: tasks done, manuscript stage changes, papers read, open high-priority or due-soon tasks and deadlines in the next 30 days (limited to the meeting's projects when linked).
+- **Currencies**: Loans, Budget and Home add an "≈ all in <default currency>" estimate when more than one currency is present, using the free daily fawazahmed0 rates cached for the day; per-currency totals are unchanged.

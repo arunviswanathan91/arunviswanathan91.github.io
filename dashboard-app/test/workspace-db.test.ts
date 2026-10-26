@@ -19,6 +19,8 @@ test('workspace integration preserves existing records and enforces isolation',a
  await db.exec(readFileSync(new URL('emi-statements-habit-carry.sql',root),'utf8'));
  const finance2=readFileSync(new URL('card-spending-habit-periods-reminders.sql',root),'utf8');
  try{await db.exec(finance2);await db.exec(finance2)}catch(e){throw new Error('card-spending: '+(e as Error).message)}
+ const agenda=readFileSync(new URL('agenda-recurring-followups.sql',root),'utf8');
+ try{await db.exec(agenda);await db.exec(agenda)}catch(e){throw new Error('agenda: '+(e as Error).message)}
  await db.exec(`select set_config('request.jwt.claim.sub','${uid}',false);set role authenticated;`);
  assert.equal((await db.query<any>('select title from ws_projects')).rows[0].title,'Existing research');
  await db.exec(`update ws_tasks set title='Changed title' where id='44444444-4444-4444-4444-444444444444'`);
@@ -63,6 +65,35 @@ test('workspace integration preserves existing records and enforces isolation',a
  assert.equal(nudges.length,1);
  assert.match(nudges[0].body,/Read \(0 of 30 min\)/);
  assert.match(nudges[0].body,/Run \(0 of 10 km this week\)/);
+ // Recurring: two monthly occurrences are due, one is in the future.
+ const cat=(await db.query<any>("insert into ws_budget_categories(name,kind) values('Subscriptions','expense') returning id")).rows[0].id;
+ const rec=(await db.query<any>("insert into ws_recurring(kind,description,amount,category_id,loan_id,day_of_month,next_on) values('expense','Netflix',649,$1,$2,31,(date_trunc('month',current_date)-interval '1 month' + interval '30 days')::date) returning id",[cat,card])).rows[0].id;
+ const posted=(await db.query<any>('select ws_post_recurring() as n')).rows[0].n;
+ assert.ok(posted>=1&&posted<=2);
+ assert.equal((await db.query<any>('select ws_post_recurring() as n')).rows[0].n,0); // nothing posted twice
+ assert.equal((await db.query<any>('select count(*)::int n from ws_transactions where recurring_id=$1 and loan_id=$2',[rec,card])).rows[0].n,posted);
+ assert.ok((await db.query<any>('select next_on>current_date as ok from ws_recurring where id=$1',[rec])).rows[0].ok);
+ // Agenda: the EMI loan and the recurring item, from one call.
+ const rows=(await db.query<any>("select kind,title,path from ws_agenda(current_date-1,current_date+70)")).rows;
+ assert.ok(rows.some((r:any)=>r.kind==='emi'&&r.title==='EMI · Bike'&&r.path==='tools/loans'));
+ assert.ok(rows.some((r:any)=>r.kind==='recurring'&&r.title==='Netflix'));
+ assert.equal(rows.filter((r:any)=>r.kind==='emi').length,2); // second and third EMI left
+ // Calendar feed by token (service role), nothing without one.
+ await db.exec("update ws_settings set calendar_token='99999999-9999-9999-9999-999999999999'");
+ await db.exec('reset role');
+ assert.ok((await db.query<any>("select count(*)::int n from ws_calendar_feed('99999999-9999-9999-9999-999999999999')")).rows[0].n>=3);
+ assert.equal((await db.query<any>("select count(*)::int n from ws_calendar_feed('88888888-8888-8888-8888-888888888888')")).rows[0].n,0);
+ // Publication follow-up after 60 days under review; the daily block runs after 08:00 local, so pick a zone where it is daytime.
+ const hour=new Date().getUTCHours();const off=[...Array(27).keys()].map(i=>i-12).find(o=>(hour+o+24)%24>=9&&(hour+o+24)%24<=20)!;
+ await db.exec(`update ws_settings set timezone='${off>=0?`Etc/GMT-${off}`:`Etc/GMT+${-off}`}',loans_synced_on=null,publication_followup_days=60`);
+ const pub=(await db.query<any>(`insert into publications(user_id,title,stage,venue) values('${uid}','Stalled paper','Under Review','Bioinformatics') returning id`)).rows[0].id;
+ await db.query("update publication_stage_events set created_at=now()-interval '70 days' where publication_id=$1",[pub]);
+ await db.exec('select ws_daily_nudges()');await db.exec('select ws_daily_nudges()');
+ const follow=(await db.query<any>("select title,body from reminders where nudge_key like 'pub:%'")).rows;
+ assert.equal(follow.length,1);
+ assert.match(follow[0].body,/Under Review for 70 days at Bioinformatics/);
+ await db.query('delete from publications where id=$1',[pub]); // keep the history count the backup test checks
+ await db.exec('set role authenticated');
  const reminderCount=(await db.query<any>('select count(*)::int n from reminders')).rows[0].n;
  const backup=(await db.query<any>('select ws_backup_data() as data')).rows[0].data;
  assert.equal(backup.ws_loans[0].card_last4,"1234");

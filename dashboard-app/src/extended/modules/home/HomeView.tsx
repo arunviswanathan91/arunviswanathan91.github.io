@@ -5,6 +5,7 @@ import { addDays, fmtDateTime, relDay, startOfMonth, today } from "../../lib/dat
 import { href } from "../../lib/route.ts";
 import { SECTIONS, toneStyle, type SectionId } from "../../lib/sections.ts";
 import { useSettings } from "../../lib/settings.ts";
+import { combine, useFx } from "../../lib/fx.ts";
 import type { Deadline, Habit, HabitCheckin, Meeting, MonthlyBudget, Note, Paper, Project, Task, Transaction } from "../../lib/types.ts";
 import { openQuick, QUICK_ACTIONS } from "../../components/QuickAdd.tsx";
 import { Ring } from "../../components/Ring.tsx";
@@ -133,6 +134,8 @@ export function HomeView() {
   const budgeted = (data?.budgets ?? []).filter((b) => b.currency === cur).reduce((s, b) => s + cents(b.amount), 0);
   const loanTotals = totalsByCurrency(loans, payments);
   const overdueLoans = loans.filter((l) => loanStatus(l, payments, now) === "overdue").length;
+  const fx = useFx(cur, Object.keys(loanTotals).length > 1);
+  const loansNetAll = fx ? combine(Object.fromEntries(Object.entries(loanTotals).map(([c, t]) => [c, t.net])), fx) : null;
 
   return (
     <section>
@@ -249,6 +252,7 @@ export function HomeView() {
             {Object.entries(loanTotals).map(([c, t]) => (
               <div className="stat-line" key={c}><span>Loans net {c}</span><strong className={t.net >= 0 ? "pos" : "neg"}>{formatMoney(t.net, c)}</strong></div>
             ))}
+            {loansNetAll !== null && <div className="stat-line"><span>Loans net, all ≈ {cur}</span><strong className={loansNetAll >= 0 ? "pos" : "neg"}>{formatMoney(loansNetAll, cur)}</strong></div>}
             {overdueLoans > 0 && <a className="small neg" href={href("loans")}>{overdueLoans} overdue loan{overdueLoans > 1 ? "s" : ""} →</a>}
           </Card>
         </div>

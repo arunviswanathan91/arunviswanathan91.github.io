@@ -9,6 +9,8 @@ import { Modal } from "../../components/Modal.tsx";
 import { Badge, confirmDanger, Empty, ErrorText, PageHeader, Select } from "../../components/ui.tsx";
 import { formatMoney } from "../loans/balance.ts";
 import { TransactionForm } from "./TransactionForm.tsx";
+import { RecurringCard } from "./Recurring.tsx";
+import { combine, useFx } from "../../lib/fx.ts";
 
 const cents = (n: number) => Math.round(Number(n) * 100);
 
@@ -21,6 +23,8 @@ export function BudgetView({ route }: { route: Route }) {
   const [error, setError] = useState("");
 
   const { data, error: loadError } = useLoad(async () => {
+    // Post recurring items that are due (rent, salary, subscriptions); a no-op until the migration runs.
+    await rpc<number>("post_recurring").catch(() => 0);
     const [categories, txs, budgets, lines] = await Promise.all([
       list<BudgetCategory>("budget_categories", { order: [["kind"], ["name"]] }),
       list<Transaction>("transactions", { gte: ["occurred_on", month], lt: ["occurred_on", addMonths(month, 1)], order: [["occurred_on", false], ["created_at", false]] }),
@@ -43,6 +47,11 @@ export function BudgetView({ route }: { route: Route }) {
     totals.set(t.currency, x);
   }
   if (!totals.size) totals.set(cur, { income: 0, expense: 0 });
+  const fx = useFx(cur, totals.size > 1);
+  const combined = fx && {
+    income: combine(Object.fromEntries([...totals].map(([c, t]) => [c, t.income / 100])), fx),
+    expense: combine(Object.fromEntries([...totals].map(([c, t]) => [c, t.expense / 100])), fx),
+  };
 
   // Budget vs actual for expense categories in the default currency (plus uncategorised spending)
   const expenseCats = categories.filter((c) => c.kind === "expense" && (!c.archived_at || txs.some((t) => t.category_id === c.id)));
@@ -146,6 +155,14 @@ export function BudgetView({ route }: { route: Route }) {
         </div>
 
         <aside className="detail-side">
+          {combined && combined.income !== null && combined.expense !== null && (
+            <div className="card pad">
+              <h3>All currencies ≈ {cur}</h3>
+              <div className="stat-line"><span>Income</span><strong className="pos">{formatMoney(combined.income, cur)}</strong></div>
+              <div className="stat-line"><span>Spent</span><strong>{formatMoney(combined.expense, cur)}</strong></div>
+              <p className="muted small">Estimate at rates of {fx!.date}; totals above stay in their own currencies.</p>
+            </div>
+          )}
           <div className="card pad">
             <div className="section-head">
               <h3>Budget vs actual ({cur})</h3>
@@ -188,6 +205,7 @@ export function BudgetView({ route }: { route: Route }) {
               </p>
             )}
           </div>
+          <RecurringCard categories={categories} currency={cur} />
         </aside>
       </div>
 

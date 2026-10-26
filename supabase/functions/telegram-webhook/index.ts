@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { BY_COMMAND, ENTITIES, ENTITY_LIST } from "./entities.ts";
 import type { BotEntity, EntityKey } from "./entities.ts";
 import { isAffirmative, isDone, parseDate, parseMessage, splitPair } from "./parse.ts";
+import { dayIn, matchByName, money, parseHabit, parseSpend } from "./money.ts";
 
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 const STATE_TTL=15*60*1000;
@@ -25,6 +26,13 @@ const HELP=[
  "  /tag              ask me which tag to add",
  "  /projects         list, or /projects new Thesis",
  "  /tags             list, or /tags new urgent",
+ "",
+ "Money & habits:",
+ "  /spend 450 Groceries card:amazon cat:food   (date:yesterday, or 450 SEK …)",
+ "  /income 52000 Salary",
+ "  /habit read 30    add 30 to today's Read (or /habit gym to tick it)",
+ "  /habits           today's habits and how far along they are",
+ "  /due              what's due in the next 7 days (EMIs, cards, deadlines…)",
  "",
  "After creating or picking something, just send more tokens to update it — send \"done\" to stop.",
 ].join("\n");
@@ -186,6 +194,107 @@ Deno.serve(async(req)=>{
    `${requestedProject?`\n\nNo project named "${requestedProject}" was found.`:""}\n\nReply with a number, or "no".`);
  };
 
+ // ---------- money and habits ----------
+ const settingsRow=async()=>{
+  const {data}=await db.from("ws_settings").select("default_currency,timezone,habit_pauses").eq("user_id",userId).maybeSingle();
+  return {currency:(data?.default_currency as string)||"INR",tz:(data?.timezone as string)||tz,pauses:(data?.habit_pauses??[]) as {from:string;to:string;habit_id?:string|null}[]};
+ };
+
+ const handleSpend=async(kind:"expense"|"income",input:string)=>{
+  const p=parseSpend(input);
+  if("error" in p)return send(chatId,p.error);
+  const s=await settingsRow();
+  let currency=p.currency??s.currency;
+  const notes:string[]=[];
+  let loanId:string|null=null;
+  if(p.card){
+   const {data:cards}=await db.from("ws_loans").select("id,account_name,card_last4,currency").eq("user_id",userId).eq("account_type","credit_card");
+   const list=((cards??[]) as {id:string;account_name:string|null;card_last4:string|null;currency:string}[]).map(c=>({...c,name:c.account_name??""}));
+   const card=list.find(c=>c.card_last4===p.card)??matchByName(list,p.card!);
+   if(card){loanId=card.id;currency=card.currency;notes.push(`card ${card.account_name??"••"+card.card_last4}`)}
+   else notes.push(`no card matching "${p.card}"`);
+  }
+  let categoryId:string|null=null;
+  if(p.category){
+   const {data:cats}=await db.from("ws_budget_categories").select("id,name").eq("user_id",userId).eq("kind",kind).is("archived_at",null);
+   const cat=matchByName((cats??[]) as {id:string;name:string}[],p.category);
+   if(cat){categoryId=cat.id;notes.push(cat.name)}else notes.push(`no category "${p.category}", left uncategorised`);
+  }
+  const occurred=p.date?(()=>{const iso=parseDate(p.date!,s.tz);return iso?dayIn(s.tz,new Date(iso)):null})():dayIn(s.tz);
+  if(!occurred)return send(chatId,`I couldn't read the date "${p.date}".`);
+  const {error}=await db.from("ws_transactions").insert({user_id:userId,kind,description:p.description,amount:p.amount,currency,category_id:categoryId,occurred_on:occurred,loan_id:loanId,notes:"Telegram"});
+  if(error)return send(chatId,"I couldn't save that: "+error.message);
+  return send(chatId,`Saved ${kind}: ${money(p.amount,currency)} · ${p.description} · ${occurred}${notes.length?"\n"+notes.join(" · "):""}`);
+ };
+
+ type HabitRow={id:string;name:string;target:number|null;unit:string|null;period:string|null;frequency:string;weekdays:number[];start_date:string};
+ const activeHabits=async()=>{
+  const {data}=await db.from("ws_habits").select("id,name,target,unit,period,frequency,weekdays,start_date").eq("user_id",userId).is("archived_at",null).order("position");
+  return (data??[]) as HabitRow[];
+ };
+ const periodStart=(h:HabitRow,day:string)=>{
+  if(h.period==="month")return day.slice(0,8)+"01";
+  if(h.period==="week"){const d=new Date(day+"T12:00:00Z");d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10)}
+  return day;
+ };
+ const progress=async(h:HabitRow,day:string)=>{
+  const {data}=await db.from("ws_habit_checkins").select("day,amount").eq("habit_id",h.id).gte("day",periodStart(h,day)).lte("day",day);
+  const rows=(data??[]) as {day:string;amount:number|null}[];
+  return {total:rows.reduce((t,r)=>t+Number(r.amount??h.target??1),0),todayRow:rows.find(r=>r.day===day)??null};
+ };
+ const scope=(h:HabitRow)=>h.period==="week"?" this week":h.period==="month"?" this month":" today";
+
+ const handleHabit=async(input:string)=>{
+  const p=parseHabit(input);
+  if("error" in p)return send(chatId,p.error);
+  const habits=await activeHabits();
+  const h=matchByName(habits,p.name);
+  if(!h)return send(chatId,`No habit called "${p.name}". Your habits: ${habits.map(x=>x.name).join(", ")||"none yet"}`);
+  const s=await settingsRow();
+  const day=dayIn(s.tz);
+  const before=await progress(h,day);
+  if(p.amount===null&&!h.target){
+   if(before.todayRow)return send(chatId,`${h.name} is already ticked for today ✓`);
+   const {error}=await db.from("ws_habit_checkins").insert({habit_id:h.id,user_id:userId,day});
+   return send(chatId,error?"I couldn't save that: "+error.message:`${h.name} ✓ for today`);
+  }
+  const add=p.amount??Math.max(0,(h.target??1)-before.total);
+  const current=before.todayRow?Number(before.todayRow.amount??h.target??1):0;
+  const {error}=await db.from("ws_habit_checkins").upsert({habit_id:h.id,user_id:userId,day,amount:current+add},{onConflict:"habit_id,day"});
+  if(error)return send(chatId,"I couldn't save that: "+error.message);
+  const total=before.total+add,unit=h.unit?" "+h.unit:"";
+  const target=h.target??1;
+  return send(chatId,`${h.name}: ${total}${unit} of ${target}${unit}${scope(h)}${total>=target?" ✓":` · ${Math.round((target-total)*100)/100}${unit} to go`}`
+   +(h.period==="day"||!h.period?"\n(A shortfall carried from yesterday shows on the dashboard.)":""));
+ };
+
+ const handleHabits=async()=>{
+  const s=await settingsRow();
+  const day=dayIn(s.tz);
+  const dow=((new Date(day+"T12:00:00Z").getUTCDay()+6)%7)+1;
+  const lines:string[]=[];
+  for(const h of await activeHabits()){
+   if(h.start_date>day)continue;
+   if(s.pauses.some(p=>p.from<=day&&day<=p.to&&(!p.habit_id||p.habit_id===h.id)))continue;
+   if((h.period==="day"||!h.period)&&h.frequency!=="daily"&&!h.weekdays.includes(dow))continue;
+   const {total}=await progress(h,day);
+   const target=h.target??1,unit=h.unit?" "+h.unit:"";
+   lines.push(`${total>=target?"✓":"○"} ${h.name}${h.target?` — ${total}${unit} of ${target}${unit}${scope(h)}`:""}`);
+  }
+  return send(chatId,lines.length?lines.join("\n")+"\n\nLog with /habit <name> [amount].":"No habits due today.");
+ };
+
+ const handleDue=async()=>{
+  const s=await settingsRow();
+  const day=dayIn(s.tz);
+  const until=new Date(Date.parse(day+"T12:00:00Z")+7*86400000).toISOString().slice(0,10);
+  const {data,error}=await db.rpc("ws_agenda_for_user",{p_user:userId,p_from:day,p_to:until});
+  if(error)return send(chatId,"The agenda isn't available yet.");
+  const rows=(data??[]) as {kind:string;title:string;day:string;detail:string|null}[];
+  if(!rows.length)return send(chatId,"Nothing due in the next 7 days.");
+  return send(chatId,rows.slice(0,25).map(r=>`${r.day===day?"Today":r.day.slice(5)} · ${r.title}${r.detail?` (${r.detail})`:""}`).join("\n"));
+ };
+
  // ---------- commands ----------
  if(text.startsWith("/")){
   const [cmd,...restParts]=text.split(/\s+/);
@@ -193,6 +302,11 @@ Deno.serve(async(req)=>{
   const command=cmd.toLowerCase();
 
   if(command==="/help"||command==="/start")return send(chatId,HELP);
+
+  if(command==="/spend"||command==="/income")return handleSpend(command==="/income"?"income":"expense",rest);
+  if(command==="/habit")return handleHabit(rest);
+  if(command==="/habits")return handleHabits();
+  if(command==="/due")return handleDue();
 
   // Create in any module
   const entity=BY_COMMAND[command];
