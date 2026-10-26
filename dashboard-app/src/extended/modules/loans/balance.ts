@@ -12,6 +12,11 @@ export interface Contact {
 }
 
 export interface Loan {
+  account_type?: "personal" | "bank" | "credit_card";
+  account_name?: string | null;
+  card_last4?: string | null;
+  credit_limit?: number | null;
+  minimum_due?: number | null;
   id: string;
   contact_id: string;
   direction: Direction;

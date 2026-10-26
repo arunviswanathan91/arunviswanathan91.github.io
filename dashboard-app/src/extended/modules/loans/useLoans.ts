@@ -22,7 +22,7 @@ export function useLoans(): LoansData {
     if (!supabase) return;
     const [c, l, p] = await Promise.all([
       supabase.from("contacts").select("id,name,phone,email,notes").order("name"),
-      supabase.from("loans").select("id,contact_id,direction,amount,currency,issued_on,due_on,note").order("issued_on", { ascending: false }),
+      supabase.from("loans").select("id,contact_id,direction,amount,currency,issued_on,due_on,note,account_type,account_name,card_last4,credit_limit,minimum_due").order("issued_on", { ascending: false }),
       supabase.from("loan_payments").select("id,loan_id,amount,paid_on,note").order("paid_on"),
     ]);
     const err = c.error ?? l.error ?? p.error;

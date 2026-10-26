@@ -24,7 +24,7 @@ export const SECTIONS: Record<SectionId, Section> = {
   meetings: { id: "meetings", label: "Meetings", icon: Users, tone: "meetings" },
   deadlines: { id: "deadlines", label: "Deadlines", icon: CalendarClock, tone: "deadlines" },
   budget: { id: "budget", label: "Budget", icon: Wallet, tone: "money" },
-  loans: { id: "loans", label: "Loans", icon: HandCoins, tone: "money" },
+  loans: { id: "loans", label: "Loans & cards", icon: HandCoins, tone: "money" },
   habits: { id: "habits", label: "Habits", icon: Repeat, tone: "habits" },
   search: { id: "search", label: "Search", icon: Search, tone: "home" },
   settings: { id: "settings", label: "Settings", icon: Settings, tone: "home" },

@@ -827,6 +827,7 @@ begin
     where i.indrelid=('public.'||t)::regclass and i.indisprimary;
   for original in select value from jsonb_array_elements(coalesce(payload->t,'[]')) loop
    r := original;
+   if t='ws_loans' then r:=jsonb_build_object('account_type','personal')||r; end if;
    if t <> 'item_tags' and (r->>'user_id') is distinct from auth.uid()::text then raise exception 'Backup contains a different owner'; end if;
    if t='tasks' then r:=r || '{"previous_id":null,"recurrence":null}'::jsonb; end if;
    fresh := false;

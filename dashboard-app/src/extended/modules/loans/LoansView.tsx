@@ -13,6 +13,7 @@ export function LoansView() {
   const { contacts, loans, payments, loading, error, reload } = useLoans();
   const [filter, setFilter] = useState<Filter>("active");
   const [person, setPerson] = useState<string | null>(null);
+  const [editing,setEditing]=useState<Loan|null>(null);
   const [adding, setAdding] = useState(false);
   const [paying, setPaying] = useState<Loan | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -50,9 +51,9 @@ export function LoansView() {
     <section>
       <PageHeader
         section="loans"
-        title="Loans"
-        subtitle="Money you’ve lent and borrowed, and what’s still outstanding."
-        actions={<button className="primary" onClick={() => setAdding(true)}>+ New loan</button>}
+        title="Loans & credit cards"
+        subtitle="Personal loans, bank loans and credit-card balances, with repayment history."
+        actions={<button className="primary" onClick={() => setAdding(true)}>+ Add loan / card</button>}
       />
       {error && <p className="error">{error}</p>}
 
@@ -70,9 +71,9 @@ export function LoansView() {
 
       <div className="loans-layout">
         <aside className="card people">
-          <h3>People</h3>
+          <h3>People & lenders</h3>
           <button className={`person ${person === null ? "on" : ""}`} onClick={() => setPerson(null)}>
-            <span>Everyone</span>
+            <span>All people & lenders</span>
           </button>
           {people.map(({ contact, net, overdueLoans }) => (
             <button key={contact.id} className={`person ${person === contact.id ? "on" : ""}`} onClick={() => setPerson(contact.id)}>
@@ -101,12 +102,12 @@ export function LoansView() {
             ))}
           </div>
           {rows.length === 0 ? (
-            <p className="muted empty">{loans.length === 0 ? "No loans yet. Add your first one with “+ New loan”." : "Nothing here."}</p>
+            <p className="muted empty">{loans.length === 0 ? "No loans yet. Add your first one with “+ Add loan / card”." : "Nothing here."}</p>
           ) : (
             <div className="table-scroll">
               <table>
                 <thead>
-                  <tr><th>Person</th><th>Type</th><th className="num">Amount</th><th className="num">Left</th><th>Due</th><th>Status</th><th /></tr>
+                  <tr><th>Account / person</th><th>Type</th><th className="num">Amount</th><th className="num">Left</th><th>Due</th><th>Status</th><th /></tr>
                 </thead>
                 <tbody>
                   {rows.map(({ loan, status, left }) => {
@@ -114,13 +115,14 @@ export function LoansView() {
                     return (
                       <Fragment key={loan.id}>
                         <tr className="clickable" onClick={() => setExpanded(expanded === loan.id ? null : loan.id)}>
-                          <td>{nameOf(loan.contact_id)}{loan.note && <div className="muted small">{loan.note}</div>}</td>
-                          <td><span className={`badge ${loan.direction}`}>{loan.direction === "lent" ? "Lent" : "Borrowed"}</span></td>
+                          <td><strong>{loan.account_name || nameOf(loan.contact_id)}</strong>{loan.account_name && <div className="muted small">{nameOf(loan.contact_id)}</div>}{loan.card_last4 && <span className="small"> · •••• {loan.card_last4}</span>}{loan.note && <div className="muted small">{loan.note}</div>}</td>
+                          <td><span className={`badge ${loan.direction}`}>{loan.account_type === "credit_card" ? "Credit card" : loan.account_type === "bank" ? "Bank loan" : loan.direction === "lent" ? "Lent" : "Borrowed"}</span></td>
                           <td className="num">{formatMoney(loan.amount, loan.currency)}</td>
                           <td className="num"><strong>{formatMoney(left, loan.currency)}</strong></td>
                           <td className="date">{loan.due_on ?? <span className="muted">—</span>}</td>
                           <td><StatusBadge status={status} /></td>
                           <td className="actions" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={()=>setEditing(loan)}>Edit</button>
                             {status !== "settled" && <button onClick={() => setPaying(loan)}>{loan.direction === "lent" ? "Got paid" : "Paid back"}</button>}
                           </td>
                         </tr>
@@ -130,6 +132,7 @@ export function LoansView() {
                               <p className="small muted">{loan.direction === "lent" ? "Lent" : "Borrowed"} on {loan.issued_on}</p>
                               <p className="small"><strong>Repayments</strong> · paid {formatMoney(paidCents(loan, payments) / 100, loan.currency)} of {formatMoney(loan.amount, loan.currency)}</p>
                               {history.length === 0 && <p className="muted small">No repayments yet.</p>}
+                              {loan.account_type === "credit_card" && <p className="small">Minimum due: {loan.minimum_due == null ? "Not set" : formatMoney(Number(loan.minimum_due),loan.currency)} · Credit limit: {loan.credit_limit == null ? "Not set" : formatMoney(Number(loan.credit_limit),loan.currency)}</p>}
                               <ul className="history">
                                 {history.map((p) => (
                                   <li key={p.id}>
@@ -154,9 +157,9 @@ export function LoansView() {
         </div>
       </div>
 
-      {adding && (
-        <Modal title="New loan" onClose={() => setAdding(false)}>
-          <LoanForm contacts={contacts} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); await reload(); }} />
+      {(adding || editing) && (
+        <Modal title={editing ? "Edit account" : "New loan or credit card"} onClose={() => {setAdding(false);setEditing(null)}}>
+          <LoanForm loan={editing ?? undefined} contacts={contacts} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); setEditing(null); await reload(); }} />
         </Modal>
       )}
       {paying && (

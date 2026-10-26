@@ -15,6 +15,7 @@ test('workspace integration preserves existing records and enforces isolation',a
  await db.exec(`grant usage on schema public to authenticated;grant select,insert,update,delete on all tables in schema public to authenticated;insert into profiles(id,timezone) values('${uid}','Asia/Kolkata');insert into projects(id,user_id,name) values('33333333-3333-3333-3333-333333333333','${uid}','Existing research');insert into tasks(id,user_id,title,status,priority,due_at,notes) values('44444444-4444-4444-4444-444444444444','${uid}','Existing task','Review','High','2026-10-27T09:30:00Z','Preserve me');`);
  const migration=readFileSync(new URL('workspace-extension.sql',root),'utf8');
  try{await db.exec(migration);await db.exec(migration)}catch(e){throw new Error('extension: '+(e as Error).message)}
+ await db.exec(readFileSync(new URL('finance-accounts.sql',root),'utf8'));
  await db.exec(`select set_config('request.jwt.claim.sub','${uid}',false);set role authenticated;`);
  assert.equal((await db.query<any>('select title from ws_projects')).rows[0].title,'Existing research');
  await db.exec(`update ws_tasks set title='Changed title' where id='44444444-4444-4444-4444-444444444444'`);
@@ -30,7 +31,10 @@ test('workspace integration preserves existing records and enforces isolation',a
  assert.ok((await db.query<any>(`select * from ws_search_workspace('STAT3')`)).rows.length);
  await db.exec(`insert into publications(user_id,title) values('${uid}','Existing manuscript')`);
  const historyCount=(await db.query<any>('select count(*)::int n from publication_stage_events')).rows[0].n;
+ const contact=(await db.query<any>("insert into ws_contacts(name) values('Test bank') returning id")).rows[0].id;
+ await db.query("insert into ws_loans(contact_id,direction,amount,account_type,account_name,card_last4,minimum_due) values($1,'borrowed',2000,'credit_card','Test card','1234',100)",[contact]);
  const backup=(await db.query<any>('select ws_backup_data() as data')).rows[0].data;
+ assert.equal(backup.ws_loans[0].card_last4,"1234");
  assert.equal(backup.tasks.length,3);
  assert.equal(backup.ws_papers.length,1);
  await db.exec(`update ws_papers set title='Edited' where id='${paper}'`);
