@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CalendarClock, CheckSquare, Users } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckSquare, CreditCard, HandCoins, Repeat, Users, Wallet } from "lucide-react";
 import { list, useLoad } from "../../lib/db.ts";
 import { addDays, fmtDateTime, relDay, startOfMonth, today } from "../../lib/dates.ts";
 import { href } from "../../lib/route.ts";
@@ -10,9 +10,9 @@ import { openQuick, QUICK_ACTIONS } from "../../components/QuickAdd.tsx";
 import { Ring } from "../../components/Ring.tsx";
 import { Empty, ErrorText } from "../../components/ui.tsx";
 import { DeadlineRows, isOpenDeadline } from "../deadlines/DeadlineRows.tsx";
-import { planFor } from "../habits/logic.ts";
+import { summarise } from "../habits/logic.ts";
 import { TodayHabits } from "../habits/HabitsView.tsx";
-import { formatMoney, loanStatus, totalsByCurrency } from "../loans/balance.ts";
+import { emiPlan, formatMoney, loanStatus, statementPlan, totalsByCurrency, type Loan, type Payment } from "../loans/balance.ts";
 import { useLoans } from "../loans/useLoans.ts";
 import { MeetingRows } from "../meetings/MeetingRows.tsx";
 import { NoteRows } from "../notes/NoteRows.tsx";
@@ -43,6 +43,50 @@ function RingStat({ section, value, label, title, detail, link }: { section: Sec
 }
 
 const cents = (n: number) => Math.round(Number(n) * 100);
+
+interface AttentionItem {
+  key: string;
+  icon: typeof CheckSquare;
+  text: string;
+  href: string;
+  urgent: boolean;
+}
+
+/** One line of chips for what needs doing soon; hidden when there is nothing. */
+function Attention({ items }: { items: AttentionItem[] }) {
+  if (!items.length) return null;
+  return (
+    <ul className="attention" aria-label="Needs attention">
+      {items.map(({ key, icon: Icon, text, href: link, urgent }) => (
+        <li key={key} style={{ maxWidth: "100%" }}>
+          <a href={link} className={urgent ? "urgent" : ""} title={text}>
+            {urgent ? <AlertTriangle size={14} /> : <Icon size={14} />}<span>{text}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** EMIs and card bills that are overdue or due within a week. */
+function moneyAttention(loans: Loan[], payments: Payment[], now: string): AttentionItem[] {
+  const week = addDays(now, 7);
+  const out: AttentionItem[] = [];
+  for (const l of loans) {
+    const name = l.account_name || "Loan";
+    const emi = emiPlan(l, payments, now);
+    if (emi?.nextDue && emi.nextDue <= week) {
+      out.push({ key: `e${l.id}`, icon: HandCoins, text: `${emi.overdueCount ? "EMI overdue" : "EMI"} ${formatMoney(emi.dueNow || emi.emi, l.currency)} · ${name} · ${relDay(emi.nextDue, now)}`, href: href("loans"), urgent: emi.overdueCount > 0 });
+      continue;
+    }
+    const st = statementPlan(l, payments, now);
+    if (st && st.dueOn && st.statementLeft > 0 && st.dueOn <= week && (st.dueOn >= now || st.state === "overdue")) {
+      const amount = st.minimumLeft > 0 ? `min ${formatMoney(st.minimumLeft, l.currency)}` : `${formatMoney(st.statementLeft, l.currency)} to avoid interest`;
+      out.push({ key: `c${l.id}`, icon: CreditCard, text: `${name}: ${amount} · ${relDay(st.dueOn, now)}`, href: href("loans"), urgent: st.state === "overdue" });
+    }
+  }
+  return out;
+}
 
 export function HomeView() {
   const now = today();
@@ -81,9 +125,9 @@ export function HomeView() {
   const nextMeeting = data?.meetings.find((m) => m.starts_at >= new Date().toISOString());
   const active = data?.projects.filter((p) => p.status === "active").sort((a, b) => Number(b.pinned) - Number(a.pinned)).slice(0, 6) ?? [];
 
-  const habitDays = (data?.habits ?? []).filter((h) => !h.archived_at).map((h) => planFor(h, data!.checkins, now).at(-1)).filter((d) => d && d.required > 0);
-  const habitsDue = habitDays;
-  const habitsDone = habitDays.filter((d) => d!.state === "done").length;
+  const habitNow = (data?.habits ?? []).filter((h) => !h.archived_at).map((h) => ({ h, n: summarise(h, data!.checkins, now, settings.habit_pauses ?? []).now })).filter((x) => x.n && x.n.required > 0 && x.n.state !== "paused");
+  const habitsDue = habitNow;
+  const habitsDone = habitNow.filter((x) => x.n!.state === "done").length;
 
   const spent = (data?.txs ?? []).filter((t) => t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
   const budgeted = (data?.budgets ?? []).filter((b) => b.currency === cur).reduce((s, b) => s + cents(b.amount), 0);
@@ -124,6 +168,17 @@ export function HomeView() {
         )}
       </header>
       <ErrorText error={error} />
+      {data && (
+        <Attention
+          items={[
+            ...moneyAttention(loans, payments, now),
+            ...(overdue.length ? [{ key: "tasks", icon: CheckSquare, text: `${overdue.length} overdue task${overdue.length > 1 ? "s" : ""}`, href: href("tasks", { view: "overdue" }), urgent: true }] : []),
+            ...deadlines.filter((d) => d.due_date <= addDays(now, 3)).map((d) => ({ key: `d${d.id}`, icon: CalendarClock, text: `${d.title} · ${relDay(d.due_date, now)}`, href: href(`deadlines/${d.id}`), urgent: d.due_date <= now })),
+            ...(habitsDue.length - habitsDone > 0 ? [{ key: "habits", icon: Repeat, text: `${habitsDue.length - habitsDone} habit${habitsDue.length - habitsDone > 1 ? "s" : ""} still open: ${habitNow.filter((x) => x.n!.state !== "done").map((x) => x.h.name).join(", ")}`, href: href("habits"), urgent: false }] : []),
+            ...(budgeted > 0 && spent > budgeted ? [{ key: "budget", icon: Wallet, text: `Over budget by ${formatMoney((spent - budgeted) / 100, cur)}`, href: href("budget"), urgent: true }] : []),
+          ]}
+        />
+      )}
 
       <div className="quick-actions" aria-label="Quick add">
         {QUICK_ACTIONS.map(({ kind, label, icon: Icon, section }) => (

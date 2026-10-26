@@ -179,6 +179,8 @@ export interface Transaction {
   occurred_on: string;
   payment_method: string | null;
   notes: string | null;
+  /** Credit card this was paid with (or refunded to). */
+  loan_id?: string | null;
 }
 export interface MonthlyBudget {
   id: string;
@@ -211,8 +213,17 @@ export interface Habit {
   unit: string | null;
   /** A shortfall rolls into the next day's requirement. */
   carry_over: boolean;
-  /** Most that can be carried into one day; null = no limit. */
+  /** Most that can be carried into one day (or period); null = one day's (period's) amount. */
   max_carry: number | null;
+  /** The target is per day (on the scheduled days), per ISO week or per calendar month (any days). */
+  period: "day" | "week" | "month";
+}
+/** A break from habits, inclusive dates. No habit_id means every habit. Stored in settings.habit_pauses. */
+export interface HabitPause {
+  from: string;
+  to: string;
+  habit_id?: string | null;
+  note?: string | null;
 }
 export interface HabitCheckin {
   habit_id: string;
@@ -246,6 +257,9 @@ export interface Settings {
   user_id: string;
   default_currency: string;
   timezone: string;
+  habit_pauses?: HabitPause[];
+  /** "HH:MM" local time for the Telegram "habits still open" nudge; null = off. */
+  habit_nudge_time?: string | null;
 }
 
 export interface SearchHit {

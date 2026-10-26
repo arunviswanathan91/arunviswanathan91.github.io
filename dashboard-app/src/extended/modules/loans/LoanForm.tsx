@@ -102,8 +102,8 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
       )}
       <div className="row">
         <label className="grow">
-          {accountType === "credit_card" ? "Starting balance (before repayments)" : "Amount"}
-          <input required type="number" inputMode="decimal" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          {accountType === "credit_card" ? "Starting balance (0 if new)" : "Amount"}
+          <input required type="number" inputMode="decimal" min={accountType === "credit_card" ? "0" : "0.01"} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </label>
         <label>
           Currency
@@ -120,7 +120,7 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
           <label>Payment due date<input type="date" min={stmtOn} value={stmtDue} onChange={e=>setStmtDue(e.target.value)}/></label>
           <p className="muted small">Payments dated on or after the statement date count towards the statement and its minimum due. Enter the new statement each month.</p>
         </div>
-        <p className="muted small">Repayments reduce the tracked balance. New spending, interest and statement amounts must be updated manually. Only the last four digits are needed.</p>
+        <p className="muted small">Balance = starting balance + spending added with “Add spend” (or a Budget expense paid with this card) − bill payments. Enter 0 for a new card. Interest and fees can be added as spending. Only the last four digits are needed.</p>
       </>}
       {hasEmi && <div className="form-group" role="group" aria-label="EMI"><strong className="form-group-title">EMI (optional)</strong>
         <div className="grid-2"><label>EMI amount<input type="number" min="0.01" step="0.01" value={emiAmount} onChange={e=>setEmiAmount(e.target.value)}/></label><label>Number of EMIs<input type="number" min="1" step="1" value={tenure} onChange={e=>setTenure(e.target.value)}/></label></div>

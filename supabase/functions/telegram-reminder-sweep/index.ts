@@ -14,6 +14,8 @@ Deno.serve(async(req)=>{
  // The same scheduled sweep also enforces each user's 14/30-day Trash policy.
  // Ignore "function not found" until the one-time trash.sql migration is applied.
  await db.rpc("purge_expired_trash");
+ // Queues loan and habit reminders (card-spending-habit-periods-reminders.sql); a no-op until that migration runs.
+ await db.rpc("ws_daily_nudges");
 
  // opportunity_id only exists once opportunity-deadline-reminders.sql has been
  // run; this Edge Function redeploys and starts polling on every push
@@ -47,6 +49,8 @@ Deno.serve(async(req)=>{
   const base=Deno.env.get("DASHBOARD_URL")??"https://arunviswanathan91.github.io/dashboard/";
   const root=base.replace(/#.*$/,"").replace(/\/$/,"");
   const url=reminder.project_id?`${root}/#/project/${reminder.project_id}`
+   :/^(EMI|Card payment)/.test(reminder.title)?`${root}/#/tools/loans`
+   :/^Habits still open/.test(reminder.title)?`${root}/#/tools/habits`
    :reminder.opportunity_id?`${root}/#/opportunities`
    :`${root}/#/reminders`;
   const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({

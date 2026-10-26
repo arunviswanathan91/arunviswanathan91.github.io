@@ -10,7 +10,7 @@ export function Ring({ value, label, size = 46 }: { value: number; label: string
         <circle className="track" cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} />
         <circle className="value" cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={c * (1 - v)} />
       </svg>
-      <span className="ring-label">{label}</span>
+      <span className={`ring-label ${label.length > 3 ? "long" : ""}`}>{label}</span>
     </span>
   );
 }

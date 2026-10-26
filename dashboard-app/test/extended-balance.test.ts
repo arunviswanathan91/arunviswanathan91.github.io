@@ -110,3 +110,42 @@ test("card usage is the tracked balance against the limit", () => {
   assert.equal(u.available, 35000);
   assert.equal(u.utilization, 0.3);
 });
+
+// ── Card spending, amortisation, next statement ─────────────────────────────
+import { amortisation, chargedByLoan, nextStatementDefaults, totalOwed } from "../src/extended/modules/loans/balance.ts";
+import { toCsv } from "../src/extended/lib/download.ts";
+
+test("card spending adds to the balance and refunds lower it", () => {
+  const charged = chargedByLoan([
+    { id: "t1", loan_id: "k1", kind: "expense", description: "Food", amount: 300.1, occurred_on: "2026-10-12" },
+    { id: "t2", loan_id: "k1", kind: "income", description: "Refund", amount: 0.1, occurred_on: "2026-10-13" },
+  ]);
+  const withSpend = { ...card, charged: charged.k1 };
+  assert.equal(totalOwed(withSpend), 20300);
+  assert.equal(remaining(withSpend, [payOn("k1", 300, "2026-10-14")]), 20000);
+  assert.equal(statementPlan(withSpend, [], "2026-10-10")!.unbilled, 5300);
+});
+
+test("amortisation derives the principal from EMI, rate and tenure", () => {
+  // ₹1,00,000 at 12 % for 12 months has an EMI of about 8,884.88.
+  const l: Loan = { ...emiLoan, amount: 106618.56, emi_amount: 8884.88, emi_tenure: 12, interest_rate: 12 };
+  const a = amortisation(l, [], "2026-01-01")!;
+  assert.ok(Math.abs(a.principal - 100000) < 1);
+  assert.ok(Math.abs(a.totalInterest - 6618.56) < 1);
+  assert.equal(a.rows.at(-1)!.balance, 0);
+  assert.equal(a.rows[0].interest, 1000);
+  const later = amortisation(l, [payOn("e1", 8884.88 * 6, "2026-06-30")], "2026-07-01")!;
+  assert.ok(later.outstandingPrincipal > 50000 && later.outstandingPrincipal < 52000);
+  assert.ok(later.prepaySaving > 1000);
+  assert.equal(amortisation({ ...l, interest_rate: null }, [], "2026-01-01"), null);
+});
+
+test("next statement is a month on, for the balance owed now, with about 5 % minimum", () => {
+  const d = nextStatementDefaults(card, [payOn("k1", 15000, "2026-10-15")], "2026-11-05");
+  assert.deepEqual(d, { statement_on: "2026-11-01", statement_due_on: "2026-11-20", statement_amount: 5000, minimum_due: 250 });
+  assert.equal(nextStatementDefaults(card, [], "2026-10-26").statement_on, "2026-11-01"); // upcoming date kept
+});
+
+test("CSV quotes commas, quotes and new lines", () => {
+  assert.equal(toCsv([["a,b", 'say "hi"', "x\ny", null, 3]]), '﻿"a,b","say ""hi""","x\ny",,3\r\n');
+});
