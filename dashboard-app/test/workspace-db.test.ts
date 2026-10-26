@@ -16,6 +16,7 @@ test('workspace integration preserves existing records and enforces isolation',a
  const migration=readFileSync(new URL('workspace-extension.sql',root),'utf8');
  try{await db.exec(migration);await db.exec(migration)}catch(e){throw new Error('extension: '+(e as Error).message)}
  await db.exec(readFileSync(new URL('finance-accounts.sql',root),'utf8'));
+ await db.exec(readFileSync(new URL('emi-statements-habit-carry.sql',root),'utf8'));
  await db.exec(`select set_config('request.jwt.claim.sub','${uid}',false);set role authenticated;`);
  assert.equal((await db.query<any>('select title from ws_projects')).rows[0].title,'Existing research');
  await db.exec(`update ws_tasks set title='Changed title' where id='44444444-4444-4444-4444-444444444444'`);

@@ -2,10 +2,10 @@ import { Fragment, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { PageHeader } from "../../components/ui.tsx";
-import { balancesByContact, formatMoney, loanStatus, paidCents, remaining, todayISO, totalsByCurrency, type Loan, type LoanStatus } from "./balance.ts";
+import { balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, paidCents, remaining, statementPlan, todayISO, totalsByCurrency, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
 import { useLoans } from "./useLoans.ts";
 import { LoanForm } from "./LoanForm.tsx";
-import { PaymentForm } from "./PaymentForm.tsx";
+import { PaymentForm, type QuickAmount } from "./PaymentForm.tsx";
 
 type Filter = "active" | "overdue" | "settled" | "all";
 
@@ -22,6 +22,8 @@ export function LoansView() {
   const totals = useMemo(() => totalsByCurrency(loans, payments), [loans, payments]);
   // contacts is shared with meetings, so list only people you have loans with
   const people = useMemo(() => balancesByContact(contacts.filter((c) => loans.some((l) => l.contact_id === c.id)), loans, payments, today), [contacts, loans, payments, today]);
+  // The date that matters next: the next EMI, the statement due date, or the plain due date.
+  const nextDate = (loan: Loan) => emiPlan(loan, payments, today)?.nextDue ?? (statementPlan(loan, payments, today)?.statementLeft ? loan.statement_due_on : null) ?? loan.due_on;
   const nameOf = (id: string) => contacts.find((c) => c.id === id)?.name ?? "—";
 
   const rows = loans
@@ -43,6 +45,20 @@ export function LoansView() {
     await supabase.from("contacts").delete().eq("id", id);
     setPerson(null);
     await reload();
+  }
+
+  // Preset amounts for the repayment form: the EMI, or the card's minimum / statement / full balance.
+  function quickAmounts(loan: Loan, left: number): QuickAmount[] {
+    const out: QuickAmount[] = [];
+    const emi = emiPlan(loan, payments, today);
+    if (emi) out.push({ label: "EMI", amount: Math.min(emi.emi, left) });
+    const st = statementPlan(loan, payments, today);
+    if (st) {
+      if (st.minimumLeft > 0) out.push({ label: "Minimum due", amount: Math.min(st.minimumLeft, left) });
+      if (st.statementLeft > 0) out.push({ label: "Statement", amount: Math.min(st.statementLeft, left) });
+    }
+    if (out.length) out.push({ label: "Full balance", amount: left });
+    return out.filter((q, i) => q.amount > 0 && out.findIndex((o) => o.amount === q.amount && o.label === q.label) === i);
   }
 
   if (loading) return <p className="muted">Loading…</p>;
@@ -119,7 +135,7 @@ export function LoansView() {
                           <td><span className={`badge ${loan.direction}`}>{loan.account_type === "credit_card" ? "Credit card" : loan.account_type === "bank" ? "Bank loan" : loan.direction === "lent" ? "Lent" : "Borrowed"}</span></td>
                           <td className="num">{formatMoney(loan.amount, loan.currency)}</td>
                           <td className="num"><strong>{formatMoney(left, loan.currency)}</strong></td>
-                          <td className="date">{loan.due_on ?? <span className="muted">—</span>}</td>
+                          <td className="date">{nextDate(loan) ?? <span className="muted">—</span>}</td>
                           <td><StatusBadge status={status} /></td>
                           <td className="actions" onClick={(e) => e.stopPropagation()}>
                             <button onClick={()=>setEditing(loan)}>Edit</button>
@@ -132,7 +148,8 @@ export function LoansView() {
                               <p className="small muted">{loan.direction === "lent" ? "Lent" : "Borrowed"} on {loan.issued_on}</p>
                               <p className="small"><strong>Repayments</strong> · paid {formatMoney(paidCents(loan, payments) / 100, loan.currency)} of {formatMoney(loan.amount, loan.currency)}</p>
                               {history.length === 0 && <p className="muted small">No repayments yet.</p>}
-                              {loan.account_type === "credit_card" && <p className="small">Minimum due: {loan.minimum_due == null ? "Not set" : formatMoney(Number(loan.minimum_due),loan.currency)} · Credit limit: {loan.credit_limit == null ? "Not set" : formatMoney(Number(loan.credit_limit),loan.currency)}</p>}
+                              <EmiDetail loan={loan} payments={payments} today={today} />
+                              <CardDetail loan={loan} payments={payments} today={today} />
                               <ul className="history">
                                 {history.map((p) => (
                                   <li key={p.id}>
@@ -164,7 +181,7 @@ export function LoansView() {
       )}
       {paying && (
         <Modal title={`${paying.direction === "lent" ? "Repayment from" : "Repayment to"} ${nameOf(paying.contact_id)}`} onClose={() => setPaying(null)}>
-          <PaymentForm loan={paying} left={remaining(paying, payments)} onDone={async () => { setPaying(null); await reload(); }} />
+          <PaymentForm loan={paying} left={remaining(paying, payments)} quick={quickAmounts(paying, remaining(paying, payments))} onDone={async () => { setPaying(null); await reload(); }} />
         </Modal>
       )}
     </section>
@@ -175,3 +192,59 @@ function StatusBadge({ status }: { status: LoanStatus }) {
   return <span className={`badge ${status}`}>{status === "open" ? "Open" : status === "overdue" ? "Overdue" : "Settled"}</span>;
 }
 
+
+function EmiDetail({ loan, payments, today }: { loan: Loan; payments: Payment[]; today: string }) {
+  const plan = emiPlan(loan, payments, today);
+  if (!plan) return null;
+  return (
+    <div className="small emi-detail">
+      <p>
+        <strong>EMI</strong> {formatMoney(plan.emi, loan.currency)} / month · {plan.covered}{plan.tenure ? ` of ${plan.tenure}` : ""} paid
+        {plan.left !== null && ` · ${plan.left} left`}
+        {plan.finalDate && ` · last EMI ${plan.finalDate}`}
+        {loan.interest_rate != null && ` · ${loan.interest_rate}% interest`}
+      </p>
+      {plan.tenure && <progress max={plan.tenure} value={plan.covered} aria-label="EMIs paid" />}
+      {plan.nextDue && (
+        <p className={plan.overdueCount > 0 ? "neg" : ""}>
+          {plan.overdueCount > 0 ? `${plan.overdueCount} EMI${plan.overdueCount > 1 ? "s" : ""} overdue · ` : "Next EMI "}
+          {plan.nextDue}{plan.dueNow > 0 && ` · ${formatMoney(plan.dueNow, loan.currency)} due now`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const STATEMENT_LABEL: Record<StatementState, string> = { paid: "Statement paid", minimum_paid: "Minimum paid", due: "Payment due", overdue: "Overdue" };
+
+function CardDetail({ loan, payments, today }: { loan: Loan; payments: Payment[]; today: string }) {
+  if (loan.account_type !== "credit_card") return null;
+  const st = statementPlan(loan, payments, today);
+  const usage = cardUsage(loan, payments);
+  const money = (n: number) => formatMoney(n, loan.currency);
+  return (
+    <div className="small card-detail">
+      {st ? (
+        <>
+          <p>
+            <strong>Statement {st.statementOn}</strong> <span className={`badge ${st.state === "overdue" ? "overdue" : st.state === "paid" ? "settled" : "open"}`}>{STATEMENT_LABEL[st.state]}</span>
+          </p>
+          <p>
+            Statement {money(st.statement)} · paid since {money(st.paid)} · <strong>{money(st.statementLeft)} left</strong>
+            {st.dueOn && ` · due ${st.dueOn}`}
+          </p>
+          <p>Minimum due {money(st.minimumDue)}{st.minimumLeft > 0 ? ` · ${money(st.minimumLeft)} still to pay` : " · covered"} · New spending since statement {money(st.unbilled)}</p>
+          {st.interestRisk && <p className="neg">Past the due date with the statement unpaid, so interest is likely.</p>}
+        </>
+      ) : (
+        <p>Minimum due: {loan.minimum_due == null ? "Not set" : money(Number(loan.minimum_due))}. Edit the card to enter the current statement.</p>
+      )}
+      {usage && (
+        <p>
+          Limit {money(Number(loan.credit_limit))} · used {money(usage.used)} ({Math.round(usage.utilization * 100)}%) · available {money(usage.available)}
+          {usage.utilization > 0.3 && <span className="muted"> · above 30% can hurt your credit score</span>}
+        </p>
+      )}
+    </div>
+  );
+}

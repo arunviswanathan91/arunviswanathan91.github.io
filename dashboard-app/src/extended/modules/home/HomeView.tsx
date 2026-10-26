@@ -10,7 +10,7 @@ import { openQuick, QUICK_ACTIONS } from "../../components/QuickAdd.tsx";
 import { Ring } from "../../components/Ring.tsx";
 import { Empty, ErrorText } from "../../components/ui.tsx";
 import { DeadlineRows, isOpenDeadline } from "../deadlines/DeadlineRows.tsx";
-import { isDue } from "../habits/logic.ts";
+import { planFor } from "../habits/logic.ts";
 import { TodayHabits } from "../habits/HabitsView.tsx";
 import { formatMoney, loanStatus, totalsByCurrency } from "../loans/balance.ts";
 import { useLoans } from "../loans/useLoans.ts";
@@ -59,7 +59,7 @@ export function HomeView() {
       list<Note>("notes", { order: [["updated_at", false]], limit: 8 }),
       list<Meeting>("meetings", { gte: ["starts_at", new Date(Date.now() - 2 * 3600e3).toISOString()], order: [["starts_at"]], limit: 5 }),
       list<Habit>("habits"),
-      list<HabitCheckin>("habit_checkins", { gte: ["day", addDays(now, -60)] }),
+      list<HabitCheckin>("habit_checkins", { gte: ["day", addDays(now, -400)] }),
       list<Transaction>("transactions", { gte: ["occurred_on", startOfMonth(now)], eq: { kind: "expense" } }),
       list<MonthlyBudget>("monthly_budgets", { eq: { month: startOfMonth(now) } }),
     ]);
@@ -81,8 +81,9 @@ export function HomeView() {
   const nextMeeting = data?.meetings.find((m) => m.starts_at >= new Date().toISOString());
   const active = data?.projects.filter((p) => p.status === "active").sort((a, b) => Number(b.pinned) - Number(a.pinned)).slice(0, 6) ?? [];
 
-  const habitsDue = data?.habits.filter((h) => !h.archived_at && isDue(h, now)) ?? [];
-  const habitsDone = habitsDue.filter((h) => data!.checkins.some((c) => c.habit_id === h.id && c.day === now)).length;
+  const habitDays = (data?.habits ?? []).filter((h) => !h.archived_at).map((h) => planFor(h, data!.checkins, now).at(-1)).filter((d) => d && d.required > 0);
+  const habitsDue = habitDays;
+  const habitsDone = habitDays.filter((d) => d!.state === "done").length;
 
   const spent = (data?.txs ?? []).filter((t) => t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
   const budgeted = (data?.budgets ?? []).filter((b) => b.currency === cur).reduce((s, b) => s + cents(b.amount), 0);

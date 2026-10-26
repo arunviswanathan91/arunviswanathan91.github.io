@@ -474,6 +474,8 @@
 .extension-workspace .cell.done { background: var(--sec-habits); color: var(--surface); border-color: transparent; animation: pop 0.25s var(--ease); }
 .extension-workspace .cell.done:hover:not(:disabled) { background: var(--sec-habits); filter: brightness(1.08); }
 .extension-workspace .cell.off { display: inline-block; color: var(--border-strong); }
+.extension-workspace .cell.miss { border-color: var(--danger, #c0392b); }
+.extension-workspace .emi-detail progress, .extension-workspace .card-detail progress { width: 100%; max-width: 320px; }
 .extension-workspace .habit-stats li { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-top: 1px solid var(--border); }
 .extension-workspace .habit-stats li:first-child { border-top: 0; }
 .extension-workspace .habit-stat-head { display: flex; justify-content: space-between; align-items: center; }

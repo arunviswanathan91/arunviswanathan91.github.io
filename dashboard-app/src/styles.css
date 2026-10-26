@@ -1243,3 +1243,7 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
   --sec-money: #5b8a3a;     --sec-money-soft: #e6f0da;     --sec-money-ink: #2c5212;
   --sec-habits: #8a6f4e;    --sec-habits-soft: #efe6d8;    --sec-habits-ink: #4a3a28;}
 .sidebar .sec-chip{display:inline-grid;place-items:center;min-width:30px;height:30px;border-radius:9px;background:var(--tone-soft,var(--accent-soft));color:var(--tone,var(--accent))}.sidebar .sec-chip svg{width:17px;height:17px}.sidebar .extension-nav{display:flex;gap:10px;align-items:center;padding:8px 10px;text-decoration:none;color:var(--text);border-radius:9px}.sidebar .extension-nav:hover{background:var(--surface-2)}.sidebar.collapsed .extension-nav .nav-text{display:none}
+.form-group{display:grid;gap:10px;margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;min-width:0}
+.form-group legend{padding:0 6px;font-weight:600;font-size:.85rem}
+.emi-detail progress,.card-detail progress{width:100%;max-width:320px}
+.emi-detail p,.card-detail p{margin:2px 0}

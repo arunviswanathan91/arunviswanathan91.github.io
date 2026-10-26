@@ -2,8 +2,13 @@ import { useState, type FormEvent } from "react";
 import { supabase } from "../../lib/supabase.ts";
 import { formatMoney, todayISO, type Loan } from "./balance.ts";
 
-export function PaymentForm({ loan, left, onDone }: { loan: Loan; left: number; onDone: () => void }) {
-  const [amount, setAmount] = useState(String(left));
+export interface QuickAmount {
+  label: string;
+  amount: number;
+}
+
+export function PaymentForm({ loan, left, quick = [], onDone }: { loan: Loan; left: number; quick?: QuickAmount[]; onDone: () => void }) {
+  const [amount, setAmount] = useState(String(quick[0]?.amount ?? left));
   const [paidOn, setPaidOn] = useState(todayISO());
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -22,6 +27,15 @@ export function PaymentForm({ loan, left, onDone }: { loan: Loan; left: number; 
   return (
     <form className="form" onSubmit={submit}>
       <p className="muted">Outstanding: <strong>{formatMoney(left, loan.currency)}</strong></p>
+      {quick.length > 0 && (
+        <div className="segmented" role="group" aria-label="Quick amounts">
+          {quick.map((q) => (
+            <button key={q.label} type="button" className={Number(amount) === q.amount ? "on" : ""} onClick={() => setAmount(String(q.amount))}>
+              {q.label} · {formatMoney(q.amount, loan.currency)}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="row">
         <label className="grow">
           Amount ({loan.currency})

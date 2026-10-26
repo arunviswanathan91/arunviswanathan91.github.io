@@ -31,3 +31,11 @@ Restore requires the original signed-in account. It adds or updates matching IDs
 ## Finance accounts
 
 Apply `supabase/finance-accounts.sql` after `workspace-extension.sql`. Budget → Categories has a separate category-name field. Loans & cards → Add loan / card supports personal loans, bank loans and credit cards. Credit cards store a display name, bank, last four digits, starting balance, optional limit, minimum due and due date. Edit changes saved details. Repayments subtract from the starting balance; spending, interest and updated statement values are manual. Do not replace the starting balance with a current balance that already subtracts recorded repayments. No full card number, CVV or bank connection is required.
+
+## EMIs, card statements and habit carry-over
+
+Apply `supabase/emi-statements-habit-carry.sql` after `finance-accounts.sql` (all new columns are optional).
+
+- **EMI**: bank loans and borrowed personal loans accept an EMI amount, number of EMIs and first EMI date. EMIs repeat monthly; repayments are matched to them in order, so the loan shows EMIs paid / left, the next EMI date and goes overdue when an EMI date passes unpaid. "Paid back" offers the EMI as a preset amount.
+- **Credit cards**: enter the current statement (amount, statement date, due date) together with the minimum due. Payments dated on or after the statement date count towards it. The card shows statement left, minimum still to pay, new spending since the statement, credit-limit utilisation, and warns when the due date has passed with the statement unpaid. Presets: minimum due, statement, full balance. Enter each month's new statement by editing the card.
+- **Habits**: a habit can have a daily amount and unit (e.g. 30 min). Log the total done each day. With "Carry a shortfall over" on, whatever was not done is added to the next day's requirement (capped at one extra day's amount unless a limit is set). A short day counts towards the streak once the next day is completed; otherwise it is missed.
