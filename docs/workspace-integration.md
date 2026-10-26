@@ -18,6 +18,8 @@ Apply `supabase/workspace-extension.sql` after the existing schema, project coll
 
 JSON contains data; ZIP also includes private attachments and publication Markdown files. Both preserve stable IDs and links for active owned projects, tasks, publications, people, project metadata, tags, documents, job applications, clippings, reads, reminders and every new module. Archived research notes are included. Credentials, sharing permissions, Trash and opportunity discovery data/caches are excluded. Existing integrations and Trash operate independently. Check the export status for unavailable files.
 
+Immutable publication stage history is exported for reference; restore retains the existing history.
+
 Restore requires the original signed-in account. It adds or updates matching IDs without deleting absent records. Database restoration is atomic and enforces RLS; invalid records roll back the transaction. File uploads follow restoration. If a file upload fails, the UI says records were restored; retry the same backup to finish. JSON cannot recreate attachment bytes. This is a workspace backup, not a full Supabase disaster-recovery backup.
 
 ## Validation

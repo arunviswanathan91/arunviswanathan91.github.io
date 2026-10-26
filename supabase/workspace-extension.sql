@@ -815,6 +815,8 @@ begin
  perform set_config('workspace.restoring','on',true);
  foreach t in array array['people','projects','project_people','project_stages','project_links','project_fields','publications','publication_nodes','publication_stage_events','tags','documents','job_applications','inbox_items','reads','ws_settings','ws_contacts','ws_papers','ws_project_papers','ws_notes','ws_meetings','ws_meeting_projects','ws_meeting_participants','ws_deadlines','tasks','reminders','item_tags','ws_meeting_action_items','ws_loans','ws_loan_payments','ws_budget_categories','ws_transactions','ws_monthly_budgets','ws_habits','ws_habit_checkins','ws_attachments'] loop
   n := 0;
+  -- Immutable publication history is exported for reference; existing history is retained.
+  if t='publication_stage_events' then result:=result||jsonb_build_object(t,0); continue; end if;
   select string_agg(quote_ident(a.attname),',' order by a.attnum),
          string_agg(format('%I=excluded.%I',a.attname,a.attname),',' order by a.attnum)
     into cols,updates from pg_catalog.pg_attribute a

@@ -28,11 +28,14 @@ test('workspace integration preserves existing records and enforces isolation',a
  assert.equal((await db.query<any>(`select count(*)::int as n from tasks where previous_id='${task}'`)).rows[0].n,1);
  const paper=(await db.query<any>(`insert into ws_papers(title,doi) values('STAT3 paper','10.1234/stat3') returning id`)).rows[0].id;
  assert.ok((await db.query<any>(`select * from ws_search_workspace('STAT3')`)).rows.length);
+ await db.exec(`insert into publications(user_id,title) values('${uid}','Existing manuscript')`);
+ const historyCount=(await db.query<any>('select count(*)::int n from publication_stage_events')).rows[0].n;
  const backup=(await db.query<any>('select ws_backup_data() as data')).rows[0].data;
  assert.equal(backup.tasks.length,3);
  assert.equal(backup.ws_papers.length,1);
  await db.exec(`update ws_papers set title='Edited' where id='${paper}'`);
  await db.query('select ws_restore_data($1,$2)',[uid,JSON.stringify(backup)]);
+ assert.equal((await db.query<any>('select count(*)::int n from publication_stage_events')).rows[0].n,historyCount);
  assert.equal((await db.query<any>(`select title from ws_papers where id='${paper}'`)).rows[0].title,'STAT3 paper');
  assert.equal((await db.query<any>('select count(*)::int n from tasks')).rows[0].n,3);
  assert.equal((await db.query<any>(`select status from tasks where id='44444444-4444-4444-4444-444444444444'`)).rows[0].status,'Review');
