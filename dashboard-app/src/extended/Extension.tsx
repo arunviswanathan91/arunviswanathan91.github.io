@@ -21,7 +21,6 @@ import { ReviewView } from "./modules/review/ReviewView.tsx";
 import { ProjectPage } from "./modules/projects/ProjectPage.tsx";
 import { ProjectsView } from "./modules/projects/ProjectsView.tsx";
 import { SearchPalette, SearchView } from "./modules/search/Search.tsx";
-import { SettingsView } from "./modules/settings/SettingsView.tsx";
 import { TasksView } from "./modules/tasks/TasksView.tsx";
 function Page({ route }: { route: Route }) {
   const [section, id] = route.path;
@@ -38,7 +37,7 @@ function Page({ route }: { route: Route }) {
     case "loans": return <LoansView />;
     case "habits": return <HabitsView />;
     case "search": return <SearchView route={route} />;
-    case "settings": return <SettingsView />;
+    case "settings": location.hash = "/settings"; return null;
     default: return <HomeView />;
   }
 }

@@ -1287,3 +1287,9 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
   --sec-notes:#7fc0d1;--sec-notes-soft:#183039;--sec-notes-ink:#c2e3ec;--sec-meetings:#e88aad;--sec-meetings-soft:#3c1f2b;--sec-meetings-ink:#f6c6d7;
   --sec-deadlines:#ee9473;--sec-deadlines-soft:#3d241a;--sec-deadlines-ink:#f8cbb8;--sec-money:#a6d07d;--sec-money-soft:#24311a;--sec-money-ink:#d5eabd;
   --sec-habits:#cdb08a;--sec-habits-soft:#332a1f;--sec-habits-ink:#eadcc6;}
+
+/* Settings: stacked actions and the restore preview */
+.button-column{display:flex;flex-direction:column;align-items:stretch;gap:var(--s-2)}
+.button-column button{justify-content:flex-start}
+.button-row{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.restore-preview{display:grid;gap:var(--s-2);padding:var(--s-3);border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface-2)}
