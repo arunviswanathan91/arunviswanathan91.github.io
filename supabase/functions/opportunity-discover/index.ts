@@ -1,4 +1,6 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 import { userIdFromRequest } from "../_shared/gmail.ts";
 
 const corsHeaders = {
@@ -12,7 +14,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
  headers: { ...corsHeaders, "content-type": "application/json" },
 });
 
-const failRun = async (db: ReturnType<typeof createClient>, runId: string, error: string) => {
+const failRun = async (db: SupabaseClient, runId: string, error: string) => {
  await db.from("discovery_runs").update({
   status: "failed", error: error.slice(0, 500), finished_at: new Date().toISOString(),
  }).eq("id", runId);
