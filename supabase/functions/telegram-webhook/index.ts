@@ -6,6 +6,8 @@ import { dayIn, matchByName, money, parseHabit, parseSpend } from "./money.ts";
 import { MENU, parseDeadline, parseNote, parsePaid, parsePaper } from "./workspace.ts";
 import { extractWhen, preview, understand } from "./intent.ts";
 
+declare const EdgeRuntime:{waitUntil(promise:Promise<unknown>):void};
+
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 const STATE_TTL=15*60*1000;
 

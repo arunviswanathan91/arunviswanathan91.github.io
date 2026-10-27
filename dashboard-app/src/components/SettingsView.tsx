@@ -6,6 +6,8 @@ import { useData } from "../lib/store";
 import { TAG_COLORS } from "../lib/tags";
 import { SelectMenu } from "./ui/SelectMenu";
 import { useConfirmDialog } from "./ui/ConfirmDialog";
+import { saveSettings } from "../extended/lib/settings";
+import { BackupPanel, PreferencesPanel } from "./settings/WorkspacePanels";
 
 const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const generateCode=()=>{
@@ -23,6 +25,7 @@ export function SettingsView(){
  const [notice,setNotice]=useState("");
  const [displayName,setDisplayName]=useState("");
  const [timezone,setTimezone]=useState("");
+ const [zoneError,setZoneError]=useState("");
  const [trashRetention,setTrashRetention]=useState<14|30>(30);
  const [names,setNames]=useState<Record<string,string>>({});
  const {ask,confirmation}=useConfirmDialog();
@@ -43,8 +46,8 @@ export function SettingsView(){
   await supabase.from("profiles").update({display_name:displayName.trim()||null}).eq("id",userId);
  };
  const saveTimezone=async()=>{
-  if(!supabase)return;
-  await supabase.from("profiles").update({timezone:timezone.trim()||null}).eq("id",userId);
+  const zone=timezone.trim();if(!zone)return;
+  try{await saveSettings({timezone:zone});setZoneError("")}catch{setZoneError(`“${zone}” is not a time zone name, for example Asia/Kolkata.`)}
  };
  const saveTrashRetention=async(days:14|30)=>{
   setTrashRetention(days);
@@ -67,10 +70,9 @@ export function SettingsView(){
 
  return <div className="entity-view">
   <div className="view-head">
-   <div><p className="kicker">Settings</p><h1>Workspace</h1><p className="subtitle">Profile, Telegram, projects and tags.</p></div>
+   <div><p className="kicker">Workspace</p><h1>Settings</h1><p className="subtitle">Profile, Telegram, money, backups, projects and tags.</p></div>
   </div>
 
-  <p><a className="secondary" href="#/tools/settings">Backup, restore & finance preferences</a></p>
   <div className="settings-grid">
    <section className="panel">
     <header className="panel-head"><h2>Profile</h2>{toggle("Profile")}</header>
@@ -84,7 +86,8 @@ export function SettingsView(){
      <label className="field-label" htmlFor="timezone">Time zone</label>
      <input id="timezone" className="input" value={timezone} placeholder="Asia/Kolkata"
       onChange={e=>setTimezone(e.target.value)} onBlur={()=>void saveTimezone()}/>
-     <small className="muted-note">The bot reads dates like “due:friday” and “in 2h” in this zone.</small>
+     <small className="muted-note">Dates, reminders, the agenda and the bot (“due:friday”, “in 2h”) all use this zone.</small>
+     {zoneError&&<p className="data-notice" role="alert">{zoneError}</p>}
     </div>
     <div className="field">
      <label className="field-label" htmlFor="trash-retention">Keep deleted items</label>
@@ -106,6 +109,9 @@ export function SettingsView(){
      <small>Send this to your bot before {expiresAt&&new Date(expiresAt).toLocaleTimeString()}.</small></div></div>}
     {notice&&<p className="data-notice" role="alert">{notice}</p>}
    </section>
+
+   <PreferencesPanel/>
+   <BackupPanel/>
 
    <section className="panel">
     <header className="panel-head"><h2>Projects</h2>{toggle("Projects")}</header>

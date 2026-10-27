@@ -14,6 +14,16 @@ import { combine, useFx } from "../../lib/fx.ts";
 
 const cents = (n: number) => Math.round(Number(n) * 100);
 
+// Post recurring items that are due (rent, salary, subscriptions) once a day per session, not on
+// every reload; the scheduled sweep covers the rest. A no-op until the migration runs.
+let postedOn = "";
+async function postRecurringOnce() {
+  const day = new Date().toDateString();
+  if (postedOn === day) return;
+  postedOn = day;
+  await rpc<number>("post_recurring").catch(() => 0);
+}
+
 export function BudgetView({ route }: { route: Route }) {
   const month = route.query.get("month") ?? startOfMonth(today());
   const kindFilter = (route.query.get("kind") ?? "") as Transaction["kind"] | "";
@@ -23,8 +33,7 @@ export function BudgetView({ route }: { route: Route }) {
   const [error, setError] = useState("");
 
   const { data, error: loadError } = useLoad(async () => {
-    // Post recurring items that are due (rent, salary, subscriptions); a no-op until the migration runs.
-    await rpc<number>("post_recurring").catch(() => 0);
+    await postRecurringOnce();
     const [categories, txs, budgets, lines] = await Promise.all([
       list<BudgetCategory>("budget_categories", { order: [["kind"], ["name"]] }),
       list<Transaction>("transactions", { gte: ["occurred_on", month], lt: ["occurred_on", addMonths(month, 1)], order: [["occurred_on", false], ["created_at", false]] }),

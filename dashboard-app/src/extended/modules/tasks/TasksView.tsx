@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { list, useLoad } from "../../lib/db.ts";
 import { today } from "../../lib/dates.ts";
-import { setQuery, type Route } from "../../lib/route.ts";
+import { go, setQuery, type Route } from "../../lib/route.ts";
 import { PRIORITY, type Priority, type Task } from "../../lib/types.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { projectName, useProjects } from "../../components/pickers.tsx";
@@ -12,10 +12,26 @@ import { inView, sortTasks, viewCounts, type TaskView } from "./logic.ts";
 import { TaskForm } from "./TaskForm.tsx";
 import { TaskList } from "./TaskList.tsx";
 
-const VIEWS: [TaskView, string][] = [
+type Tab = TaskView | "board";
+const VIEWS: [Tab, string][] = [
   ["today", "Today"], ["inbox", "Inbox"], ["upcoming", "Upcoming"], ["overdue", "Overdue"],
-  ["all", "All open"], ["by_project", "By project"], ["completed", "Completed"],
+  ["all", "All open"], ["by_project", "By project"], ["completed", "Completed"], ["board", "Board"],
 ];
+
+/** One Tasks page: the planner lists and the status board are tabs of the same page. */
+export function TasksHeader({ view, counts, onAdd }: { view: Tab; counts?: Partial<Record<Tab, number>>; onAdd: () => void }) {
+  return (
+    <>
+      <PageHeader
+        section="tasks"
+        title="Tasks"
+        subtitle="Everything you need to do, across all projects."
+        actions={<button className="primary" onClick={onAdd}><Plus size={16} /> Task</button>}
+      />
+      <Tabs value={view} options={VIEWS} counts={counts} onChange={(v) => (v === "board" ? (location.hash = "/tasks") : view === "board" ? go("tasks", { view: v }) : setQuery("view", v))} />
+    </>
+  );
+}
 
 export function TasksView({ route }: { route: Route }) {
   const view = (route.query.get("view") as TaskView) || "today";
@@ -39,13 +55,7 @@ export function TasksView({ route }: { route: Route }) {
 
   return (
     <section>
-      <PageHeader
-        section="tasks"
-        title="Tasks"
-        subtitle="Everything you need to do, across all projects."
-        actions={<button className="primary" onClick={() => setAdding(true)}><Plus size={16} /> Task</button>}
-      />
-      <Tabs value={view} options={VIEWS} counts={{ today: counts.today, inbox: counts.inbox, overdue: counts.overdue }} onChange={(v) => setQuery("view", v)} />
+      <TasksHeader view={view} counts={{ today: counts.today, inbox: counts.inbox, overdue: counts.overdue }} onAdd={() => setAdding(true)} />
       <div className="filters">
         <SearchBox value={search} onChange={(v) => setQuery("q", v)} placeholder="Search tasks" />
         <Select label="Priority" allLabel="Any priority" value={priority} options={Object.entries(PRIORITY) as [Priority, string][]} onChange={(v) => setQuery("priority", v)} />

@@ -31,7 +31,8 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
  const go=(v:ViewKey)=>ui.setView(v);
  // Workspace pages are hash routes (#/tools/agenda…); highlight the open one like the other menu items.
  const route=useRoute();
- const toolClass=(key:SectionId)=>"extension-nav"+(ui.view==="extended"&&route.path[0]===key?" active":"");
+ const onTool=(key:SectionId)=>(ui.view==="extended"&&route.path[0]===key)||(key==="tasks"&&ui.view==="tasks");
+ const toolClass=(key:SectionId)=>"extension-nav"+(onTool(key)?" active":"");
 
  return <aside className={"sidebar"+(open?" open":"")+(collapsed?" collapsed":"")}>
   <div className="identity" title={collapsed?"Arun’s workspace":undefined}>
@@ -68,16 +69,16 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
    </div>
 
    <p className="nav-label">Research & planning</p>
-   {(["agenda","review","projects","tasks","papers","notes","meetings","deadlines","search"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={ui.view==="extended"&&route.path[0]===key?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{key==="tasks"?"Task planner":key==="projects"?"Project overview":item.label}</span></a>})}
+   {(["agenda","review","projects","tasks","papers","notes","meetings","deadlines"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={onTool(key)?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span>{key==="tasks"&&<span className="nav-count">{counts.tasks}</span>}</a>})}
    <p className="nav-label">Personal</p>
    {(["budget","loans","habits"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={ui.view==="extended"&&route.path[0]===key?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span></a>})}
    <p className="nav-label">Workflows</p>
-   {ENTITY_ORDER.map(key=>{
+   {ENTITY_ORDER.filter(key=>key!=="tasks").map(key=>{
     const def=ENTITIES[key];
     const active=ui.view===key||(key==="publications"&&ui.view==="publication");
     return <button key={key} className={active?"active":""} aria-current={active?"page":undefined}
      title={collapsed?def.plural:undefined} onClick={()=>go(key as ViewKey)}>
-     <span className="sec-chip"><def.icon/></span><span className="nav-text">{key==="tasks"?"Task board":def.plural}</span><span className="nav-count">{counts[key]}</span>
+     <span className="sec-chip"><def.icon/></span><span className="nav-text">{def.plural}</span><span className="nav-count">{counts[key]}</span>
     </button>;
    })}
    <button className={ui.view==="clippings"?"active":""} title="Clippings" onClick={()=>go("clippings")}><span className="sec-chip"><Highlighter/></span><span className="nav-text">Clippings</span></button>

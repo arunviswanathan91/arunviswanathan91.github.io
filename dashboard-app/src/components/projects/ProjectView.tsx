@@ -2,7 +2,7 @@ import { EditToggle } from "../ui/EditToggle";
 import { useMemo, useState } from "react";
 import {
  ArrowLeft, ArrowRight, BookMarked, CalendarClock, ExternalLink,
- FileText, FlaskConical, FolderKanban, Mail, Pencil, Plus, Send, Trash2, UserRound, Users,
+ FileDown, FileText, FlaskConical, FolderKanban, Mail, Pencil, Pin, Plus, Send, Trash2, UserRound, Users,
 } from "lucide-react";
 import { ENTITIES, TASK_STATUS } from "../../entities";
 import { formatDate } from "../../lib/format";
@@ -16,8 +16,17 @@ import { useConfirmDialog } from "../ui/ConfirmDialog";
 import { TagChips, TagEditor } from "../ui/TagChips";
 import type { EntityKey, Row } from "../../entities/types";
 import type { Person, Project, ProjectStage } from "../../lib/store";
+import { ProjectSection, type ProjectSectionTab } from "../../extended/modules/projects/ProjectSections";
 
-type ProjectTab="overview"|"work"|"publications"|"reads"|"people";
+type ProjectTab="overview"|"work"|"publications"|ProjectSectionTab|"reads"|"people";
+const PROJECT_TABS:ProjectTab[]=["overview","work","publications","papers","notes","meetings","deadlines","reads","files","people"];
+// Old workspace links say ?tab=tasks for the work board.
+const tabFromHash=():ProjectTab=>{const t=new URLSearchParams(location.hash.split("?")[1]??"").get("tab");return t==="tasks"?"work":PROJECT_TABS.includes(t as ProjectTab)?t as ProjectTab:"overview"};
+// Phase is the one project stage the user edits; the workspace lists read the coarser ws_status.
+const WS_STATUS:Record<string,string>={Planning:"planned",Active:"active",Analysis:"active",Writing:"active",Paused:"paused",Completed:"completed",Archived:"archived"};
+const phasePatch=(phase:string)=>({phase,ws_status:WS_STATUS[phase]??"active",status:phase==="Archived"?"Archived":"Active",
+ completed_on:phase==="Completed"?new Date().toISOString().slice(0,10):null});
+const AREAS=[["research","Research"],["personal","Personal"],["teaching","Teaching"],["administration","Administration"],["career","Career"],["other","Other"]].map(([value,label])=>({value,label}));
 type ProjectEntityKey="tasks"|"publications"|"reads";
 type ComposerState={key:ProjectEntityKey;seed:Record<string,unknown>}|null;
 const TASK_MIME="application/x-science-project-task";
@@ -30,7 +39,7 @@ const safeHttp=(value:string)=>{try{const u=new URL(value);return u.protocol==="
 export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?:"editor"|"viewer"}){
  const data=useData(),ui=useUi();
  const project=data.projects.byId.get(projectId)??null;
- const [tab,setTab]=useState<ProjectTab>("overview");
+ const [tab,setTab]=useState<ProjectTab>(tabFromHash);
  const [composer,setComposer]=useState<ComposerState>(null);
  const [manageStages,setManageStages]=useState(false);
  const [person,setPerson]=useState<{person:Person|"new";membershipId?:string}|null>(null);
@@ -69,15 +78,19 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
  const tabs:{key:ProjectTab;label:string;count?:number}[]=[
   {key:"overview",label:"Overview"},{key:"work",label:"Work board",count:projectTasks.length},
   {key:"publications",label:"Publications",count:directPapers.length+relatedPapers.length},
-  {key:"reads",label:"Reads",count:projectReads.length},{key:"people",label:"People"},
+  {key:"papers",label:"Papers"},{key:"notes",label:"Notes"},{key:"meetings",label:"Meetings"},{key:"deadlines",label:"Deadlines"},
+  {key:"reads",label:"Reads",count:projectReads.length},{key:"files",label:"Files"},{key:"people",label:"People"},
  ];
 
  return <div className="project-view">
   <header className="project-head">
-   <div><p className="kicker">Scientific project</p><h1>{project.name}</h1><a className="secondary" href={`#/tools/projects/${projectId}`}>Papers, meetings, files & PDF summary</a>
+   <div><p className="kicker">Scientific project</p><h1>{project.name}</h1>
     <p className="subtitle">{project.description||"Add a description and objective for this project."}</p></div>
    <div className="project-head-actions">
     <span className="project-phase">{project.phase||"Planning"}</span>
+    {isOwner&&<button className={"icon-button"+(project.pinned?" active":"")} aria-pressed={!!project.pinned} title={project.pinned?"Unpin":"Pin to the top of Projects"}
+     onClick={()=>void data.projects.update(projectId,{pinned:!project.pinned})}><Pin/></button>}
+    <a className="secondary" href={`#/tools/print/project?id=${projectId}`}><FileDown/>PDF summary</a>
     {canEdit&&<button className="secondary" onClick={()=>setManageStages(true)}><FolderKanban/>Manage stages</button>}
     {canEdit&&<button className="primary" onClick={()=>newEntity("tasks",{stage_id:stages[0]?.id})}><Plus/>Add work</button>}
    </div>
@@ -93,6 +106,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
    canEdit={canEdit} onAdd={stageId=>newEntity("tasks",{stage_id:stageId})} onOpen={id=>ui.openDrawer("tasks",id)} onManage={()=>setManageStages(true)}/>}
   {tab==="publications"&&<ProjectPublications project={project} direct={directPapers} related={relatedPapers}
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("publications")} onOpen={ui.openPublication}/>}
+  {(tab==="papers"||tab==="notes"||tab==="meetings"||tab==="deadlines"||tab==="files")&&<ProjectSection key={tab} id={projectId} tab={tab}/>}
   {tab==="reads"&&<ProjectReads project={project} rows={projectReads}
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("reads")} onOpen={id=>ui.openDrawer("reads",id)}/>}
   {tab==="people"&&<ProjectPeople projectId={projectId} isOwner={isOwner} onAdd={()=>setPerson({person:"new"})}
@@ -147,7 +161,11 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
    <div className="project-detail-grid">
     <div className="field"><label className="field-label" htmlFor="project-phase">Project phase</label>
      <SelectMenu id="project-phase" value={project.phase||"Planning"} label="Project phase" disabled={!canEdit}
-      options={options(PROJECT_PHASES)} onChange={phase=>{if(phase!==project.phase)save({phase})}}/>
+      options={options(PROJECT_PHASES)} onChange={phase=>{if(phase!==project.phase)save(phasePatch(phase))}}/>
+    </div>
+    <div className="field"><label className="field-label" htmlFor="project-area">Area</label>
+     <SelectMenu id="project-area" value={project.area||"research"} label="Area" disabled={!canEdit}
+      options={AREAS} onChange={area=>{if(area!==project.area)save({area})}}/>
     </div>
     <div className="field"><label className="field-label" htmlFor="project-start">Start date</label>
      <input id="project-start" className="input" type="date" value={project.start_date??""} disabled={!canEdit} onChange={e=>save({start_date:e.target.value||null})}/></div>
@@ -164,6 +182,7 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
    <div><span className="field-label">Objective</span><p>{project.objective||"No objective yet."}</p></div>
    <div><span className="field-label">Description</span><p>{project.description||"No description yet."}</p></div>
    <div className="project-detail-grid"><div><span className="field-label">Phase</span><p>{project.phase||"Planning"}</p></div>
+   <div><span className="field-label">Area</span><p>{AREAS.find(a=>a.value===(project.area||"research"))?.label}</p></div>
    <div><span className="field-label">Start date</span><p>{project.start_date?formatDate(project.start_date):"Not set"}</p></div>
    <div><span className="field-label">Target date</span><p>{project.target_date?formatDate(project.target_date):"Not set"}</p></div></div>
    <div><span className="field-label">Project tags</span>{selectedTags.length?<TagChips ids={selectedTags} byId={tags.byId}/>:<p>No tags yet.</p>}</div>

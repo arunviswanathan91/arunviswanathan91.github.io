@@ -20,7 +20,7 @@ import { SelectMenu } from "../ui/SelectMenu";
 import { useEntityCtx } from "./ctx";
 import type { EntityDef, FieldDef, QuickAction, Row } from "../../entities/types";
 
-export function EntityView({def}:{def:EntityDef}){
+export function EntityView({def,embedded=false}:{def:EntityDef;embedded?:boolean}){
  const table=useEntityTable(def.key);
  const {tags,userId,projects}=useData();
  const ui=useUi();
@@ -83,13 +83,13 @@ export function EntityView({def}:{def:EntityDef}){
  });
 
  return <div className="entity-view">
-  <div className="view-head">
+  {!embedded&&<div className="view-head">
    <div>
     <p className="kicker">{def.kicker}</p>
     <h1>{def.plural}</h1>
     <p className="subtitle">{def.subtitle}</p>
    </div>
-  </div>
+  </div>}
 
   {def.key==="opportunities"&&<OpportunityDiscovery currentCount={table.rows.length} onComplete={scope=>{
    setDiscoveryScope(scope);void table.refetch(true);
