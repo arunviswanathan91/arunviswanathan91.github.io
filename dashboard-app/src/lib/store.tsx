@@ -13,6 +13,7 @@ import type { EntityKey, Row } from "../entities/types";
 
 export interface Project extends Row{
  id:string;name:string;description:string|null;objective:string|null;status:string;phase:string;
+ ws_status?:string;area?:string;pinned?:boolean;completed_on?:string|null;
  color:string|null;start_date:string|null;target_date:string|null;created_at:string;updated_at:string;
 }
 export interface Person extends Row{
@@ -50,7 +51,7 @@ export type ViewKey=EntityKey|"extended"|"clippings"|"home"|"project"|"publicati
 export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
 
-const PROJECT_SELECT="id,user_id,name,description,objective,status,phase,color,start_date,target_date,created_at,updated_at";
+const PROJECT_SELECT="id,user_id,name,description,objective,status,phase,ws_status,area,pinned,completed_on,color,start_date,target_date,created_at,updated_at";
 interface DataValue{
  userId:string;
  tables:Record<EntityKey,TableStore>;
@@ -108,7 +109,7 @@ export function applyTheme(theme:Theme){
 const initialRoute=():{view:ViewKey;scope:Scope;publicationId:string|null}=>{
  const hash=location.hash.replace(/^#\/?/,"");
  if(hash.startsWith("tools/"))return {view:"extended",scope:"all",publicationId:null};
- const project=hash.match(/^project\/([0-9a-f-]+)$/i);
+ const project=hash.match(/^project\/([0-9a-f-]+)(?:\?.*)?$/i);
  if(project)return {view:"project",scope:project[1],publicationId:null};
  const publication=hash.match(/^publication\/([0-9a-f-]+)$/i);
  if(publication)return {view:"publication",scope:"all",publicationId:publication[1]};

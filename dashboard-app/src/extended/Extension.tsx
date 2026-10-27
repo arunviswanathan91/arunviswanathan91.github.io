@@ -18,16 +18,16 @@ import { PaperPage } from "./modules/papers/PaperPage.tsx";
 import { PapersView } from "./modules/papers/PapersView.tsx";
 import { PrintMeetings, PrintProject } from "./modules/print/PrintViews.tsx";
 import { ReviewView } from "./modules/review/ReviewView.tsx";
-import { ProjectPage } from "./modules/projects/ProjectPage.tsx";
 import { ProjectsView } from "./modules/projects/ProjectsView.tsx";
-import { SearchPalette, SearchView } from "./modules/search/Search.tsx";
+import { SearchView } from "./modules/search/Search.tsx";
 import { TasksView } from "./modules/tasks/TasksView.tsx";
 function Page({ route }: { route: Route }) {
   const [section, id] = route.path;
   switch (section) {
     case "agenda": return <AgendaView />;
     case "review": return <ReviewView />;
-    case "projects": return id ? <ProjectPage id={id} route={route} /> : <ProjectsView route={route} />;
+    // One project page: the old workspace address opens it, keeping the tab.
+    case "projects": if (id) { const tab = route.query.get("tab"); location.replace(`#/project/${id}${tab ? `?tab=${tab}` : ""}`); return null; } return <ProjectsView route={route} />;
     case "tasks": return <TasksView route={route} />;
     case "papers": return id ? <PaperPage id={id} /> : <PapersView route={route} />;
     case "notes": return id ? <NotePage id={id} /> : <NotesView route={route} />;
@@ -37,7 +37,7 @@ function Page({ route }: { route: Route }) {
     case "loans": return <LoansView />;
     case "habits": return <HabitsView />;
     case "search": return <SearchView route={route} />;
-    case "settings": location.hash = "/settings"; return null;
+    case "settings": location.replace("#/settings"); return null;
     default: return <HomeView />;
   }
 }

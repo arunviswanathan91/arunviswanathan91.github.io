@@ -6,6 +6,9 @@ import { loadRaw, save } from "../lib/persist";
 import { useHotkeys } from "../lib/keys";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
 import { Extension } from "../extended/Extension";
+import { TasksHeader } from "../extended/modules/tasks/TasksView";
+import { SECTIONS, toneStyle } from "../extended/lib/sections";
+import { useRoute } from "../extended/lib/route";
 import { Sidebar } from "./Sidebar";
 import { HomeView } from "./HomeView";
 import { SettingsView } from "./SettingsView";
@@ -24,6 +27,7 @@ function Shell(){
  const {userId,projects,loading,notices,tables,refreshAll}=useData();
  useEffect(()=>{const refresh=()=>refreshAll();window.addEventListener("ws:changed",refresh);return()=>window.removeEventListener("ws:changed",refresh)},[refreshAll]);
  const ui=useUi();
+ const route=useRoute();
  const [navOpen,setNavOpen]=useState(false);
  const [sidebarCollapsed,setSidebarCollapsed]=useState(()=>loadRaw("sidebar-collapsed",false));
  const [projectComposer,setProjectComposer]=useState(false);
@@ -64,7 +68,8 @@ function Shell(){
  const currentProject=typeof ui.scope==="string"?projects.byId.get(ui.scope):null;
  const currentPublication=ui.publicationId?tables.publications.byId.get(ui.publicationId):null;
  const sharedPublication=projectOnly&&sharedProject&&currentPublication?.project_id===sharedProject.id?currentPublication:null;
- const title=ui.view==="extended"?"Workspace":ui.view==="clippings"?"Clippings":ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
+ const sectionLabel=(SECTIONS as Record<string,{label:string}|undefined>)[route.path[0]]?.label;
+ const title=ui.view==="extended"?sectionLabel??"Workspace":ui.view==="clippings"?"Clippings":ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
   ui.view==="publication"?(String(currentPublication?.title??"")||"Publication"):ENTITIES[ui.view as EntityKey].plural;
 
  useEffect(()=>{
@@ -115,6 +120,9 @@ function Shell(){
      :ui.view==="trash"?<TrashView/>
      :ui.view==="project"&&typeof ui.scope==="string"?<ProjectView projectId={ui.scope}/>
      :ui.view==="publication"&&ui.publicationId?<PublicationView publicationId={ui.publicationId}/>
+     :ui.view==="tasks"?<>
+       <div className="extension-workspace" style={toneStyle("tasks")}><TasksHeader view="board" onAdd={()=>document.dispatchEvent(new CustomEvent("dash:new",{detail:"tasks"}))}/></div>
+       <EntityView key="tasks" def={ENTITIES.tasks} embedded/></>
      :<EntityView key={ui.view} def={ENTITIES[ui.view as EntityKey]}/>}</div>
    </div>
   </main>

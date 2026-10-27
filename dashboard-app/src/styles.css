@@ -227,6 +227,7 @@ textarea.input{resize:vertical;min-height:64px;line-height:1.5}
  display:inline-grid;place-items:center;padding:5px;border-radius:var(--r-1);color:var(--text-3);
 }
 .icon-button:hover{background:var(--surface-3);color:var(--text)}
+.icon-button.active{color:var(--accent);background:var(--accent-soft)}
 
 .chip-button{
  display:inline-flex;align-items:center;gap:6px;padding:5px 10px;
@@ -838,6 +839,8 @@ dialog::backdrop{background:var(--scrim)}
 .stat-card small{font-size:var(--f-2xs);color:var(--text-3)}
 
 .home-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,.8fr);gap:var(--s-3)}
+.home-grid.single{grid-template-columns:1fr}
+.home-workflows-head{margin:var(--s-5) 0 var(--s-1);font-size:var(--f-md);font-weight:700}
 .panel{border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface);padding:var(--s-4);display:grid;gap:var(--s-3);align-content:start}
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2)}
 .panel-head h2{font-size:var(--f-md);font-weight:700}

@@ -13,7 +13,8 @@ export function HomeView({compact=false}:{compact?:boolean}){
  const {tables,projects}=useData();
  const ui=useUi();
 
- const visibleKeys=ui.scope==="all"?ENTITY_ORDER:ENTITY_ORDER.filter(key=>Boolean(ENTITIES[key].projectField));
+ // Compact = under the workspace home, which already covers tasks; show only the workflow lists.
+ const visibleKeys=(ui.scope==="all"?ENTITY_ORDER:ENTITY_ORDER.filter(key=>Boolean(ENTITIES[key].projectField))).filter(key=>!compact||key!=="tasks");
  const scopedRows=(key:EntityKey)=>{
   const def=ENTITIES[key],rows=tables[key].rows;
   return def.projectField&&ui.scope!=="all"?rows.filter(row=>(row[def.projectField!]??null)===ui.scope):rows;
@@ -50,9 +51,8 @@ export function HomeView({compact=false}:{compact?:boolean}){
     <h1>{heading}</h1>
     <p className="subtitle">{subtitle}</p>
    </div>
-  </div>
-
-  }
+  </div>}
+  {compact&&<h2 className="home-workflows-head">Workflows</h2>}
   <section className="stat-grid">
    {stats.map(s=><button key={s.key} className="stat-card" onClick={()=>ui.setView(s.key as ViewKey)}>
     <s.def.icon/>
@@ -62,9 +62,9 @@ export function HomeView({compact=false}:{compact?:boolean}){
    </button>)}
   </section>
 
-  <section className="home-grid">
+  <section className={"home-grid"+(compact?" single":"")}>
    <article className="panel">
-    <header className="panel-head"><h2>What’s coming up</h2></header>
+    <header className="panel-head"><h2>{compact?"Workflow dates":"What’s coming up"}</h2></header>
     <div className="due-list">
      {upcoming.map(({key,row,due})=>{
       const def=ENTITIES[key];
@@ -82,7 +82,7 @@ export function HomeView({compact=false}:{compact?:boolean}){
     </div>
    </article>
 
-   <aside className="panel brief">
+   {!compact&&<aside className="panel brief">
     <header className="panel-head"><h2>Telegram capture</h2></header>
     <ol>
      <li><code>/add</code> a task, <code>/job</code> an application, <code>/remind</code> yourself.</li>
@@ -90,7 +90,7 @@ export function HomeView({compact=false}:{compact?:boolean}){
      <li>Anything without a <code>#Project</code> tag lands in Inbox until you assign it.</li>
     </ol>
     <div className="bot-command"><Send/><code>/add Review draft #Project</code></div>
-   </aside>
+   </aside>}
   </section>
  </div>;
 }

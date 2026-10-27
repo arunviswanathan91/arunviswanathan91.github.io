@@ -7,6 +7,8 @@ import type { ViewKey } from "../lib/store";
 
 import { useSearch, resultHref, KIND } from "../extended/modules/search/Search";
 import { SECTIONS } from "../extended/lib/sections";
+// Search hits for main-app records open in their drawer rather than on a bare list page.
+const DRAWER_KIND:Partial<Record<string,EntityKey>>={task:"tasks",document:"documents",job:"jobs",read:"reads",reminder:"reminders"};
 interface Item{id:string;group:string;label:string;hint?:string;icon?:any;run():void}
 
 export function CommandPalette(){
@@ -28,7 +30,8 @@ export function CommandPalette(){
  const items=useMemo(()=>{
   const out:Item[]=[];
   out.push({id:"go:home",group:"Go to",label:"Home",icon:Home,run:()=>ui.setView("home")});
-  for(const key of ENTITY_ORDER){
+  // Tasks has one page (planner + board), reached through the workspace section below.
+  for(const key of ENTITY_ORDER.filter(k=>k!=="tasks")){
    const def=ENTITIES[key];
    out.push({id:"go:"+key,group:"Go to",label:def.plural,icon:def.icon,run:()=>ui.setView(key as ViewKey)});
   }
@@ -38,11 +41,16 @@ export function CommandPalette(){
    out.push({id:"new:"+key,group:"Create",label:`New ${def.singular}`,icon:Plus,
     run:()=>{ui.setView(key as ViewKey);requestAnimationFrame(()=>document.dispatchEvent(new CustomEvent("dash:new",{detail:key})))}});
   }
-  for(const [key,section] of Object.entries(SECTIONS)){out.push({id:"tool:"+key,group:"Go to",label:section.label,icon:section.icon,run:()=>{window.location.hash="#/tools/"+key}})}
-  for(const hit of hits??[])out.push({id:`find:remote:${hit.kind}:${hit.id}`,group:"Workspace search",label:hit.title,hint:KIND[hit.kind].label,icon:KIND[hit.kind].icon,run:()=>{window.location.hash=resultHref(hit)}});
+  for(const [key,section] of Object.entries(SECTIONS)){if(key!=="home"&&key!=="settings"&&key!=="search")out.push({id:"tool:"+key,group:"Go to",label:section.label,icon:section.icon,run:()=>{window.location.hash="#/tools/"+key}})}
+  // One search: the workspace index covers everything except opportunities, which are matched locally below.
+  for(const hit of hits??[]){
+   const entity=DRAWER_KIND[hit.kind];
+   out.push({id:`find:remote:${hit.kind}:${hit.id}`,group:"Search results",label:hit.title,hint:KIND[hit.kind].label,icon:KIND[hit.kind].icon,
+    run:()=>{if(entity){ui.setView(entity);ui.openDrawer(entity,hit.id)}else window.location.hash=resultHref(hit)}});
+  }
   const q=term.trim().toLowerCase();
   if(q){
-   for(const key of ENTITY_ORDER){
+   for(const key of ["opportunities"] as EntityKey[]){
     const def=ENTITIES[key];
     const hits=tables[key as EntityKey].rows.filter(r=>
      def.searchFields.some(f=>String(r[f]??"").toLowerCase().includes(q))).slice(0,5);
