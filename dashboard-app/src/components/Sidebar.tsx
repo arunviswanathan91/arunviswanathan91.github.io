@@ -1,5 +1,5 @@
-import { SECTIONS, toneStyle, type SectionId } from "../extended/lib/sections";
-import { href } from "../extended/lib/route";
+import { SECTIONS, type SectionId } from "../extended/lib/sections";
+import { href, useRoute } from "../extended/lib/route";
 import { useMemo, useState } from "react";
 import { Check, Highlighter, Home, Inbox, Moon, PanelLeftClose, PanelLeftOpen, Plus, Send, Settings, Sun, SunMoon, Trash2 } from "lucide-react";
 import { useData, useUi } from "../lib/store";
@@ -29,6 +29,9 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
 
  const visibleProjects=projects.rows.filter(p=>showArchived||p.status==="Active");
  const go=(v:ViewKey)=>ui.setView(v);
+ // Workspace pages are hash routes (#/tools/agenda…); highlight the open one like the other menu items.
+ const route=useRoute();
+ const toolClass=(key:SectionId)=>"extension-nav"+(ui.view==="extended"&&route.path[0]===key?" active":"");
 
  return <aside className={"sidebar"+(open?" open":"")+(collapsed?" collapsed":"")}>
   <div className="identity" title={collapsed?"Arun’s workspace":undefined}>
@@ -42,7 +45,7 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
 
   <nav>
    <button className={ui.view==="home"?"active":""} aria-current={ui.view==="home"?"page":undefined}
-    title={collapsed?"Home":undefined} onClick={()=>go("home")}><Home/><span className="nav-text">Home</span></button>
+    title={collapsed?"Home":undefined} onClick={()=>go("home")}><span className="sec-chip"><Home/></span><span className="nav-text">Home</span></button>
 
    <p className="nav-label">Projects</p>
    <button className={"nav-project"+(ui.scope==="all"?" active":"")} title={collapsed?"All projects":undefined} onClick={()=>{ui.setScope("all");if(ui.view==="project"||ui.view==="publication")ui.setView("home")}}>
@@ -65,9 +68,9 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
    </div>
 
    <p className="nav-label">Research & planning</p>
-   {(["agenda","review","projects","tasks","papers","notes","meetings","deadlines","search"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className="extension-nav" href={href(key)} style={toneStyle(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{key==="tasks"?"Task planner":key==="projects"?"Project overview":item.label}</span></a>})}
+   {(["agenda","review","projects","tasks","papers","notes","meetings","deadlines","search"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={ui.view==="extended"&&route.path[0]===key?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{key==="tasks"?"Task planner":key==="projects"?"Project overview":item.label}</span></a>})}
    <p className="nav-label">Personal</p>
-   {(["budget","loans","habits"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className="extension-nav" href={href(key)} style={toneStyle(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span></a>})}
+   {(["budget","loans","habits"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={ui.view==="extended"&&route.path[0]===key?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span></a>})}
    <p className="nav-label">Workflows</p>
    {ENTITY_ORDER.map(key=>{
     const def=ENTITIES[key];
@@ -77,10 +80,10 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
      <span className="sec-chip"><def.icon/></span><span className="nav-text">{key==="tasks"?"Task board":def.plural}</span><span className="nav-count">{counts[key]}</span>
     </button>;
    })}
-   <button className={ui.view==="clippings"?"active":""} title="Clippings" onClick={()=>go("clippings")}><Highlighter/><span className="nav-text">Clippings</span></button>
+   <button className={ui.view==="clippings"?"active":""} title="Clippings" onClick={()=>go("clippings")}><span className="sec-chip"><Highlighter/></span><span className="nav-text">Clippings</span></button>
    <button className={ui.view==="trash"?"active":""} aria-current={ui.view==="trash"?"page":undefined}
     title={collapsed?"Trash":undefined} onClick={()=>go("trash")}>
-    <Trash2/><span className="nav-text">Trash</span><span className="nav-count">{trashItems.rows.length}</span>
+    <span className="sec-chip"><Trash2/></span><span className="nav-text">Trash</span><span className="nav-count">{trashItems.rows.length}</span>
    </button>
   </nav>
 
