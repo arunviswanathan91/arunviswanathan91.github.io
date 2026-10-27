@@ -226,7 +226,7 @@ export function LoansView() {
       </div>
 
       {(adding || editing) && (
-        <Modal title={editing ? "Edit account" : "New loan or credit card"} onClose={() => {setAdding(false);setEditing(null)}}>
+        <Modal wide title={editing ? "Edit account" : "New loan or credit card"} onClose={() => {setAdding(false);setEditing(null)}}>
           <LoanForm loan={editing ?? undefined} contacts={contacts} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); setEditing(null); await reload(); }} />
         </Modal>
       )}

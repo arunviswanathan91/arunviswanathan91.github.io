@@ -56,7 +56,7 @@ export function RecurringCard({ categories, currency }: { categories: BudgetCate
         </ul>
       )}
       {editing && (
-        <Modal title={editing === "new" ? "New recurring item" : "Edit recurring item"} onClose={() => setEditing(null)}>
+        <Modal wide title={editing === "new" ? "New recurring item" : "Edit recurring item"} onClose={() => setEditing(null)}>
           <RecurringForm item={editing === "new" ? undefined : editing} categories={categories} currency={currency} onDone={() => setEditing(null)} />
         </Modal>
       )}

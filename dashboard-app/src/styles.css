@@ -1254,4 +1254,36 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
   --sec-deadlines: #c2552f; --sec-deadlines-soft: #f8e4db; --sec-deadlines-ink: #712b13;
   --sec-money: #5b8a3a;     --sec-money-soft: #e6f0da;     --sec-money-ink: #2c5212;
   --sec-habits: #8a6f4e;    --sec-habits-soft: #efe6d8;    --sec-habits-ink: #4a3a28;}
-.sidebar .sec-chip{display:inline-grid;place-items:center;min-width:30px;height:30px;border-radius:9px;background:var(--tone-soft,var(--accent-soft));color:var(--tone,var(--accent))}.sidebar .sec-chip svg{width:17px;height:17px}.sidebar .extension-nav{display:flex;gap:10px;align-items:center;padding:8px 10px;text-decoration:none;color:var(--text);border-radius:9px}.sidebar .extension-nav:hover{background:var(--surface-2)}.sidebar.collapsed .extension-nav .nav-text{display:none}
+/* One look for every sidebar item: the same chip, spacing, hover and active state. */
+.sidebar .sec-chip{display:inline-grid;place-items:center;flex:none;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent)}
+.sidebar .sec-chip svg{width:16px;height:16px}
+.sidebar nav button.active .sec-chip,.sidebar .extension-nav.active .sec-chip{background:var(--accent);color:var(--accent-text)}
+.sidebar .extension-nav{display:flex;align-items:center;gap:var(--s-2);width:100%;padding:6px var(--s-2);border-radius:var(--r-2);color:var(--text-2);font-size:var(--f-sm);text-decoration:none}
+.sidebar .extension-nav:hover{background:var(--surface-3);color:var(--text)}
+.sidebar .extension-nav.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.sidebar.collapsed .extension-nav .nav-text{display:none}
+
+/* Scrollbars that follow the theme (thin thumb on a transparent track). */
+:root{--scroll-thumb:#c3cac5;--scroll-thumb-hover:#a5aea8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--scroll-thumb:#3a443f;--scroll-thumb-hover:#53605a}}
+:root[data-theme="dark"]{--scroll-thumb:#3a443f;--scroll-thumb-hover:#53605a}
+*{scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent}
+*:hover{scrollbar-color:var(--scroll-thumb-hover) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border:3px solid transparent;border-radius:999px;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover);border:3px solid transparent;background-clip:padding-box}
+
+/* Section colours in dark mode outside the workspace too (the workspace sets its own). */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --sec-home:#7cc29c;--sec-home-soft:#1e3328;--sec-home-ink:#bfe3cd;--sec-projects:#a99cf0;--sec-projects-soft:#2c2847;--sec-projects-ink:#d4cdfa;
+  --sec-tasks:#7fb2e5;--sec-tasks-soft:#1d2f42;--sec-tasks-ink:#c3dcf5;--sec-papers:#e2b05a;--sec-papers-soft:#3a2c14;--sec-papers-ink:#f5dba7;
+  --sec-notes:#7fc0d1;--sec-notes-soft:#183039;--sec-notes-ink:#c2e3ec;--sec-meetings:#e88aad;--sec-meetings-soft:#3c1f2b;--sec-meetings-ink:#f6c6d7;
+  --sec-deadlines:#ee9473;--sec-deadlines-soft:#3d241a;--sec-deadlines-ink:#f8cbb8;--sec-money:#a6d07d;--sec-money-soft:#24311a;--sec-money-ink:#d5eabd;
+  --sec-habits:#cdb08a;--sec-habits-soft:#332a1f;--sec-habits-ink:#eadcc6;}}
+:root[data-theme="dark"]{
+  --sec-home:#7cc29c;--sec-home-soft:#1e3328;--sec-home-ink:#bfe3cd;--sec-projects:#a99cf0;--sec-projects-soft:#2c2847;--sec-projects-ink:#d4cdfa;
+  --sec-tasks:#7fb2e5;--sec-tasks-soft:#1d2f42;--sec-tasks-ink:#c3dcf5;--sec-papers:#e2b05a;--sec-papers-soft:#3a2c14;--sec-papers-ink:#f5dba7;
+  --sec-notes:#7fc0d1;--sec-notes-soft:#183039;--sec-notes-ink:#c2e3ec;--sec-meetings:#e88aad;--sec-meetings-soft:#3c1f2b;--sec-meetings-ink:#f6c6d7;
+  --sec-deadlines:#ee9473;--sec-deadlines-soft:#3d241a;--sec-deadlines-ink:#f8cbb8;--sec-money:#a6d07d;--sec-money-soft:#24311a;--sec-money-ink:#d5eabd;
+  --sec-habits:#cdb08a;--sec-habits-soft:#332a1f;--sec-habits-ink:#eadcc6;}
