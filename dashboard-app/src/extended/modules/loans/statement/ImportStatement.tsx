@@ -7,6 +7,7 @@ import { formatMoney, type Charge, type Loan, type Payment } from "../balance.ts
 import { parseStatement, type ParsedStatement, type RowKind } from "./parse.ts";
 import { balanceOn, planImport, statementAddsUp, type ImportRow } from "./plan.ts";
 import { PdfPasswordError, readPdfLines } from "./readPdf.ts";
+import { ForSelect, usePeople } from "../../budget/ForSelect.tsx";
 import { DateInput } from "../../../../components/ui/DateInput";
 import { fmtDate } from "../../../lib/dates.ts";
 
@@ -95,6 +96,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
   const [error, setError] = useState("");
 
   const expense = categories.filter((c) => c.kind === "expense" && !c.archived_at);
+  const people = usePeople();
   const addsUp = statementAddsUp(parsed);
   const otherCard = loan.card_last4 && parsed.cardLast4.length > 0 && !parsed.cardLast4.includes(loan.card_last4) ? parsed.cardLast4.join(", ") : null;
   const ticked = rows.filter((r) => r.include);
@@ -127,9 +129,10 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
         payment_method: label,
         notes: note,
         loan_id: loan.id,
+        for_contact_id: r.forId ?? null,
       }));
       if (adjust && Math.abs(gap) >= 0.01 && statementOn) {
-        spending.push({ kind: gap > 0 ? "expense" : "income", description: "Adjustment to match the statement", amount: Math.abs(gap), currency: loan.currency, category_id: null, occurred_on: statementOn, payment_method: label, notes: note, loan_id: loan.id });
+        spending.push({ kind: gap > 0 ? "expense" : "income", description: "Adjustment to match the statement", amount: Math.abs(gap), currency: loan.currency, category_id: null, occurred_on: statementOn, payment_method: label, notes: note, loan_id: loan.id, for_contact_id: null });
       }
       await insertMany("transactions", spending);
       const paid = ticked.filter((r) => r.kind === "payment").map((r) => ({ loan_id: loan.id, amount: r.amount, paid_on: r.date, note }));
@@ -187,7 +190,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
       </p>
       <div className="table-scroll">
         <table className="statement-rows">
-          <thead><tr><th aria-label="Add" /><th>Date</th><th>Transaction details</th><th>Type</th><th className="num">Amount</th><th>Budget category</th></tr></thead>
+          <thead><tr><th aria-label="Add" /><th>Date</th><th>Transaction details</th><th>Type</th><th className="num">Amount</th><th>Budget category</th><th>For</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.key} className={r.include ? "" : "muted"}>
@@ -204,6 +207,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
                     </select>
                   )}
                 </td>
+                <td>{r.kind === "payment" ? <span className="muted small">—</span> : <ForSelect label={`Who ${r.description} was for`} value={r.forId} people={people} onChange={(id) => set(r.key, { forId: id })} />}</td>
               </tr>
             ))}
           </tbody>

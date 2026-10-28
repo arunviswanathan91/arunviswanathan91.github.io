@@ -23,6 +23,8 @@ export interface ListOptions {
   in?: [string, (string | number)[]];
   gte?: [string, string];
   lt?: [string, string];
+  /** Columns that must have a value. */
+  notNull?: string[];
   order?: [string, boolean?][]; // [column, ascending = true]
   limit?: number;
 }
@@ -36,6 +38,7 @@ export async function list<T>(table: string, opts: ListOptions = {}): Promise<T[
   }
   if (opts.gte) q = q.gte(opts.gte[0], opts.gte[1]);
   if (opts.lt) q = q.lt(opts.lt[0], opts.lt[1]);
+  for (const k of opts.notNull ?? []) q = q.not(k, "is", null);
   for (const [col, asc = true] of opts.order ?? []) q = q.order(col, { ascending: asc, nullsFirst: false });
   if (opts.limit) q = q.limit(opts.limit);
   return check(await q) as T[];

@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 import { supabase } from "../../lib/supabase.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { PageHeader } from "../../components/ui.tsx";
-import { list, useLoad } from "../../lib/db.ts";
+import { list, update, useLoad } from "../../lib/db.ts";
 import { downloadCsv } from "../../lib/download.ts";
 import type { BudgetCategory } from "../../lib/types.ts";
 import { TransactionForm } from "../budget/TransactionForm.tsx";
@@ -12,6 +12,7 @@ import { useSettings } from "../../lib/settings.ts";
 import { sortedSchedule, type EmiInstalment, amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
 import { useLoans } from "./useLoans.ts";
 import { ImportStatement } from "./statement/ImportStatement.tsx";
+import { ForSelect, usePeople } from "../budget/ForSelect.tsx";
 import { deleteContacts, uniqueByName, unusedContacts } from "./contacts.ts";
 import { LoanForm } from "./LoanForm.tsx";
 import { PaymentForm, type QuickAmount } from "./PaymentForm.tsx";
@@ -96,7 +97,7 @@ export function LoansView() {
     try {
       const unused = await unusedContacts(contacts, loans);
       if (!unused.length) return alert("Every name here is used by a loan or a meeting.");
-      if (!confirm(`Remove ${unused.length} unused name${unused.length > 1 ? "s" : ""} (${unused.map((c) => c.name).join(", ")})? They have no loans and no meetings.`)) return;
+      if (!confirm(`Remove ${unused.length} unused name${unused.length > 1 ? "s" : ""} (${unused.map((c) => c.name).join(", ")})? They have no loans, meetings or shared spending.`)) return;
       await deleteContacts(unused.map((c) => c.id));
       await reload();
     } catch (e) {
@@ -240,7 +241,7 @@ export function LoansView() {
                               </ul>
                               <EmiDetail loan={loan} payments={payments} today={today} onChange={reload} />
                               <CardDetail loan={loan} payments={payments} charges={charges} today={today} onRoll={() => setRolling(loan)} onImport={() => setImporting(loan)} />
-                              <CardSpending charges={charges.filter((c) => c.loan_id === loan.id)} currency={loan.currency} />
+                              <CardSpending charges={charges.filter((c) => c.loan_id === loan.id)} currency={loan.currency} categories={categories ?? []} onChange={reload} />
                               <button className="link danger small" onClick={() => void removeLoan(loan)}>Delete loan</button>
                             </div></td>
                           </tr>
@@ -446,21 +447,40 @@ function AmortisationDetail({ loan, payments, today }: { loan: Loan; payments: P
   );
 }
 
-function CardSpending({ charges, currency }: { charges: Charge[]; currency: string }) {
+/** The card's spending, with its budget category and who it was for editable in place (e.g. after a statement import). */
+function CardSpending({ charges, currency, categories, onChange }: { charges: Charge[]; currency: string; categories: BudgetCategory[]; onChange: () => Promise<void> }) {
+  const [all, setAll] = useState(false);
+  const people = usePeople();
   if (!charges.length) return null;
+  const set = async (c: Charge, patch: Partial<Charge>) => {
+    try {
+      await update("transactions", c.id, patch);
+      await onChange();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+  const shown = all ? charges : charges.slice(0, 8);
   return (
     <div className="small card-detail">
-      <p><strong>Card spending</strong> · from Budget (edit or delete it there)</p>
-      <ul className="history">
-        {charges.slice(0, 8).map((c) => (
+      <p><strong>Card spending</strong> · change a category or who it was for here; edit or delete it in Budget</p>
+      <ul className="card-spends">
+        {shown.map((c) => (
           <li key={c.id}>
             <span>{fmtDate(c.occurred_on)}</span>
-            <span>{c.kind === "income" ? "−" : ""}{formatMoney(c.amount, currency)}</span>
-            <span className="muted">{c.description}</span>
+            <span className="num">{c.kind === "income" ? "−" : ""}{formatMoney(c.amount, currency)}</span>
+            <span className="muted clamp">{c.description}</span>
+            {c.kind === "expense" ? (
+              <select className="inline-select" aria-label={`Category for ${c.description}`} value={c.category_id ?? ""} onChange={(e) => void set(c, { category_id: e.target.value || null })}>
+                <option value="">Uncategorised</option>
+                {categories.filter((x) => x.kind === "expense" && (!x.archived_at || x.id === c.category_id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            ) : <span className="muted">refund / credit</span>}
+            <ForSelect label={`Who ${c.description} was for`} value={c.for_contact_id} people={people} onChange={(id) => void set(c, { for_contact_id: id })} />
           </li>
         ))}
       </ul>
-      {charges.length > 8 && <p className="muted">and {charges.length - 8} more</p>}
+      {charges.length > 8 && <button className="link small" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${charges.length}`}</button>}
     </div>
   );
 }

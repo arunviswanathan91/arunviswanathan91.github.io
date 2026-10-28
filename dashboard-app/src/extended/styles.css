@@ -645,3 +645,20 @@
 .extension-workspace .emi-list li:first-child { border-top: 0; }
 .extension-workspace .emi-list .badge, .extension-workspace .emi-list button { justify-self: end; }
 .extension-workspace .warn-text { color: var(--warn); }
+
+/* Category / friend pickers inside lists */
+.extension-workspace select.inline-select, .extension-workspace .card-spends select { width: auto; max-width: 180px; padding: 4px 8px; font-size: var(--f-xs); }
+.extension-workspace .card-spends { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.extension-workspace .card-spends li { display: grid; grid-template-columns: 96px 96px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+@media (max-width: 700px) { .extension-workspace .card-spends li { grid-template-columns: 1fr 1fr; } .extension-workspace .card-spends li .clamp { grid-column: 1 / -1; } }
+.extension-workspace .friends-card .friend-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-top: 1px solid var(--border); }
+.extension-workspace .friends-card .friend-row:first-of-type { border-top: 0; }
+
+/* Budget: money out this month */
+.extension-workspace .money-out-groups { list-style: none; margin: 0 0 6px; padding: 0; }
+.extension-workspace .money-out-groups > li { border-top: 1px solid var(--border); }
+.extension-workspace .money-out-groups > li:first-child { border-top: 0; }
+.extension-workspace .money-out-row { width: 100%; display: flex; justify-content: space-between; gap: 8px; border: 0; background: none; padding: 7px 0; border-radius: 0; font-weight: 500; text-align: left; }
+.extension-workspace .money-out-row:hover:not(:disabled) { background: none; color: var(--accent); }
+.extension-workspace .money-out-items { list-style: none; margin: 0 0 8px; padding: 0 0 0 8px; font-size: var(--f-xs); }
+.extension-workspace .money-out-items li { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 8px; padding: 2px 0; }

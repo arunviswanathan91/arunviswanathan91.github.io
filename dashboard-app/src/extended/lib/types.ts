@@ -181,6 +181,8 @@ export interface Transaction {
   notes: string | null;
   /** Credit card this was paid with (or refunded to). */
   loan_id?: string | null;
+  /** Friend this was paid for (or who paid you back); kept out of your own budget. */
+  for_contact_id?: string | null;
 }
 export interface MonthlyBudget {
   id: string;
