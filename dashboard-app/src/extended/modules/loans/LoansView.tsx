@@ -11,6 +11,7 @@ import { combine, useFx } from "../../lib/fx.ts";
 import { useSettings } from "../../lib/settings.ts";
 import { amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
 import { useLoans } from "./useLoans.ts";
+import { ImportStatement } from "./statement/ImportStatement.tsx";
 import { LoanForm } from "./LoanForm.tsx";
 import { PaymentForm, type QuickAmount } from "./PaymentForm.tsx";
 
@@ -20,6 +21,7 @@ export function LoansView() {
   const { contacts, loans, payments, charges, loading, error, reload } = useLoans();
   const { data: categories } = useLoad(() => list<BudgetCategory>("budget_categories", { order: [["name"]] }), []);
   const [spending, setSpending] = useState<Loan | null>(null);
+  const [importing, setImporting] = useState<Loan | null>(null);
   const [rolling, setRolling] = useState<Loan | null>(null);
   const [filter, setFilter] = useState<Filter>("active");
   const [person, setPerson] = useState<string | null>(null);
@@ -91,8 +93,8 @@ export function LoansView() {
     if (emi) out.push({ label: "EMI", amount: Math.min(emi.emi, left) });
     const st = statementPlan(loan, payments, today);
     if (st) {
-      if (st.minimumLeft > 0) out.push({ label: "Minimum due", amount: Math.min(st.minimumLeft, left) });
-      if (st.statementLeft > 0) out.push({ label: "Statement", amount: Math.min(st.statementLeft, left) });
+      if (st.minimumLeft > 0) out.push({ label: "Minimum amount due", amount: Math.min(st.minimumLeft, left) });
+      if (st.statementLeft > 0) out.push({ label: "Total amount due", amount: Math.min(st.statementLeft, left) });
     }
     if (out.length) out.push({ label: "Full balance", amount: left });
     return out.filter((q, i) => q.amount > 0 && out.findIndex((o) => o.amount === q.amount && o.label === q.label) === i);
@@ -209,7 +211,7 @@ export function LoansView() {
                                 ))}
                               </ul>
                               <EmiDetail loan={loan} payments={payments} today={today} />
-                              <CardDetail loan={loan} payments={payments} today={today} onRoll={() => setRolling(loan)} />
+                              <CardDetail loan={loan} payments={payments} today={today} onRoll={() => setRolling(loan)} onImport={() => setImporting(loan)} />
                               <CardSpending charges={charges.filter((c) => c.loan_id === loan.id)} currency={loan.currency} />
                               <button className="link danger small" onClick={() => remove("loans", loan.id, "loan and its repayments")}>Delete loan</button>
                             </div></td>
@@ -233,6 +235,11 @@ export function LoansView() {
       {spending && (
         <Modal title={`Spend on ${spending.account_name || nameOf(spending.contact_id)}`} onClose={() => setSpending(null)}>
           <TransactionForm categories={categories ?? []} currency={spending.currency} presetLoanId={spending.id} onDone={async () => { setSpending(null); await reload(); }} />
+        </Modal>
+      )}
+      {importing && (
+        <Modal title={`Import statement · ${importing.account_name || nameOf(importing.contact_id)}`} wide onClose={() => setImporting(null)}>
+          <ImportStatement loan={importing} charges={charges} payments={payments} categories={categories ?? []} onDone={async () => { setImporting(null); await reload(); }} />
         </Modal>
       )}
       {rolling && (
@@ -279,7 +286,7 @@ function EmiDetail({ loan, payments, today }: { loan: Loan; payments: Payment[];
 
 const STATEMENT_LABEL: Record<StatementState, string> = { paid: "Statement paid", minimum_paid: "Minimum paid", due: "Payment due", overdue: "Overdue" };
 
-function CardDetail({ loan, payments, today, onRoll }: { loan: Loan; payments: Payment[]; today: string; onRoll: () => void }) {
+function CardDetail({ loan, payments, today, onRoll, onImport }: { loan: Loan; payments: Payment[]; today: string; onRoll: () => void; onImport: () => void }) {
   if (loan.account_type !== "credit_card") return null;
   const st = statementPlan(loan, payments, today);
   const usage = cardUsage(loan, payments);
@@ -292,19 +299,22 @@ function CardDetail({ loan, payments, today, onRoll }: { loan: Loan; payments: P
             <strong>Statement {st.statementOn}</strong> <span className={`badge ${st.state === "overdue" ? "overdue" : st.state === "paid" ? "settled" : "open"}`}>{STATEMENT_LABEL[st.state]}</span>
           </p>
           <p>
-            Statement {money(st.statement)} · paid since {money(st.paid)} · <strong>{money(st.statementLeft)} left</strong>
-            {st.dueOn && ` · due ${st.dueOn}`}
+            Total amount due {money(st.statement)} · paid since {money(st.paid)} · <strong>{money(st.statementLeft)} left</strong>
+            {st.dueOn && ` · payment due date ${st.dueOn}`}
           </p>
-          <p>Minimum due {money(st.minimumDue)}{st.minimumLeft > 0 ? ` · ${money(st.minimumLeft)} still to pay` : " · covered"} · New spending since statement {money(st.unbilled)}</p>
+          <p>Minimum amount due {money(st.minimumDue)}{st.minimumLeft > 0 ? ` · ${money(st.minimumLeft)} still to pay` : " · covered"} · Purchases since the statement {money(st.unbilled)}</p>
           {st.interestRisk && <p className="neg">Past the due date with the statement unpaid, so interest is likely.</p>}
         </>
       ) : (
-        <p>Minimum due: {loan.minimum_due == null ? "Not set" : money(Number(loan.minimum_due))}. No statement entered yet.</p>
+        <p>Minimum amount due: {loan.minimum_due == null ? "Not set" : money(Number(loan.minimum_due))}. No statement entered yet.</p>
       )}
-      <button className="small" onClick={onRoll}>{st ? "Enter next statement" : "Enter statement"}</button>
+      <div className="row wrap">
+        <button className="small" onClick={onImport}>Import statement PDF</button>
+        <button className="small" onClick={onRoll}>{st ? "Enter next statement by hand" : "Enter statement by hand"}</button>
+      </div>
       {usage && (
         <p>
-          Limit {money(Number(loan.credit_limit))} · used {money(usage.used)} ({Math.round(usage.utilization * 100)}%) · available {money(usage.available)}
+          Credit limit {money(Number(loan.credit_limit))} · used {money(usage.used)} ({Math.round(usage.utilization * 100)}%) · available credit {money(usage.available)}
           {usage.utilization > 0.3 && <span className="muted"> · above 30% can hurt your credit score</span>}
         </p>
       )}
@@ -384,8 +394,8 @@ function StatementForm({ loan, payments, today, onDone }: { loan: Loan; payments
     <form className="form" onSubmit={submit}>
       <p className="muted small">Prefilled with the balance owed today and dates one month after the last statement. Change them to match the bill.</p>
       <div className="grid-2">
-        <label>Statement amount<input required type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-        <label>Minimum due<input type="number" min="0" step="0.01" value={minimum} onChange={(e) => setMinimum(e.target.value)} /></label>
+        <label>Total amount due<input required type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+        <label>Minimum amount due<input type="number" min="0" step="0.01" value={minimum} onChange={(e) => setMinimum(e.target.value)} /></label>
         <label>Statement date<input required type="date" value={on} onChange={(e) => setOn(e.target.value)} /></label>
         <label>Payment due date<input type="date" min={on} value={due} onChange={(e) => setDue(e.target.value)} /></label>
       </div>

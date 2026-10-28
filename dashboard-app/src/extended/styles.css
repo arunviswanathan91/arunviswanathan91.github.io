@@ -621,3 +621,14 @@
 .extension-workspace .recurring-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .extension-workspace .reading-timer { display: flex; flex-direction: column; gap: 8px; }
 .extension-workspace .reading-clock { font-size: 1.8rem; font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: 0.02em; }
+
+/* Statement import */
+.extension-workspace .statement-import label.row-check { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; font-weight: 600; text-align: left; }
+.extension-workspace .statement-import .row-check input { width: auto; }
+.extension-workspace .statement-import .warn-notice { background: var(--warn-soft); color: var(--warn); display: flex; gap: 6px; align-items: center; }
+.extension-workspace .statement-import .table-scroll { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-2); }
+.extension-workspace .statement-rows th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.extension-workspace .statement-rows td { padding: 7px 10px; vertical-align: middle; }
+.extension-workspace .statement-rows tr.muted td { color: var(--muted); }
+.extension-workspace .statement-rows select { min-width: 150px; padding: 5px 8px; }
+.extension-workspace .statement-import p svg { vertical-align: -2px; margin-right: 2px; }

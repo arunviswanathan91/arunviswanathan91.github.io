@@ -114,11 +114,11 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
       </div>
       {accountType === "credit_card" && <>
         <label>Last four digits (optional)<input inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={last4} onChange={e=>setLast4(e.target.value.replace(/\D/g,""))} placeholder="1234"/></label>
-        <div className="grid-2"><label>Credit limit (optional)<input type="number" min="0" step="0.01" value={creditLimit} onChange={e=>setCreditLimit(e.target.value)}/></label><label>Minimum payment due (optional)<input type="number" min="0" step="0.01" value={minimumDue} onChange={e=>setMinimumDue(e.target.value)}/></label></div>
+        <div className="grid-2"><label>Credit limit (optional)<input type="number" min="0" step="0.01" value={creditLimit} onChange={e=>setCreditLimit(e.target.value)}/></label><label>Minimum amount due (optional)<input type="number" min="0" step="0.01" value={minimumDue} onChange={e=>setMinimumDue(e.target.value)}/></label></div>
         <div className="form-group" role="group" aria-label="Current statement"><strong className="form-group-title">Current statement (optional)</strong>
-          <div className="grid-2"><label>Statement amount<input type="number" min="0" step="0.01" value={stmtAmount} onChange={e=>setStmtAmount(e.target.value)}/></label><label>Statement date<input type="date" required={stmtAmount !== ""} value={stmtOn} onChange={e=>setStmtOn(e.target.value)}/></label></div>
+          <div className="grid-2"><label>Total amount due<input type="number" min="0" step="0.01" value={stmtAmount} onChange={e=>setStmtAmount(e.target.value)}/></label><label>Statement date<input type="date" required={stmtAmount !== ""} value={stmtOn} onChange={e=>setStmtOn(e.target.value)}/></label></div>
           <label>Payment due date<input type="date" min={stmtOn} value={stmtDue} onChange={e=>setStmtDue(e.target.value)}/></label>
-          <p className="muted small">Payments dated on or after the statement date count towards the statement and its minimum due. Enter the new statement each month.</p>
+          <p className="muted small">Use the figures printed on the bill. Payments dated on or after the statement date count towards the total and minimum amount due. Each month, import the statement PDF or enter it by hand.</p>
         </div>
         <p className="muted small">Balance = starting balance + spending added with “Add spend” (or a Budget expense paid with this card) − bill payments. Enter 0 for a new card. Interest and fees can be added as spending. Only the last four digits are needed.</p>
       </>}

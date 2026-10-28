@@ -82,7 +82,7 @@ function moneyAttention(loans: Loan[], payments: Payment[], now: string): Attent
     }
     const st = statementPlan(l, payments, now);
     if (st && st.dueOn && st.statementLeft > 0 && st.dueOn <= week && (st.dueOn >= now || st.state === "overdue")) {
-      const amount = st.minimumLeft > 0 ? `min ${formatMoney(st.minimumLeft, l.currency)}` : `${formatMoney(st.statementLeft, l.currency)} to avoid interest`;
+      const amount = st.minimumLeft > 0 ? `minimum amount due ${formatMoney(st.minimumLeft, l.currency)}` : `total amount due ${formatMoney(st.statementLeft, l.currency)}`;
       out.push({ key: `c${l.id}`, icon: CreditCard, text: `${name}: ${amount} · ${relDay(st.dueOn, now)}`, href: href("loans"), urgent: st.state === "overdue" });
     }
   }
