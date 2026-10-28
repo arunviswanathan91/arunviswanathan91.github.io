@@ -35,14 +35,15 @@ export function startOfWeek(day: string): string {
   return addDays(day, 1 - isoWeekday(day));
 }
 
-export function fmtDate(day: string | null | undefined, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" }): string {
+/** "08 Apr 2026": the month is always a word, never a number. */
+export function fmtDate(day: string | null | undefined, opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "short", year: "numeric" }): string {
   if (!day) return "";
   return new Date(day.length === 10 ? `${day}T12:00:00` : day).toLocaleDateString("en-GB", opts);
 }
 
 export function fmtDateTime(ts: string | null | undefined): string {
   if (!ts) return "";
-  return new Date(ts).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(ts).toLocaleString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 export function fmtTime(ts: string): string {
@@ -76,3 +77,10 @@ export function fmtBytes(n: number | null): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** "Wednesday, 8 April 2026": shown under date boxes, whose own display follows the browser. */
+export function longDate(day: string | null | undefined): string {
+  if (!day) return "";
+  const d = new Date(day.length === 10 ? `${day}T12:00:00` : day);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", ...(day.length > 10 ? { hour: "2-digit", minute: "2-digit" } : {}) });
+}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { getOne, insert, list, remove, update, useLoad } from "../../lib/db.ts";
-import { today } from "../../lib/dates.ts";
+import { fmtDate, today } from "../../lib/dates.ts";
 import { go, href } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
 import { PAPER_STATUS, type Note, type PageRef, type Paper, type PaperStatus, type ProjectPaper } from "../../lib/types.ts";
@@ -216,8 +216,8 @@ function PaperDetail({ paper, links, notes }: { paper: Paper; links: ProjectPape
             </div>
             {(paper.started_on || paper.finished_on) && (
               <p className="small muted">
-                {paper.started_on && <>Started {paper.started_on}. </>}
-                {paper.finished_on && <>Finished {paper.finished_on}.</>}
+                {paper.started_on && <>Started {fmtDate(paper.started_on)}. </>}
+                {paper.finished_on && <>Finished {fmtDate(paper.finished_on)}.</>}
               </p>
             )}
           </div>

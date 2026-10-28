@@ -1296,3 +1296,8 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .button-column button{justify-content:flex-start}
 .button-row{display:flex;flex-wrap:wrap;gap:var(--s-2)}
 .restore-preview{display:grid;gap:var(--s-2);padding:var(--s-3);border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface-2)}
+
+/* Date boxes show the browser's numeric format; the date is written out underneath. */
+.date-field{display:flex;flex-direction:column;gap:2px;min-width:0;width:100%}
+.date-field>input{width:100%}
+.date-words{font-size:var(--f-2xs);color:var(--text-2);line-height:1.3}

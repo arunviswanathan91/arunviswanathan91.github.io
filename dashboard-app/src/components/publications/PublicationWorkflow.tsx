@@ -5,6 +5,7 @@ import { useData } from "../../lib/store";
 import { formatDate, fromInput, toInput } from "../../lib/format";
 import { SelectMenu } from "../ui/SelectMenu";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
+import { DateInput } from "../ui/DateInput";
 
 const NODE_STATUS=["Pending","In progress","Waiting","Done"] as const;
 
@@ -65,7 +66,7 @@ export function PublicationWorkflow({publicationId,canEdit=true,canDelete=true}:
     <SelectMenu className="input input-compact" value={node.assignee_id??""} label={`${node.title} assignee`} disabled={!canEdit}
      options={[{value:"",label:"Unassigned"},...assignees.map(p=>({value:p.id,label:p.name+(p.role?` · ${p.role}`:"")}))]}
      onChange={value=>void publicationNodes.update(node.id,{assignee_id:value||null})}/>
-    <input className="input input-compact" type="date" value={toInput(node.due_at,false)} aria-label={`${node.title} due date`} disabled={!canEdit}
+    <DateInput className="input input-compact" type="date" value={toInput(node.due_at,false)} aria-label={`${node.title} due date`} disabled={!canEdit}
      onChange={e=>void publicationNodes.update(node.id,{due_at:fromInput(e.target.value,false)})}/>
     <input className="input input-compact node-notes" defaultValue={node.notes??""} placeholder="Notes or expected output" disabled={!canEdit}
      aria-label={`${node.title} notes`} onBlur={e=>{const notes=e.target.value.trim()||null;if(notes!==node.notes)void publicationNodes.update(node.id,{notes})}}/>

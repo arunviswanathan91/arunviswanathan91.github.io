@@ -6,6 +6,7 @@ import { LinksEditor } from "../../components/LinksEditor.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { ErrorText, Field } from "../../components/ui.tsx";
 import { today } from "../../lib/dates.ts";
+import { DateInput } from "../../../components/ui/DateInput";
 
 export function ProjectForm({ project, onDone }: { project?: Project; onDone: () => void }) {
   const [title, setTitle] = useState(project?.title ?? "");
@@ -69,14 +70,14 @@ export function ProjectForm({ project, onDone }: { project?: Project; onDone: ()
           </select>
         </Field>
         <Field label="Start date">
-          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+          <DateInput type="date" value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>
         <Field label="Target date">
-          <input type="date" value={target} onChange={(e) => setTarget(e.target.value)} />
+          <DateInput type="date" value={target} onChange={(e) => setTarget(e.target.value)} />
         </Field>
         {(status === "completed" || completed) && (
           <Field label="Completed on">
-            <input type="date" value={completed} onChange={(e) => setCompleted(e.target.value)} />
+            <DateInput type="date" value={completed} onChange={(e) => setCompleted(e.target.value)} />
           </Field>
         )}
       </div>

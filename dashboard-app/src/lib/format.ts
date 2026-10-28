@@ -2,9 +2,9 @@
 // Rows keep raw ISO everywhere else, so edit forms can always round-trip a date.
 
 const rtf=new Intl.RelativeTimeFormat(undefined,{numeric:"auto"});
-const dayMonth=new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric"});
-const dayMonthYear=new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric",year:"numeric"});
-const dateAndTime=new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"});
+// Dates always read "08 Apr 2026": month as a word, never a number, so they are easy to read.
+const dayMonthYear=new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+const dateAndTime=new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 
 const valid=(iso:string|null|undefined):Date|null=>{if(!iso)return null;const d=new Date(iso);return isNaN(d.getTime())?null:d};
 const pad=(n:number)=>String(n).padStart(2,"0");
@@ -17,7 +17,7 @@ export const isOverdue=(iso:string|null,now=Date.now())=>{const d=valid(iso);ret
 export function formatDate(iso:string|null,withTime=false){
  const d=valid(iso); if(!d)return "";
  if(withTime)return dateAndTime.format(d);
- return d.getFullYear()===new Date().getFullYear()?dayMonth.format(d):dayMonthYear.format(d);
+ return dayMonthYear.format(d);
 }
 
 /** "2h ago" / "in 3 days", falling back to an absolute date beyond a month. */

@@ -7,6 +7,8 @@ import { formatMoney, type Charge, type Loan, type Payment } from "../balance.ts
 import { parseStatement, type ParsedStatement, type RowKind } from "./parse.ts";
 import { balanceOn, planImport, statementAddsUp, type ImportRow } from "./plan.ts";
 import { PdfPasswordError, readPdfLines } from "./readPdf.ts";
+import { DateInput } from "../../../../components/ui/DateInput";
+import { fmtDate } from "../../../lib/dates.ts";
 
 const KIND_LABEL: Record<RowKind, string> = { spend: "Purchase", fee: "Interest / fee", payment: "Payment", refund: "Refund / credit" };
 const KIND_TONE: Record<RowKind, string> = { spend: "", fee: "warn", payment: "pos", refund: "pos" };
@@ -159,7 +161,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
       <p className="small">
         <strong>{parsed.bank ?? "Statement"}</strong>
         {parsed.cardLast4.length > 0 && <> · card ••{parsed.cardLast4.join(", ••")}</>}
-        {parsed.periodFrom && parsed.periodTo && <> · {parsed.periodFrom} to {parsed.periodTo}</>}
+        {parsed.periodFrom && parsed.periodTo && <> · {fmtDate(parsed.periodFrom)} to {fmtDate(parsed.periodTo)}</>}
       </p>
       {otherCard && <p className="notice warn-notice"><TriangleAlert size={14} /> This statement is for card ••{otherCard}, but this card is ••{loan.card_last4}. Check you picked the right card.</p>}
       {addsUp && (addsUp.ok
@@ -171,8 +173,8 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
         <div className="grid-2">
           <label>Total amount due<input type="number" step="0.01" min="0" value={totalDue} disabled={!updateCard} onChange={(e) => setTotalDue(e.target.value)} /></label>
           <label>Minimum amount due<input type="number" step="0.01" min="0" value={minimumDue} disabled={!updateCard} onChange={(e) => setMinimumDue(e.target.value)} /></label>
-          <label>Statement date<input type="date" value={statementOn} disabled={!updateCard} onChange={(e) => setStatementOn(e.target.value)} /></label>
-          <label>Payment due date<input type="date" value={dueOn} min={statementOn} disabled={!updateCard} onChange={(e) => setDueOn(e.target.value)} /></label>
+          <label>Statement date<DateInput type="date" value={statementOn} disabled={!updateCard} onChange={(e) => setStatementOn(e.target.value)} /></label>
+          <label>Payment due date<DateInput type="date" value={dueOn} min={statementOn} disabled={!updateCard} onChange={(e) => setDueOn(e.target.value)} /></label>
           <label>Credit limit<input type="number" step="0.01" min="0" value={creditLimit} disabled={!updateCard} onChange={(e) => setCreditLimit(e.target.value)} /></label>
           {parsed.availableCredit != null && <p className="small muted">Available credit on the statement: {money(parsed.availableCredit)}</p>}
         </div>
@@ -190,7 +192,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
             {rows.map((r) => (
               <tr key={r.key} className={r.include ? "" : "muted"}>
                 <td><input type="checkbox" className="check" aria-label={`Add ${r.description}`} checked={r.include} onChange={(e) => set(r.key, { include: e.target.checked })} /></td>
-                <td className="date">{r.date}</td>
+                <td className="date">{fmtDate(r.date)}</td>
                 <td>{r.description}{r.skip && <div className="small muted">{r.skip === "duplicate" ? "Already in the dashboard" : "Before you added this card"}</div>}</td>
                 <td><span className={`badge ${KIND_TONE[r.kind]}`}>{KIND_LABEL[r.kind]}</span></td>
                 <td className="num">{money(r.amount)}{r.credit && " CR"}</td>
@@ -210,7 +212,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
 
       {after != null && due != null && (
         <div className="form-group" role="group" aria-label="Balance check">
-          <p className="small">Card balance on {statementOn} after this import: <strong>{money(after)}</strong> · statement total amount due: <strong>{money(due)}</strong></p>
+          <p className="small">Card balance on {fmtDate(statementOn)} after this import: <strong>{money(after)}</strong> · statement total amount due: <strong>{money(due)}</strong></p>
           {Math.abs(gap) >= 0.01 ? (
             <label className="row-check"><input type="checkbox" checked={adjust} onChange={(e) => setAdjust(e.target.checked)} /> Add a {money(Math.abs(gap))} {gap > 0 ? "charge" : "credit"} so the card matches the statement</label>
           ) : <p className="small pos"><CheckCircle2 size={14} /> The card will match the statement.</p>}
