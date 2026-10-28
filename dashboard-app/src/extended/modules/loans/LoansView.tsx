@@ -91,7 +91,7 @@ export function LoansView() {
     const out: QuickAmount[] = [];
     const emi = emiPlan(loan, payments, today);
     if (emi) out.push({ label: "EMI", amount: Math.min(emi.emi, left) });
-    const st = statementPlan(loan, payments, today);
+    const st = statementPlan(loan, payments, today, charges);
     if (st) {
       if (st.minimumLeft > 0) out.push({ label: "Minimum amount due", amount: Math.min(st.minimumLeft, left) });
       if (st.statementLeft > 0) out.push({ label: "Total amount due", amount: Math.min(st.statementLeft, left) });
@@ -190,7 +190,7 @@ export function LoansView() {
                           <td data-label="Status"><StatusBadge status={status} card={loan.account_type === "credit_card"} /></td>
                           <td className="actions" onClick={(e) => e.stopPropagation()}>
                             <button onClick={()=>setEditing(loan)}>Edit</button>
-                            {loan.account_type === "credit_card" && <button onClick={() => setSpending(loan)}>Add spend</button>}
+                            {loan.account_type === "credit_card" && <><button onClick={() => setSpending(loan)}>Add spend</button><button onClick={() => setImporting(loan)}>Import statement</button></>}
                             {status !== "settled" && <button onClick={() => setPaying(loan)}>{loan.account_type === "credit_card" ? "Pay bill" : loan.direction === "lent" ? "Got paid" : "Paid back"}</button>}
                           </td>
                         </tr>
@@ -211,7 +211,7 @@ export function LoansView() {
                                 ))}
                               </ul>
                               <EmiDetail loan={loan} payments={payments} today={today} />
-                              <CardDetail loan={loan} payments={payments} today={today} onRoll={() => setRolling(loan)} onImport={() => setImporting(loan)} />
+                              <CardDetail loan={loan} payments={payments} charges={charges} today={today} onRoll={() => setRolling(loan)} onImport={() => setImporting(loan)} />
                               <CardSpending charges={charges.filter((c) => c.loan_id === loan.id)} currency={loan.currency} />
                               <button className="link danger small" onClick={() => remove("loans", loan.id, "loan and its repayments")}>Delete loan</button>
                             </div></td>
@@ -286,9 +286,9 @@ function EmiDetail({ loan, payments, today }: { loan: Loan; payments: Payment[];
 
 const STATEMENT_LABEL: Record<StatementState, string> = { paid: "Statement paid", minimum_paid: "Minimum paid", due: "Payment due", overdue: "Overdue" };
 
-function CardDetail({ loan, payments, today, onRoll, onImport }: { loan: Loan; payments: Payment[]; today: string; onRoll: () => void; onImport: () => void }) {
+function CardDetail({ loan, payments, charges, today, onRoll, onImport }: { loan: Loan; payments: Payment[]; charges: Charge[]; today: string; onRoll: () => void; onImport: () => void }) {
   if (loan.account_type !== "credit_card") return null;
-  const st = statementPlan(loan, payments, today);
+  const st = statementPlan(loan, payments, today, charges);
   const usage = cardUsage(loan, payments);
   const money = (n: number) => formatMoney(n, loan.currency);
   return (
@@ -302,7 +302,16 @@ function CardDetail({ loan, payments, today, onRoll, onImport }: { loan: Loan; p
             Total amount due {money(st.statement)} · paid since {money(st.paid)} · <strong>{money(st.statementLeft)} left</strong>
             {st.dueOn && ` · payment due date ${st.dueOn}`}
           </p>
-          <p>Minimum amount due {money(st.minimumDue)}{st.minimumLeft > 0 ? ` · ${money(st.minimumLeft)} still to pay` : " · covered"} · Purchases since the statement {money(st.unbilled)}</p>
+          <p>
+            {st.minimumKnown ? <>Minimum amount due {money(st.minimumDue)}{st.minimumLeft > 0 ? ` · ${money(st.minimumLeft)} still to pay` : " · covered"}</> : "Minimum amount due not entered"}
+            {st.unbilled > 0 && ` · Purchases since the statement ${money(st.unbilled)}`}
+          </p>
+          {st.mismatch !== null && Math.abs(st.mismatch) >= 1 && (
+            <p className="neg">
+              The card balance on {st.statementOn} is {money(st.statement + st.mismatch)}, but the statement says {money(st.statement)}.
+              {st.mismatch > 0 ? " Payments or refunds from the statement are probably missing" : " Purchases or fees from the statement are probably missing"}: import the statement PDF to add them, or check the starting balance.
+            </p>
+          )}
           {st.interestRisk && <p className="neg">Past the due date with the statement unpaid, so interest is likely.</p>}
         </>
       ) : (

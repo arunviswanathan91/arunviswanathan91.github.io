@@ -164,17 +164,27 @@ export interface StatementPlan {
   statementLeft: number;
   minimumDue: number;
   minimumLeft: number;
-  /** Tracked balance that is not on the statement (spending after it was generated). */
+  /** False when no minimum amount due was entered (it is then not reported as paid). */
+  minimumKnown: boolean;
+  /** Spending after the statement was generated. */
   unbilled: number;
+  /** Card balance on the statement date minus the statement's total; null when not checkable. */
+  mismatch: number | null;
   state: StatementState;
   /** Past the due date with part of the statement unpaid, so interest is likely. */
   interestRisk: boolean;
 }
 
 /** Current-statement view of a credit card. Null when no statement has been entered. */
-export function statementPlan(loan: Loan, payments: Payment[], today: string): StatementPlan | null {
+/**
+ * Where the card stands against its latest statement. Pass the card's spending entries to get real
+ * spending since the statement and a check that the tracked balance matches the bill; without them
+ * everything owed beyond the statement counts as new spending.
+ */
+export function statementPlan(loan: Loan, payments: Payment[], today: string, charges?: Charge[]): StatementPlan | null {
   if (loan.account_type !== "credit_card" || loan.statement_amount == null || !loan.statement_on) return null;
   const statement = cents(loan.statement_amount);
+  const minimumKnown = loan.minimum_due != null;
   const minimum = Math.min(statement, cents(loan.minimum_due ?? 0));
   const statementOn = loan.statement_on;
   const paid = payments
@@ -184,7 +194,18 @@ export function statementPlan(loan: Loan, payments: Payment[], today: string): S
   const minimumLeft = Math.max(0, minimum - paid);
   const dueOn = loan.statement_due_on ?? null;
   const pastDue = dueOn !== null && today > dueOn;
-  const state: StatementState = statementLeft === 0 ? "paid" : pastDue && minimumLeft > 0 ? "overdue" : minimumLeft === 0 ? "minimum_paid" : "due";
+  const minimumMet = minimumKnown && minimumLeft === 0;
+  const state: StatementState = statementLeft === 0 ? "paid" : pastDue && !minimumMet ? "overdue" : minimumMet ? "minimum_paid" : "due";
+  const owed = cents(remaining(loan, payments));
+  let unbilled = Math.max(0, owed - statementLeft);
+  let mismatch: number | null = null;
+  if (charges) {
+    unbilled = charges
+      .filter((c) => c.loan_id === loan.id && c.occurred_on > statementOn)
+      .reduce((sum, c) => sum + (c.kind === "expense" ? cents(c.amount) : c.kind === "income" ? -cents(c.amount) : 0), 0);
+    // Only checkable when the card was tracked by the statement date.
+    if (loan.issued_on <= statementOn) mismatch = owed + paid - unbilled - statement;
+  }
   return {
     statement: statement / 100,
     statementOn,
@@ -193,7 +214,9 @@ export function statementPlan(loan: Loan, payments: Payment[], today: string): S
     statementLeft: statementLeft / 100,
     minimumDue: minimum / 100,
     minimumLeft: minimumLeft / 100,
-    unbilled: Math.max(0, cents(remaining(loan, payments)) - statementLeft) / 100,
+    minimumKnown,
+    unbilled: Math.max(0, unbilled) / 100,
+    mismatch: mismatch === null ? null : mismatch / 100,
     state,
     interestRisk: pastDue && statementLeft > 0,
   };

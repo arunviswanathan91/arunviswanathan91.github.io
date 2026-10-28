@@ -149,3 +149,27 @@ test("next statement is a month on, for the balance owed now, with about 5 % min
 test("CSV quotes commas, quotes and new lines", () => {
   assert.equal(toCsv([["a,b", 'say "hi"', "x\ny", null, 3]]), '﻿"a,b","say ""hi""","x\ny",,3\r\n');
 });
+
+test("a blank minimum amount due is never reported as paid", () => {
+  const noMin = { ...card, minimum_due: null };
+  const s = statementPlan(noMin, [], "2026-10-10")!;
+  assert.equal(s.minimumKnown, false);
+  assert.equal(s.state, "due");
+  assert.equal(statementPlan(noMin, [], "2026-10-21")!.state, "overdue");
+});
+
+test("with spending entries, new purchases are real and a balance that disagrees with the bill is flagged", () => {
+  // Starting balance 20,000 on 2026-09-01; the bill says 15,000, so 5,000 of payments/credits are missing.
+  const tracked = { ...card, issued_on: "2026-09-01" };
+  let s = statementPlan(tracked, [], "2026-10-10", [])!;
+  assert.equal(s.unbilled, 0);
+  assert.equal(s.mismatch, 5000);
+  const charges = [
+    { id: "t1", loan_id: "k1", kind: "income" as const, description: "Refund", amount: 5000, occurred_on: "2026-09-20" },
+    { id: "t2", loan_id: "k1", kind: "expense" as const, description: "Food", amount: 300, occurred_on: "2026-10-05" },
+  ];
+  const withCharges = { ...tracked, charged: chargedByLoan(charges).k1 };
+  s = statementPlan(withCharges, [payOn("k1", 1000, "2026-10-06")], "2026-10-10", charges)!;
+  assert.equal(s.unbilled, 300);
+  assert.equal(s.mismatch, 0);
+});
