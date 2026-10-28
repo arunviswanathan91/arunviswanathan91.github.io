@@ -5,6 +5,7 @@ import { CURRENCIES, type BudgetCategory, type Transaction } from "../../lib/typ
 import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
 import { ForSelect, usePeople } from "./ForSelect.tsx";
 import { DateInput } from "../../../components/ui/DateInput";
+import { CategorySelect } from "./CategorySelect.tsx";
 
 interface Card {
   id: string;
@@ -98,10 +99,7 @@ export function TransactionForm({ tx, categories, currency, presetKind = "expens
         </Field>
         {kind !== "transfer" && (
           <Field label="Category">
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Uncategorised</option>
-              {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <CategorySelect value={categoryId} categories={categories} kind={kind === "income" ? "income" : "expense"} onChange={(id) => setCategoryId(id ?? "")} />
           </Field>
         )}
         <Field label="Date">
