@@ -184,3 +184,53 @@ test("lender names are reused and shown once", () => {
   assert.deepEqual(uniqueByName(people, used).map((c) => c.id), ["b", "c"]);
   assert.deepEqual(uniqueByName(people, [], "b").map((c) => c.id), ["b", "c"]);
 });
+
+// ── EMIs that are not all the same ──────────────────────────────────────────
+import { monthlySchedule } from "../src/extended/modules/loans/balance.ts";
+
+const creditBee = (): Loan => ({ ...loan("cb", "c1", "borrowed", 51437, "INR"), emi_amount: 6162, emi_tenure: 9, emi_first_on: "2026-06-08" });
+const emis = (n: number) => Array.from({ length: n }, (_, i) => payOn("cb", 6162, `2026-${String(6 + i).padStart(2, "0")}-08`));
+
+test("same EMI every month: a short last EMI asks only for what is left", () => {
+  let p = emiPlan(creditBee(), emis(5), "2026-10-29")!;
+  assert.equal(p.nextDue, "2026-11-08");
+  assert.equal(p.nextAmount, 6162);
+  assert.equal(p.finalDate, "2027-02-08");
+  const upToJan = [...emis(5), payOn("cb", 18486, "2027-01-08")];
+  p = emiPlan(creditBee(), upToJan, "2027-01-10")!;
+  assert.equal(p.nextDue, "2027-02-08");
+  assert.equal(p.nextAmount, 2141);
+  assert.equal(emiPlan(creditBee(), upToJan, "2027-02-09")!.dueNow, 2141);
+});
+
+test("monthly fill caps the last EMI at the loan amount", () => {
+  const s = monthlySchedule("2026-06-08", 6162, 9, 51437);
+  assert.equal(s.length, 9);
+  assert.deepEqual(s.at(-1), { on: "2027-02-08", amount: 2141 });
+  assert.equal(s[1].on, "2026-07-08");
+});
+
+test("EMIs entered one by one are covered in date order", () => {
+  // A bigger first EMI, then equal ones, then a short last one.
+  const schedule = [
+    { on: "2026-06-08", amount: 8000 },
+    { on: "2026-08-08", amount: 5000 },
+    { on: "2026-07-08", amount: 5000 },
+    { on: "2026-09-08", amount: 1500 },
+  ];
+  const l: Loan = { ...loan("sl", "c1", "borrowed", 19500, "INR"), emi_schedule: schedule };
+  let p = emiPlan(l, [payOn("sl", 8000, "2026-06-08"), payOn("sl", 2000, "2026-07-08")], "2026-07-20")!;
+  assert.equal(p.covered, 1);
+  assert.equal(p.tenure, 4);
+  assert.equal(p.nextDue, "2026-07-08");
+  assert.equal(p.nextAmount, 3000); // rest of the July EMI
+  assert.equal(p.overdueCount, 1);
+  assert.equal(p.dueNow, 3000);
+  assert.equal(p.finalDate, "2026-09-08");
+  p = emiPlan(l, [payOn("sl", 18000, "2026-08-08")], "2026-08-20")!;
+  assert.equal(p.nextDue, "2026-09-08");
+  assert.equal(p.nextAmount, 1500);
+  p = emiPlan(l, [payOn("sl", 19500, "2026-09-08")], "2026-09-20")!;
+  assert.equal(p.nextDue, null);
+  assert.equal(p.left, 0);
+});

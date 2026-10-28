@@ -77,7 +77,7 @@ function moneyAttention(loans: Loan[], payments: Payment[], now: string): Attent
     const name = l.account_name || "Loan";
     const emi = emiPlan(l, payments, now);
     if (emi?.nextDue && emi.nextDue <= week) {
-      out.push({ key: `e${l.id}`, icon: HandCoins, text: `${emi.overdueCount ? "EMI overdue" : "EMI"} ${formatMoney(emi.dueNow || emi.emi, l.currency)} · ${name} · ${relDay(emi.nextDue, now)}`, href: href("loans"), urgent: emi.overdueCount > 0 });
+      out.push({ key: `e${l.id}`, icon: HandCoins, text: `${emi.overdueCount ? "EMI overdue" : "EMI"} ${formatMoney(emi.dueNow || emi.nextAmount, l.currency)} · ${name} · ${relDay(emi.nextDue, now)}`, href: href("loans"), urgent: emi.overdueCount > 0 });
       continue;
     }
     const st = statementPlan(l, payments, now);

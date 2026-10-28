@@ -26,7 +26,7 @@ export function useLoans(): LoansData {
     if (!supabase) return;
     const [c, l, p, t] = await Promise.all([
       supabase.from("contacts").select("id,name,phone,email,notes").order("name"),
-      supabase.from("loans").select("id,contact_id,direction,amount,currency,issued_on,due_on,note,account_type,account_name,card_last4,credit_limit,minimum_due,emi_amount,emi_first_on,emi_tenure,interest_rate,statement_amount,statement_on,statement_due_on").order("issued_on", { ascending: false }),
+      supabase.from("loans").select("id,contact_id,direction,amount,currency,issued_on,due_on,note,account_type,account_name,card_last4,credit_limit,minimum_due,emi_amount,emi_first_on,emi_tenure,emi_schedule,interest_rate,statement_amount,statement_on,statement_due_on").order("issued_on", { ascending: false }),
       supabase.from("loan_payments").select("id,loan_id,amount,paid_on,note").order("paid_on"),
       supabase.from("transactions").select("id,loan_id,kind,description,amount,occurred_on").not("loan_id", "is", null).order("occurred_on", { ascending: false }),
     ]);
@@ -45,6 +45,7 @@ export function useLoans(): LoansData {
         minimum_due: num(x.minimum_due),
         emi_amount: num(x.emi_amount),
         emi_tenure: num(x.emi_tenure),
+        emi_schedule: Array.isArray(x.emi_schedule) && x.emi_schedule.length ? x.emi_schedule.map((e) => ({ on: e.on, amount: Number(e.amount) })) : null,
         interest_rate: num(x.interest_rate),
         statement_amount: num(x.statement_amount),
         charged: charged[x.id] ?? 0,
