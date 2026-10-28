@@ -12,6 +12,7 @@ import { useSettings } from "../../lib/settings.ts";
 import { amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
 import { useLoans } from "./useLoans.ts";
 import { ImportStatement } from "./statement/ImportStatement.tsx";
+import { deleteContacts, uniqueByName, unusedContacts } from "./contacts.ts";
 import { LoanForm } from "./LoanForm.tsx";
 import { PaymentForm, type QuickAmount } from "./PaymentForm.tsx";
 
@@ -75,6 +76,30 @@ export function LoansView() {
     const { error } = await supabase.from(table).delete().eq("id", id);
     if (error) alert(error.message);
     await reload();
+  }
+
+  // Deleting a loan also removes its person/bank once nothing else uses the name.
+  async function removeLoan(loan: Loan) {
+    if (!supabase || !confirm("Delete this loan and its repayments? This cannot be undone.")) return;
+    const { error } = await supabase.from("loans").delete().eq("id", loan.id);
+    if (error) return alert(error.message);
+    const rest = loans.filter((l) => l.id !== loan.id);
+    const orphan = await unusedContacts(contacts.filter((c) => c.id === loan.contact_id), rest).catch(() => []);
+    await deleteContacts(orphan.map((c) => c.id)).catch(() => undefined);
+    if (orphan.length && person === loan.contact_id) setPerson(null);
+    await reload();
+  }
+
+  async function cleanUpNames() {
+    try {
+      const unused = await unusedContacts(contacts, loans);
+      if (!unused.length) return alert("Every name here is used by a loan or a meeting.");
+      if (!confirm(`Remove ${unused.length} unused name${unused.length > 1 ? "s" : ""} (${unused.map((c) => c.name).join(", ")})? They have no loans and no meetings.`)) return;
+      await deleteContacts(unused.map((c) => c.id));
+      await reload();
+    } catch (e) {
+      alert((e as Error).message);
+    }
   }
 
   async function removePerson(id: string) {
@@ -158,6 +183,7 @@ export function LoansView() {
           ))}
           {people.length === 0 && <p className="muted small">People appear here when you add a loan.</p>}
           {person && <button className="link danger small" onClick={() => removePerson(person)}>Remove this person</button>}
+          {contacts.length > people.length && <button className="link small" onClick={() => void cleanUpNames()}>Remove unused names</button>}
         </aside>
 
         <div className="card table-card">
@@ -213,7 +239,7 @@ export function LoansView() {
                               <EmiDetail loan={loan} payments={payments} today={today} />
                               <CardDetail loan={loan} payments={payments} charges={charges} today={today} onRoll={() => setRolling(loan)} onImport={() => setImporting(loan)} />
                               <CardSpending charges={charges.filter((c) => c.loan_id === loan.id)} currency={loan.currency} />
-                              <button className="link danger small" onClick={() => remove("loans", loan.id, "loan and its repayments")}>Delete loan</button>
+                              <button className="link danger small" onClick={() => void removeLoan(loan)}>Delete loan</button>
                             </div></td>
                           </tr>
                         )}
@@ -229,7 +255,7 @@ export function LoansView() {
 
       {(adding || editing) && (
         <Modal wide title={editing ? "Edit account" : "New loan or credit card"} onClose={() => {setAdding(false);setEditing(null)}}>
-          <LoanForm loan={editing ?? undefined} contacts={contacts} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); setEditing(null); await reload(); }} />
+          <LoanForm loan={editing ?? undefined} contacts={uniqueByName(contacts, loans, editing?.contact_id)} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); setEditing(null); await reload(); }} />
         </Modal>
       )}
       {spending && (

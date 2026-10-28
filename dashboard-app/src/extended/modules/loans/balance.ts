@@ -359,3 +359,24 @@ function daysBetween(a: string, b: string): number {
 function addDaysISO(day: string, n: number): string {
   return new Date(Date.parse(`${day}T12:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 }
+
+// ── Lender names ──
+const nameKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ");
+
+/** The existing person or bank with this name, so adding "Axis Bank" twice reuses the first one. */
+export function findByName(contacts: Contact[], name: string): Contact | undefined {
+  return contacts.find((c) => nameKey(c.name) === nameKey(name));
+}
+
+/** One entry per name for pickers, preferring the copy that loans already use (and always keeping `keep`). */
+export function uniqueByName(contacts: Contact[], loans: Loan[], keep?: string): Contact[] {
+  const used = new Set(loans.map((l) => l.contact_id));
+  const out = new Map<string, Contact>();
+  for (const c of contacts) {
+    const k = nameKey(c.name);
+    const have = out.get(k);
+    if (!have || (have.id !== keep && (c.id === keep || (!used.has(have.id) && used.has(c.id))))) out.set(k, c);
+  }
+  return [...out.values()];
+}
+

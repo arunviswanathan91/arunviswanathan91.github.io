@@ -173,3 +173,14 @@ test("with spending entries, new purchases are real and a balance that disagrees
   assert.equal(s.unbilled, 300);
   assert.equal(s.mismatch, 0);
 });
+
+// ── Lender names ────────────────────────────────────────────────────────────
+import { findByName, uniqueByName } from "../src/extended/modules/loans/balance.ts";
+
+test("lender names are reused and shown once", () => {
+  const people = [{ id: "a", name: "Axis Bank" }, { id: "b", name: "axis  bank " }, { id: "c", name: "Slice" }] as Contact[];
+  assert.equal(findByName(people, " AXIS bank")?.id, "a");
+  const used = [{ ...loan("l", "b", "borrowed", 1, "INR") }];
+  assert.deepEqual(uniqueByName(people, used).map((c) => c.id), ["b", "c"]);
+  assert.deepEqual(uniqueByName(people, [], "b").map((c) => c.id), ["b", "c"]);
+});

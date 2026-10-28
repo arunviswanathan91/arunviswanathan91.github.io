@@ -4,6 +4,7 @@ import { todayISO, type Contact, type Direction, type Loan } from "./balance.ts"
 
 import { useSettings } from "../../lib/settings.ts";
 import { CURRENCIES } from "../../lib/types.ts";
+import { findByName } from "./contacts.ts";
 const NEW = "__new__";
 
 export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contacts: Contact[]; defaultContactId?: string; loan?: Loan; onDone: () => void }) {
@@ -39,7 +40,10 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
     setBusy(true);
     setError("");
     let cid = contactId;
-    if (cid === NEW) {
+    // A name that already exists is reused rather than added a second time.
+    const existing = cid === NEW ? findByName(contacts, newName) : undefined;
+    if (existing) cid = existing.id;
+    else if (cid === NEW) {
       const { data, error } = await supabase.from("contacts").insert({ name: newName.trim() }).select("id").single();
       if (error) {
         setError(error.message);
