@@ -12,6 +12,7 @@ import { useSettings } from "../../lib/settings.ts";
 import { amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
 import { useLoans } from "./useLoans.ts";
 import { ImportStatement } from "./statement/ImportStatement.tsx";
+import { deleteContacts, uniqueByName, unusedContacts } from "./contacts.ts";
 import { LoanForm } from "./LoanForm.tsx";
 import { PaymentForm, type QuickAmount } from "./PaymentForm.tsx";
 
@@ -77,6 +78,30 @@ export function LoansView() {
     await reload();
   }
 
+  // Deleting a loan also removes its person/bank once nothing else uses the name.
+  async function removeLoan(loan: Loan) {
+    if (!supabase || !confirm("Delete this loan and its repayments? This cannot be undone.")) return;
+    const { error } = await supabase.from("loans").delete().eq("id", loan.id);
+    if (error) return alert(error.message);
+    const rest = loans.filter((l) => l.id !== loan.id);
+    const orphan = await unusedContacts(contacts.filter((c) => c.id === loan.contact_id), rest).catch(() => []);
+    await deleteContacts(orphan.map((c) => c.id)).catch(() => undefined);
+    if (orphan.length && person === loan.contact_id) setPerson(null);
+    await reload();
+  }
+
+  async function cleanUpNames() {
+    try {
+      const unused = await unusedContacts(contacts, loans);
+      if (!unused.length) return alert("Every name here is used by a loan or a meeting.");
+      if (!confirm(`Remove ${unused.length} unused name${unused.length > 1 ? "s" : ""} (${unused.map((c) => c.name).join(", ")})? They have no loans and no meetings.`)) return;
+      await deleteContacts(unused.map((c) => c.id));
+      await reload();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
   async function removePerson(id: string) {
     if (!supabase) return;
     if (loans.some((l) => l.contact_id === id)) return alert("Delete this person’s loans first.");
@@ -91,7 +116,7 @@ export function LoansView() {
     const out: QuickAmount[] = [];
     const emi = emiPlan(loan, payments, today);
     if (emi) out.push({ label: "EMI", amount: Math.min(emi.emi, left) });
-    const st = statementPlan(loan, payments, today);
+    const st = statementPlan(loan, payments, today, charges);
     if (st) {
       if (st.minimumLeft > 0) out.push({ label: "Minimum amount due", amount: Math.min(st.minimumLeft, left) });
       if (st.statementLeft > 0) out.push({ label: "Total amount due", amount: Math.min(st.statementLeft, left) });
@@ -158,6 +183,7 @@ export function LoansView() {
           ))}
           {people.length === 0 && <p className="muted small">People appear here when you add a loan.</p>}
           {person && <button className="link danger small" onClick={() => removePerson(person)}>Remove this person</button>}
+          {contacts.length > people.length && <button className="link small" onClick={() => void cleanUpNames()}>Remove unused names</button>}
         </aside>
 
         <div className="card table-card">
@@ -190,7 +216,7 @@ export function LoansView() {
                           <td data-label="Status"><StatusBadge status={status} card={loan.account_type === "credit_card"} /></td>
                           <td className="actions" onClick={(e) => e.stopPropagation()}>
                             <button onClick={()=>setEditing(loan)}>Edit</button>
-                            {loan.account_type === "credit_card" && <button onClick={() => setSpending(loan)}>Add spend</button>}
+                            {loan.account_type === "credit_card" && <><button onClick={() => setSpending(loan)}>Add spend</button><button onClick={() => setImporting(loan)}>Import statement</button></>}
                             {status !== "settled" && <button onClick={() => setPaying(loan)}>{loan.account_type === "credit_card" ? "Pay bill" : loan.direction === "lent" ? "Got paid" : "Paid back"}</button>}
                           </td>
                         </tr>
@@ -211,9 +237,9 @@ export function LoansView() {
                                 ))}
                               </ul>
                               <EmiDetail loan={loan} payments={payments} today={today} />
-                              <CardDetail loan={loan} payments={payments} today={today} onRoll={() => setRolling(loan)} onImport={() => setImporting(loan)} />
+                              <CardDetail loan={loan} payments={payments} charges={charges} today={today} onRoll={() => setRolling(loan)} onImport={() => setImporting(loan)} />
                               <CardSpending charges={charges.filter((c) => c.loan_id === loan.id)} currency={loan.currency} />
-                              <button className="link danger small" onClick={() => remove("loans", loan.id, "loan and its repayments")}>Delete loan</button>
+                              <button className="link danger small" onClick={() => void removeLoan(loan)}>Delete loan</button>
                             </div></td>
                           </tr>
                         )}
@@ -229,7 +255,7 @@ export function LoansView() {
 
       {(adding || editing) && (
         <Modal wide title={editing ? "Edit account" : "New loan or credit card"} onClose={() => {setAdding(false);setEditing(null)}}>
-          <LoanForm loan={editing ?? undefined} contacts={contacts} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); setEditing(null); await reload(); }} />
+          <LoanForm loan={editing ?? undefined} contacts={uniqueByName(contacts, loans, editing?.contact_id)} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); setEditing(null); await reload(); }} />
         </Modal>
       )}
       {spending && (
@@ -286,9 +312,9 @@ function EmiDetail({ loan, payments, today }: { loan: Loan; payments: Payment[];
 
 const STATEMENT_LABEL: Record<StatementState, string> = { paid: "Statement paid", minimum_paid: "Minimum paid", due: "Payment due", overdue: "Overdue" };
 
-function CardDetail({ loan, payments, today, onRoll, onImport }: { loan: Loan; payments: Payment[]; today: string; onRoll: () => void; onImport: () => void }) {
+function CardDetail({ loan, payments, charges, today, onRoll, onImport }: { loan: Loan; payments: Payment[]; charges: Charge[]; today: string; onRoll: () => void; onImport: () => void }) {
   if (loan.account_type !== "credit_card") return null;
-  const st = statementPlan(loan, payments, today);
+  const st = statementPlan(loan, payments, today, charges);
   const usage = cardUsage(loan, payments);
   const money = (n: number) => formatMoney(n, loan.currency);
   return (
@@ -302,7 +328,16 @@ function CardDetail({ loan, payments, today, onRoll, onImport }: { loan: Loan; p
             Total amount due {money(st.statement)} · paid since {money(st.paid)} · <strong>{money(st.statementLeft)} left</strong>
             {st.dueOn && ` · payment due date ${st.dueOn}`}
           </p>
-          <p>Minimum amount due {money(st.minimumDue)}{st.minimumLeft > 0 ? ` · ${money(st.minimumLeft)} still to pay` : " · covered"} · Purchases since the statement {money(st.unbilled)}</p>
+          <p>
+            {st.minimumKnown ? <>Minimum amount due {money(st.minimumDue)}{st.minimumLeft > 0 ? ` · ${money(st.minimumLeft)} still to pay` : " · covered"}</> : "Minimum amount due not entered"}
+            {st.unbilled > 0 && ` · Purchases since the statement ${money(st.unbilled)}`}
+          </p>
+          {st.mismatch !== null && Math.abs(st.mismatch) >= 1 && (
+            <p className="neg">
+              The card balance on {st.statementOn} is {money(st.statement + st.mismatch)}, but the statement says {money(st.statement)}.
+              {st.mismatch > 0 ? " Payments or refunds from the statement are probably missing" : " Purchases or fees from the statement are probably missing"}: import the statement PDF to add them, or check the starting balance.
+            </p>
+          )}
           {st.interestRisk && <p className="neg">Past the due date with the statement unpaid, so interest is likely.</p>}
         </>
       ) : (
