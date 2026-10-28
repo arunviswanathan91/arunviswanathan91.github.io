@@ -42,7 +42,7 @@ jobs:
           mkdir _site
           # TODO.md is intentionally git-ignored (a local-only note) and is never
           # present in a fresh checkout, so it's deliberately left off this list.
-          cp index.html .nojekyll README.md _site/
+          cp index.html repos.html .nojekyll README.md _site/
           cp -R css js assets _site/
           mkdir -p _site/dashboard
           cp -R dashboard-app/dist/. _site/dashboard/
