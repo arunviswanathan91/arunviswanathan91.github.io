@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
+import { fmtDate } from "../../lib/dates.ts";
 import { insert, list, remove, update, useLoad } from "../../lib/db.ts";
 import { PRIORITY, TASK_STATUS, WEEKDAYS, type Deadline, type Priority, type Recurrence, type Task, type TaskStatus } from "../../lib/types.ts";
 import { ProjectSelect } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
 import { href } from "../../lib/route.ts";
+import { DateInput } from "../../../components/ui/DateInput";
 
 export interface TaskPreset {
   project_id?: string | null;
@@ -70,7 +72,7 @@ export function TaskForm({ task, preset, onDone }: { task?: Task; preset?: TaskP
       </Field>
       <div className="grid-2">
         <Field label="Due date">
-          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+          <DateInput type="date" value={due} onChange={(e) => setDue(e.target.value)} />
         </Field>
         <Field label="Priority">
           <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
@@ -89,7 +91,7 @@ export function TaskForm({ task, preset, onDone }: { task?: Task; preset?: TaskP
       <Field label="Preparation for deadline">
         <select value={deadlineId ?? ""} onChange={(e) => setDeadlineId(e.target.value || null)}>
           <option value="">None</option>
-          {openDeadlines.map((d) => <option key={d.id} value={d.id}>{d.title} ({d.due_date})</option>)}
+          {openDeadlines.map((d) => <option key={d.id} value={d.id}>{d.title} ({fmtDate(d.due_date)})</option>)}
         </select>
       </Field>
       <Field label="Tags">
@@ -129,7 +131,7 @@ export function RecurrenceEditor({ value, onChange }: { value: Recurrence | null
             </label>
             <label className="inline">
               until
-              <input type="date" aria-label="Repeat until" value={value.until ?? ""} onChange={(e) => set({ until: e.target.value || undefined })} />
+              <DateInput type="date" aria-label="Repeat until" value={value.until ?? ""} onChange={(e) => set({ until: e.target.value || undefined })} />
             </label>
           </>
         )}

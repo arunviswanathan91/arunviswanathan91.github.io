@@ -355,6 +355,8 @@ Deno.serve(async(req)=>{
  };
 
  // ---------- workspace: deadlines, notes, papers, loans, weekly summary ----------
+ // "08 Nov 2026": months as words, never numbers.
+ const pretty=(day:string)=>new Date(day+"T12:00:00Z").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"});
  const relative=(day:string,today:string)=>{
   const diff=Math.round((Date.parse(day+"T12:00:00Z")-Date.parse(today+"T12:00:00Z"))/86400000);
   return diff===0?"today":diff===1?"tomorrow":diff===-1?"yesterday":diff>0?`in ${diff} days`:`${-diff} days ago`;
@@ -467,7 +469,7 @@ Deno.serve(async(req)=>{
   const left=Math.max(0,Math.round((loan.left-p.amount)*100)/100);
   const next=(await nextDue(dayIn(s.tz))).get(loan.id);
   await clearState();
-  return send(chatId,`Recorded ${money(p.amount,loan.currency)} ${loan.direction==="lent"?"from":"to"} ${loan.name} · ${left?`${money(left,loan.currency)} left`:"settled ✓"}${next&&left?`\nNext: ${next.day}${next.detail?` (${next.detail})`:""}`:""}`,[[b("💳 Loans","t:/loans"),b("☰ Menu","t:/menu")]]);
+  return send(chatId,`Recorded ${money(p.amount,loan.currency)} ${loan.direction==="lent"?"from":"to"} ${loan.name} · ${left?`${money(left,loan.currency)} left`:"settled ✓"}${next&&left?`\nNext: ${pretty(next.day)}${next.detail?` (${next.detail})`:""}`:""}`,[[b("💳 Loans","t:/loans"),b("☰ Menu","t:/menu")]]);
  };
 
  const handleLoans=async()=>{
@@ -478,7 +480,7 @@ Deno.serve(async(req)=>{
   const due=await nextDue(today);
   const lines=open.map(l=>{
    const n=due.get(l.id);
-   return `${l.direction==="lent"?"↙ owes you":"↗ you owe"} ${money(l.left,l.currency)} · ${l.name}${n?(n.day<today?` · ⚠️ overdue since ${n.day}`:` · next ${n.day} (${relative(n.day,today)})`):""}`;
+   return `${l.direction==="lent"?"↙ owes you":"↗ you owe"} ${money(l.left,l.currency)} · ${l.name}${n?(n.day<today?` · ⚠️ overdue since ${pretty(n.day)}`:` · next ${pretty(n.day)} (${relative(n.day,today)})`):""}`;
   });
   return send(chatId,lines.join("\n")+"\n\nPaid something? Tap it.",open.slice(0,8).map(l=>[b(`💳 ${l.direction==="lent"?"Got paid by":"Pay"} ${l.name}`,`t:/payopts ${l.name}`)]));
  };

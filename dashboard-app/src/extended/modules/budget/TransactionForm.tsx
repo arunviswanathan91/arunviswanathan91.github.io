@@ -3,6 +3,7 @@ import { insert, list, remove, update, useLoad } from "../../lib/db.ts";
 import { today } from "../../lib/dates.ts";
 import { CURRENCIES, type BudgetCategory, type Transaction } from "../../lib/types.ts";
 import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
+import { DateInput } from "../../../components/ui/DateInput";
 
 interface Card {
   id: string;
@@ -97,7 +98,7 @@ export function TransactionForm({ tx, categories, currency, presetKind = "expens
           </Field>
         )}
         <Field label="Date">
-          <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateInput required type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
         {kind !== "transfer" && (cards?.length ?? 0) > 0 && (
           <Field label={kind === "income" ? "Refund to card (optional)" : "Paid with card (optional)"}>

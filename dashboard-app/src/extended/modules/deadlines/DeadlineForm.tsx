@@ -6,6 +6,7 @@ import { LinksEditor } from "../../components/LinksEditor.tsx";
 import { ProjectSelect } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { ErrorText, Field } from "../../components/ui.tsx";
+import { DateInput } from "../../../components/ui/DateInput";
 
 export function DeadlineForm({ deadline, presetProjectId, presetDate, onDone }: { deadline?: Deadline; presetProjectId?: string; presetDate?: string; onDone: () => void }) {
   const [title, setTitle] = useState(deadline?.title ?? "");
@@ -69,7 +70,7 @@ export function DeadlineForm({ deadline, presetProjectId, presetDate, onDone }: 
           </select>
         </Field>
         <Field label="Due date">
-          <input required type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+          <DateInput required type="date" value={due} onChange={(e) => setDue(e.target.value)} />
         </Field>
         <Field label="Time (optional)">
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />

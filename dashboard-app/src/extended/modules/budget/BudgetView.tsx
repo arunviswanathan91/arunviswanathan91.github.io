@@ -148,7 +148,7 @@ export function BudgetView({ route }: { route: Route }) {
                   <tbody>
                     {shown.map((t) => (
                       <tr key={t.id} className="clickable" onClick={() => setModal(t)}>
-                        <td className="date">{fmtDate(t.occurred_on, { day: "numeric", month: "short" })}</td>
+                        <td className="date">{fmtDate(t.occurred_on, { day: "2-digit", month: "short" })}</td>
                         <td>{t.description}{t.payment_method && <div className="muted small">{t.payment_method}</div>}</td>
                         <td>{t.kind === "transfer" ? <Badge tone="quiet">Transfer</Badge> : catName(t.category_id)}</td>
                         <td className={`num ${t.kind === "income" ? "pos" : t.kind === "expense" ? "neg" : "muted"}`}>
@@ -169,7 +169,7 @@ export function BudgetView({ route }: { route: Route }) {
               <h3>All currencies ≈ {cur}</h3>
               <div className="stat-line"><span>Income</span><strong className="pos">{formatMoney(combined.income, cur)}</strong></div>
               <div className="stat-line"><span>Spent</span><strong>{formatMoney(combined.expense, cur)}</strong></div>
-              <p className="muted small">Estimate at rates of {fx!.date}; totals above stay in their own currencies.</p>
+              <p className="muted small">Estimate at rates of {fmtDate(fx!.date)}; totals above stay in their own currencies.</p>
             </div>
           )}
           <div className="card pad">

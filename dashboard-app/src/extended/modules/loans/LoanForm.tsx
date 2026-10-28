@@ -5,6 +5,7 @@ import { formatMoney, monthlySchedule, sortedSchedule, todayISO, type Contact, t
 import { useSettings } from "../../lib/settings.ts";
 import { CURRENCIES } from "../../lib/types.ts";
 import { findByName } from "./contacts.ts";
+import { DateInput } from "../../../components/ui/DateInput";
 const NEW = "__new__";
 
 type EmiRow = { on: string; amount: string; paid: boolean };
@@ -179,8 +180,8 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
         <label>Last four digits (optional)<input inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={last4} onChange={e=>setLast4(e.target.value.replace(/\D/g,""))} placeholder="1234"/></label>
         <div className="grid-2"><label>Credit limit (optional)<input type="number" min="0" step="0.01" value={creditLimit} onChange={e=>setCreditLimit(e.target.value)}/></label><label>Minimum amount due (optional)<input type="number" min="0" step="0.01" value={minimumDue} onChange={e=>setMinimumDue(e.target.value)}/></label></div>
         <div className="form-group" role="group" aria-label="Current statement"><strong className="form-group-title">Current statement (optional)</strong>
-          <div className="grid-2"><label>Total amount due<input type="number" min="0" step="0.01" value={stmtAmount} onChange={e=>setStmtAmount(e.target.value)}/></label><label>Statement date<input type="date" required={stmtAmount !== ""} value={stmtOn} onChange={e=>setStmtOn(e.target.value)}/></label></div>
-          <label>Payment due date<input type="date" min={stmtOn} value={stmtDue} onChange={e=>setStmtDue(e.target.value)}/></label>
+          <div className="grid-2"><label>Total amount due<input type="number" min="0" step="0.01" value={stmtAmount} onChange={e=>setStmtAmount(e.target.value)}/></label><label>Statement date<DateInput type="date" required={stmtAmount !== ""} value={stmtOn} onChange={e=>setStmtOn(e.target.value)}/></label></div>
+          <label>Payment due date<DateInput type="date" min={stmtOn} value={stmtDue} onChange={e=>setStmtDue(e.target.value)}/></label>
           <p className="muted small">Use the figures printed on the bill. Payments dated on or after the statement date count towards the total and minimum amount due. Each month, import the statement PDF or enter it by hand.</p>
         </div>
         <p className="muted small">Balance = starting balance + spending added with “Add spend” (or a Budget expense paid with this card) − bill payments. Enter 0 for a new card. Interest and fees can be added as spending. Only the last four digits are needed.</p>
@@ -191,7 +192,7 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
           <button type="button" role="radio" aria-checked={emiMode === "each"} className={emiMode === "each" ? "on" : ""} onClick={() => { setEmiMode("each"); if (!rows.length && emiAmount && emiFirst) fillMonthly(); }}>Enter each EMI</button>
         </div>
         <div className="grid-2"><label>EMI amount<input type="number" min="0.01" step="0.01" value={emiAmount} onChange={e=>setEmiAmount(e.target.value)}/></label><label>Number of EMIs<input type="number" min="1" step="1" value={tenure} onChange={e=>setTenure(e.target.value)}/></label></div>
-        <div className="grid-2"><label>First EMI date<input type="date" required={emiMode === "same" && emiAmount !== ""} value={emiFirst} onChange={e=>setEmiFirst(e.target.value)}/></label><label>Interest rate % (optional)<input type="number" min="0" step="0.001" value={rate} onChange={e=>setRate(e.target.value)}/></label></div>
+        <div className="grid-2"><label>First EMI date<DateInput type="date" required={emiMode === "same" && emiAmount !== ""} value={emiFirst} onChange={e=>setEmiFirst(e.target.value)}/></label><label>Interest rate % (optional)<input type="number" min="0" step="0.001" value={rate} onChange={e=>setRate(e.target.value)}/></label></div>
         {emiMode === "same" ? (
           <p className="muted small">EMIs repeat monthly on the same date. Repayments are matched to them in order; an unpaid EMI past its date marks the loan overdue. Amount above is the total you repay, including interest.</p>
         ) : (
@@ -205,7 +206,7 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
                 {rows.map((r, i) => (
                   <li key={i}>
                     <span className="muted small">{i + 1}</span>
-                    <input type="date" aria-label={`EMI ${i + 1} date`} required value={r.on} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, on: e.target.value } : x)))} />
+                    <DateInput type="date" aria-label={`EMI ${i + 1} date`} required value={r.on} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, on: e.target.value } : x)))} />
                     <input type="number" aria-label={`EMI ${i + 1} amount`} required min="0.01" step="0.01" value={r.amount} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
                     <label className={`emi-paid ${r.paid ? "on" : ""}`} title={locked[i] ? "Covered by repayments already recorded. Delete the repayment to undo." : "Tick if this EMI is already paid"}>
                       <input type="checkbox" checked={r.paid} disabled={locked[i] || !r.on} onChange={(e) => tick(i, e.target.checked)} /> {r.paid ? "✓ Paid" : "Paid"}
@@ -226,11 +227,11 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
       <div className="row">
         <label className="grow">
           Date
-          <input required type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} />
+          <DateInput required type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} />
         </label>
         <label className="grow">
           Due (optional)
-          <input type="date" min={issuedOn} value={dueOn} onChange={(e) => setDueOn(e.target.value)} />
+          <DateInput type="date" min={issuedOn} value={dueOn} onChange={(e) => setDueOn(e.target.value)} />
         </label>
       </div>
       <label>

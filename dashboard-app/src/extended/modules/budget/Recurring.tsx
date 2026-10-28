@@ -7,6 +7,7 @@ import { Modal } from "../../components/Modal.tsx";
 import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
 import { formatMoney } from "../loans/balance.ts";
 import { firstOn } from "./recurring.ts";
+import { DateInput } from "../../../components/ui/DateInput";
 
 export interface Recurring {
   id: string;
@@ -126,8 +127,8 @@ function RecurringForm({ item, categories, currency, onDone }: { item?: Recurrin
         )}
         <Field label="Day of month"><input required type="number" min="1" max="31" value={day} onChange={(e) => setDay(e.target.value)} /></Field>
         <Field label="Every (months)"><input required type="number" min="1" max="12" value={every} onChange={(e) => setEvery(e.target.value)} /></Field>
-        <Field label="First on or after"><input required type="date" value={starts} onChange={(e) => setStarts(e.target.value)} /></Field>
-        <Field label="Ends (optional)"><input type="date" min={starts} value={ends} onChange={(e) => setEnds(e.target.value)} /></Field>
+        <Field label="First on or after"><DateInput required type="date" value={starts} onChange={(e) => setStarts(e.target.value)} /></Field>
+        <Field label="Ends (optional)"><DateInput type="date" min={starts} value={ends} onChange={(e) => setEnds(e.target.value)} /></Field>
       </div>
       <p className="muted small">Posted to the budget on day {Math.min(31, Math.max(1, Number(day) || 1))} (or the month’s last day) from {fmtDate(firstOn(starts, Math.min(31, Math.max(1, Number(day) || 1))), { day: "numeric", month: "short", year: "numeric" })}. A past start date posts the missed months (at most 24) the next time the budget loads.</p>
       <ErrorText error={error} />

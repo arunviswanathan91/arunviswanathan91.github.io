@@ -17,6 +17,7 @@ import { TagChips, TagEditor } from "../ui/TagChips";
 import type { EntityKey, Row } from "../../entities/types";
 import type { Person, Project, ProjectStage } from "../../lib/store";
 import { ProjectSection, type ProjectSectionTab } from "../../extended/modules/projects/ProjectSections";
+import { DateInput } from "../ui/DateInput";
 
 type ProjectTab="overview"|"work"|"publications"|ProjectSectionTab|"reads"|"people";
 const PROJECT_TABS:ProjectTab[]=["overview","work","publications","papers","notes","meetings","deadlines","reads","files","people"];
@@ -168,9 +169,9 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
       options={AREAS} onChange={area=>{if(area!==project.area)save({area})}}/>
     </div>
     <div className="field"><label className="field-label" htmlFor="project-start">Start date</label>
-     <input id="project-start" className="input" type="date" value={project.start_date??""} disabled={!canEdit} onChange={e=>save({start_date:e.target.value||null})}/></div>
+     <DateInput id="project-start" className="input" type="date" value={project.start_date??""} disabled={!canEdit} onChange={e=>save({start_date:e.target.value||null})}/></div>
     <div className="field"><label className="field-label" htmlFor="project-target">Target date</label>
-     <input id="project-target" className="input" type="date" value={project.target_date??""} disabled={!canEdit} onChange={e=>save({target_date:e.target.value||null})}/></div>
+     <DateInput id="project-target" className="input" type="date" value={project.target_date??""} disabled={!canEdit} onChange={e=>save({target_date:e.target.value||null})}/></div>
    </div>
    <div className="field field-wide"><span className="field-label">Project tags</span>
     {isOwner?<TagEditor tags={tags.tags} selected={selectedTags} label="Project tags"

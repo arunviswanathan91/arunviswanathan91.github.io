@@ -12,6 +12,7 @@ import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { MultiPicker, useContacts, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { confirmDanger, Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { DateInput } from "../../../components/ui/DateInput";
 
 const SECTIONS: [keyof Meeting, string, string][] = [
   ["agenda", "Agenda", "Topics to cover…"],
@@ -140,11 +141,11 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
             </label>
             <label className="field">
               <span>Starts</span>
-              <input type="datetime-local" required value={toLocalInput(m.starts_at)} onChange={(e) => e.target.value && change({ starts_at: fromLocalInput(e.target.value)! })} />
+              <DateInput type="datetime-local" required value={toLocalInput(m.starts_at)} onChange={(e) => e.target.value && change({ starts_at: fromLocalInput(e.target.value)! })} />
             </label>
             <label className="field">
               <span>Ends (optional)</span>
-              <input type="datetime-local" value={toLocalInput(m.ends_at)} min={toLocalInput(m.starts_at)} onChange={(e) => change({ ends_at: fromLocalInput(e.target.value) })} />
+              <DateInput type="datetime-local" value={toLocalInput(m.ends_at)} min={toLocalInput(m.starts_at)} onChange={(e) => change({ ends_at: fromLocalInput(e.target.value) })} />
             </label>
             <label className="field">
               <span>Location / link</span>
@@ -250,11 +251,11 @@ function ActionItems({ meeting, projectIds }: { meeting: Meeting; projectIds: st
               />
               {it.task_id ? (
                 <a className="small" href={href("tasks", { view: task && (task.status === "done" || task.status === "cancelled") ? "completed" : "all" })}>
-                  <CheckSquare size={13} /> Task{task ? (task.status === "done" ? " (done)" : task.due_date ? ` · due ${task.due_date}` : "") : ""}
+                  <CheckSquare size={13} /> Task{task ? (task.status === "done" ? " (done)" : task.due_date ? ` · due ${fmtDate(task.due_date)}` : "") : ""}
                 </a>
               ) : converting === it.id ? (
                 <span className="row">
-                  <input type="date" aria-label="Task due date" value={due} onChange={(e) => setDue(e.target.value)} />
+                  <DateInput type="date" aria-label="Task due date" value={due} onChange={(e) => setDue(e.target.value)} />
                   <button type="button" className="primary" onClick={() => void convert(it)}>Create task</button>
                   <button type="button" onClick={() => setConverting(null)}>Cancel</button>
                 </span>

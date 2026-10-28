@@ -5,6 +5,7 @@ import { go } from "../../lib/route.ts";
 import { MEETING_TYPE, type Meeting, type MeetingType } from "../../lib/types.ts";
 import { ProjectSelect } from "../../components/pickers.tsx";
 import { ErrorText, Field } from "../../components/ui.tsx";
+import { DateInput } from "../../../components/ui/DateInput";
 
 function nextHour(): string {
   const d = new Date();
@@ -48,7 +49,7 @@ export function MeetingForm({ presetProjectId, onDone }: { presetProjectId?: str
           </select>
         </Field>
         <Field label="Date & time">
-          <input required type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} />
+          <DateInput required type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} />
         </Field>
       </div>
       <Field label="Project (optional, more can be added later)">

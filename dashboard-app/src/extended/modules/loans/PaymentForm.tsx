@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { supabase } from "../../lib/supabase.ts";
 import { formatMoney, todayISO, type Loan } from "./balance.ts";
+import { DateInput } from "../../../components/ui/DateInput";
 
 export interface QuickAmount {
   label: string;
@@ -43,7 +44,7 @@ export function PaymentForm({ loan, left, quick = [], onDone }: { loan: Loan; le
         </label>
         <label className="grow">
           Date
-          <input required type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+          <DateInput required type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
         </label>
       </div>
       <label>

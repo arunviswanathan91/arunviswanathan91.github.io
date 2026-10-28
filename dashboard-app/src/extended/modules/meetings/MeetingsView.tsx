@@ -8,6 +8,7 @@ import { useProjects } from "../../components/pickers.tsx";
 import { ErrorText, PageHeader, SearchBox, Select, Tabs } from "../../components/ui.tsx";
 import { MeetingForm } from "./MeetingForm.tsx";
 import { MeetingRows } from "./MeetingRows.tsx";
+import { DateInput } from "../../../components/ui/DateInput";
 
 type View = "upcoming" | "past" | "all" | "supervisor" | "lab";
 
@@ -66,8 +67,8 @@ export function MeetingsView({ route }: { route: Route }) {
       <div className="filters">
         <SearchBox value={search} onChange={(v) => setQuery("q", v)} placeholder="Search meetings" />
         <Select label="Project" allLabel="Any project" value={project} options={projects.map((p) => [p.id, p.title] as [string, string])} onChange={(v) => setQuery("project", v)} />
-        <label className="inline small">From <input type="date" value={from} onChange={(e) => setQuery("from", e.target.value)} /></label>
-        <label className="inline small">To <input type="date" value={to} onChange={(e) => setQuery("to", e.target.value)} /></label>
+        <label className="inline small">From <DateInput type="date" value={from} onChange={(e) => setQuery("from", e.target.value)} /></label>
+        <label className="inline small">To <DateInput type="date" value={to} onChange={(e) => setQuery("to", e.target.value)} /></label>
       </div>
       <ErrorText error={error} />
       <div className="card list-card">

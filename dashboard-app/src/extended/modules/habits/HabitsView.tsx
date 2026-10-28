@@ -8,6 +8,7 @@ import { WEEKDAYS, type Habit, type HabitCheckin, type HabitPause } from "../../
 import { Modal } from "../../components/Modal.tsx";
 import { confirmDanger, Empty, ErrorText, Field, PageHeader } from "../../components/ui.tsx";
 import { describeSchedule, formatAmount, isDue, isPaused, pausesFor, planFor, summarise, type DayPlan, type DayState } from "./logic.ts";
+import { DateInput } from "../../../components/ui/DateInput";
 
 export function useHabits() {
   return useLoad(async () => {
@@ -411,8 +412,8 @@ function PauseForm({ pauses, habits, onDone }: { pauses: HabitPause[]; habits: H
   return (
     <form className="form" onSubmit={submit}>
       <div className="grid-2">
-        <Field label="From"><input type="date" required value={from} onChange={(e) => { setFrom(e.target.value); if (to < e.target.value) setTo(e.target.value); }} /></Field>
-        <Field label="To (inclusive)"><input type="date" required min={from} value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+        <Field label="From"><DateInput type="date" required value={from} onChange={(e) => { setFrom(e.target.value); if (to < e.target.value) setTo(e.target.value); }} /></Field>
+        <Field label="To (inclusive)"><DateInput type="date" required min={from} value={to} onChange={(e) => setTo(e.target.value)} /></Field>
       </div>
       <Field label="Habit">
         <select value={habitId} onChange={(e) => setHabitId(e.target.value)}>
@@ -504,7 +505,7 @@ function HabitForm({ habit, position, onDone }: { habit?: Habit; position: numbe
             <option value="month">Month (any days)</option>
           </select>
         </Field>
-        <Field label="Start date"><input type="date" required value={start} onChange={(e) => setStart(e.target.value)} /></Field>
+        <Field label="Start date"><DateInput type="date" required value={start} onChange={(e) => setStart(e.target.value)} /></Field>
         {perDay && (
           <Field label="Frequency">
             <select value={frequency} onChange={(e) => setFrequency(e.target.value as Habit["frequency"])}>

@@ -15,6 +15,8 @@ import { ImportStatement } from "./statement/ImportStatement.tsx";
 import { deleteContacts, uniqueByName, unusedContacts } from "./contacts.ts";
 import { LoanForm } from "./LoanForm.tsx";
 import { PaymentForm, type QuickAmount } from "./PaymentForm.tsx";
+import { DateInput } from "../../../components/ui/DateInput";
+import { fmtDate } from "../../lib/dates.ts";
 
 type Filter = "active" | "overdue" | "settled" | "all";
 
@@ -156,7 +158,7 @@ export function LoansView() {
             <div className="stat-line"><span>Owed to you</span><strong className="pos">{formatMoney(all.owedToMe, base)}</strong></div>
             <div className="stat-line"><span>You owe</span><strong className="neg">{formatMoney(all.iOwe, base)}</strong></div>
             <div className="stat-line net"><span>Net</span><strong className={all.owedToMe - all.iOwe >= 0 ? "pos" : "neg"}>{formatMoney(all.owedToMe - all.iOwe, base)}</strong></div>
-            <span className="muted small">Rates of {fx!.date}</span>
+            <span className="muted small">Rates of {fmtDate(fx!.date)}</span>
           </div>
         )}
       </div>
@@ -212,7 +214,7 @@ export function LoansView() {
                           <td data-label="Type"><span className={`badge ${loan.direction}`}>{loan.account_type === "credit_card" ? "Credit card" : loan.account_type === "bank" ? "Bank loan" : loan.direction === "lent" ? "Lent" : "Borrowed"}</span></td>
                           <td className="num" data-label={loan.account_type === "credit_card" ? "Owed in total" : "Amount"}>{formatMoney(totalOwed(loan), loan.currency)}</td>
                           <td className="num" data-label="Left"><strong>{formatMoney(left, loan.currency)}</strong></td>
-                          <td className="date" data-label="Next due">{nextDate(loan) ?? <span className="muted">—</span>}</td>
+                          <td className="date" data-label="Next due">{nextDate(loan) ? fmtDate(nextDate(loan)) : <span className="muted">—</span>}</td>
                           <td data-label="Status"><StatusBadge status={status} card={loan.account_type === "credit_card"} /></td>
                           <td className="actions" onClick={(e) => e.stopPropagation()}>
                             <button onClick={()=>setEditing(loan)}>Edit</button>
@@ -223,13 +225,13 @@ export function LoansView() {
                         {expanded === loan.id && (
                           <tr className="detail">
                             <td colSpan={7}><div className="detail-inner">
-                              <p className="small muted">{loan.direction === "lent" ? "Lent" : "Borrowed"} on {loan.issued_on}</p>
+                              <p className="small muted">{loan.direction === "lent" ? "Lent" : "Borrowed"} on {fmtDate(loan.issued_on)}</p>
                               <p className="small"><strong>Repayments</strong> · paid {formatMoney(paidCents(loan, payments) / 100, loan.currency)} of {formatMoney(totalOwed(loan), loan.currency)}</p>
                               {history.length === 0 && <p className="muted small">No repayments yet.</p>}
                               <ul className="history">
                                 {history.map((p) => (
                                   <li key={p.id}>
-                                    <span>{p.paid_on}</span>
+                                    <span>{fmtDate(p.paid_on)}</span>
                                     <span>{formatMoney(p.amount, loan.currency)}</span>
                                     <span className="muted">{p.note}</span>
                                     <button className="link danger small" onClick={() => remove("loan_payments", p.id, "repayment")}>Delete</button>
@@ -295,7 +297,7 @@ function EmiDetail({ loan, payments, today, onChange }: { loan: Loan; payments: 
       <p>
         <strong>EMI</strong> {loan.emi_schedule?.length ? "as listed" : `${formatMoney(plan.emi, loan.currency)} / month`} · {plan.covered}{plan.tenure ? ` of ${plan.tenure}` : ""} paid
         {plan.left !== null && ` · ${plan.left} left`}
-        {plan.finalDate && ` · last EMI ${plan.finalDate}`}
+        {plan.finalDate && ` · last EMI ${fmtDate(plan.finalDate)}`}
         {loan.interest_rate != null && ` · ${loan.interest_rate}% interest`}
       </p>
       {plan.tenure && <progress max={plan.tenure} value={plan.covered} aria-label="EMIs paid" />}
@@ -304,7 +306,7 @@ function EmiDetail({ loan, payments, today, onChange }: { loan: Loan; payments: 
       {plan.nextDue && (
         <p className={plan.overdueCount > 0 ? "neg" : ""}>
           {plan.overdueCount > 0 ? `${plan.overdueCount} EMI${plan.overdueCount > 1 ? "s" : ""} overdue · ` : "Next EMI "}
-          {plan.nextDue}{plan.dueNow > 0 ? ` · ${formatMoney(plan.dueNow, loan.currency)} due now` : ` · ${formatMoney(plan.nextAmount, loan.currency)}`}
+          {fmtDate(plan.nextDue)}{plan.dueNow > 0 ? ` · ${formatMoney(plan.dueNow, loan.currency)} due now` : ` · ${formatMoney(plan.nextAmount, loan.currency)}`}
         </p>
       )}
     </div>
@@ -323,11 +325,11 @@ function CardDetail({ loan, payments, charges, today, onRoll, onImport }: { loan
       {st ? (
         <>
           <p>
-            <strong>Statement {st.statementOn}</strong> <span className={`badge ${st.state === "overdue" ? "overdue" : st.state === "paid" ? "settled" : "open"}`}>{STATEMENT_LABEL[st.state]}</span>
+            <strong>Statement {fmtDate(st.statementOn)}</strong> <span className={`badge ${st.state === "overdue" ? "overdue" : st.state === "paid" ? "settled" : "open"}`}>{STATEMENT_LABEL[st.state]}</span>
           </p>
           <p>
             Total amount due {money(st.statement)} · paid since {money(st.paid)} · <strong>{money(st.statementLeft)} left</strong>
-            {st.dueOn && ` · payment due date ${st.dueOn}`}
+            {st.dueOn && ` · payment due date ${fmtDate(st.dueOn)}`}
           </p>
           <p>
             {st.minimumKnown ? <>Minimum amount due {money(st.minimumDue)}{st.minimumLeft > 0 ? ` · ${money(st.minimumLeft)} still to pay` : " · covered"}</> : "Minimum amount due not entered"}
@@ -335,12 +337,12 @@ function CardDetail({ loan, payments, charges, today, onRoll, onImport }: { loan
           </p>
           {st.mismatch !== null && Math.abs(st.mismatch) >= 1 && (
             <p className="neg">
-              The card balance on {st.statementOn} is {money(st.statement + st.mismatch)}, but the statement says {money(st.statement)}.
+              The card balance on {fmtDate(st.statementOn)} is {money(st.statement + st.mismatch)}, but the statement says {money(st.statement)}.
               {st.mismatch > 0 ? " Payments or refunds from the statement are probably missing" : " Purchases or fees from the statement are probably missing"}: import the statement PDF to add them, or check the starting balance.
             </p>
           )}
           {st.state === "minimum_paid" && !st.interestRisk && (
-            <p className="warn-text">Only the minimum is paid so far. Pay the remaining {money(st.statementLeft)}{st.dueOn ? ` by ${st.dueOn}` : ""} to avoid interest; paying just the minimum keeps the card in good standing but the bank then charges interest, usually on the whole statement from the purchase dates.</p>
+            <p className="warn-text">Only the minimum is paid so far. Pay the remaining {money(st.statementLeft)}{st.dueOn ? ` by ${fmtDate(st.dueOn)}` : ""} to avoid interest; paying just the minimum keeps the card in good standing but the bank then charges interest, usually on the whole statement from the purchase dates.</p>
           )}
           {st.interestRisk && st.state === "minimum_paid" && (
             <p className="neg">Only the minimum was paid by the due date, so {money(st.statementLeft)} carries over to the next statement with interest and GST on it. Import the next statement PDF to add those charges.</p>
@@ -386,7 +388,7 @@ function ScheduleList({ loan, schedule, payments, today, onChange }: { loan: Loa
       .filter((r) => r.upto > paid)
       .map((r) => ({ loan_id: loan.id, amount: (r.upto - Math.max(paid, r.before)) / 100, paid_on: r.on, note: "EMI" }));
     const total = repay.reduce((sum, r) => sum + r.amount, 0);
-    if (!repay.length || !confirm(`Record ${formatMoney(total, loan.currency)} as paid${repay.length > 1 ? ` (${repay.length} EMIs up to ${rows[index].on})` : ` on ${rows[index].on}`}?`)) return;
+    if (!repay.length || !confirm(`Record ${formatMoney(total, loan.currency)} as paid${repay.length > 1 ? ` (${repay.length} EMIs up to ${fmtDate(rows[index].on)})` : ` on ${fmtDate(rows[index].on)}`}?`)) return;
     setBusy(true);
     const { error } = await supabase.from("loan_payments").insert(repay);
     setBusy(false);
@@ -400,7 +402,7 @@ function ScheduleList({ loan, schedule, payments, today, onChange }: { loan: Loa
         <ol className="emi-list">
           {rows.map((r, i) => (
             <li key={i}>
-              <span>{r.on}</span>
+              <span>{fmtDate(r.on)}</span>
               <span className="num">{formatMoney(r.amount, loan.currency)}</span>
               {r.state === "paid"
                 ? <span className="badge settled">✓ paid</span>
@@ -433,7 +435,7 @@ function AmortisationDetail({ loan, payments, today }: { loan: Loan; payments: P
             <tbody>
               {a.rows.map((r) => (
                 <tr key={r.n} className={r.n <= covered ? "muted" : ""}>
-                  <td>{r.n}</td><td className="date">{r.date}</td><td className="num">{money(r.emi)}</td><td className="num">{money(r.interest)}</td><td className="num">{money(r.principal)}</td><td className="num">{money(r.balance)}</td>
+                  <td>{r.n}</td><td className="date">{fmtDate(r.date)}</td><td className="num">{money(r.emi)}</td><td className="num">{money(r.interest)}</td><td className="num">{money(r.principal)}</td><td className="num">{money(r.balance)}</td>
                 </tr>
               ))}
             </tbody>
@@ -452,7 +454,7 @@ function CardSpending({ charges, currency }: { charges: Charge[]; currency: stri
       <ul className="history">
         {charges.slice(0, 8).map((c) => (
           <li key={c.id}>
-            <span>{c.occurred_on}</span>
+            <span>{fmtDate(c.occurred_on)}</span>
             <span>{c.kind === "income" ? "−" : ""}{formatMoney(c.amount, currency)}</span>
             <span className="muted">{c.description}</span>
           </li>
@@ -487,8 +489,8 @@ function StatementForm({ loan, payments, today, onDone }: { loan: Loan; payments
       <div className="grid-2">
         <label>Total amount due<input required type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
         <label>Minimum amount due<input type="number" min="0" step="0.01" value={minimum} onChange={(e) => setMinimum(e.target.value)} /></label>
-        <label>Statement date<input required type="date" value={on} onChange={(e) => setOn(e.target.value)} /></label>
-        <label>Payment due date<input type="date" min={on} value={due} onChange={(e) => setDue(e.target.value)} /></label>
+        <label>Statement date<DateInput required type="date" value={on} onChange={(e) => setOn(e.target.value)} /></label>
+        <label>Payment due date<DateInput type="date" min={on} value={due} onChange={(e) => setDue(e.target.value)} /></label>
       </div>
       {error && <p className="error">{error}</p>}
       <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save statement"}</button>
