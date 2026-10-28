@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Copy, Plus, Settings2, Trash2 } from "lucide
 import { insert, list, remove, rpc, update, upsert, useLoad } from "../../lib/db.ts";
 import { addMonths, fmtDate, startOfMonth, today } from "../../lib/dates.ts";
 import { friendBalances, friendSummary } from "./friends.ts";
+import { MoneyOutCard } from "./MoneyOutCard.tsx";
 import type { Person } from "./ForSelect.tsx";
 import { setQuery, type Route } from "../../lib/route.ts";
 import { useSettings } from "../../lib/settings.ts";
@@ -204,6 +205,7 @@ export function BudgetView({ route }: { route: Route }) {
         </div>
 
         <aside className="detail-side">
+          <MoneyOutCard month={month} nextMonth={addMonths(month, 1)} currency={cur} txs={txs} />
           {owed.size > 0 && (
             <div className="card pad friends-card">
               <h3>Spent for friends</h3>
