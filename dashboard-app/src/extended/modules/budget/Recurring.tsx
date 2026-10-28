@@ -8,6 +8,7 @@ import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
 import { formatMoney } from "../loans/balance.ts";
 import { firstOn } from "./recurring.ts";
 import { DateInput } from "../../../components/ui/DateInput";
+import { CategorySelect } from "./CategorySelect.tsx";
 
 export interface Recurring {
   id: string;
@@ -112,10 +113,7 @@ function RecurringForm({ item, categories, currency, onDone }: { item?: Recurrin
           </select>
         </Field>
         <Field label="Category">
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">Uncategorised</option>
-            {categories.filter((c) => c.kind === kind && !c.archived_at).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CategorySelect value={categoryId} categories={categories} kind={kind === "income" ? "income" : "expense"} onChange={(id) => setCategoryId(id ?? "")} />
         </Field>
         {kind === "expense" && (cards?.length ?? 0) > 0 && (
           <Field label="Charged to card (optional)">

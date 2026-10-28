@@ -14,6 +14,7 @@ import { formatMoney } from "../loans/balance.ts";
 import { TransactionForm } from "./TransactionForm.tsx";
 import { RecurringCard } from "./Recurring.tsx";
 import { combine, useFx } from "../../lib/fx.ts";
+import { CategorySelect } from "./CategorySelect.tsx";
 
 const cents = (n: number) => Math.round(Number(n) * 100);
 
@@ -186,10 +187,7 @@ export function BudgetView({ route }: { route: Route }) {
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           {t.kind === "transfer" ? <Badge tone="quiet">Transfer</Badge> : (
-                            <select className="inline-select" aria-label={`Category for ${t.description}`} value={t.category_id ?? ""} onChange={(e) => void recategorise(t, e.target.value)}>
-                              <option value="">Uncategorised</option>
-                              {categories.filter((c) => c.kind === t.kind && (!c.archived_at || c.id === t.category_id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
+                            <CategorySelect className="inline-select" label={`Category for ${t.description}`} value={t.category_id} categories={categories} kind={t.kind === "income" ? "income" : "expense"} onChange={(id) => void recategorise(t, id ?? "")} />
                           )}
                         </td>
                         <td className={`num ${t.kind === "income" ? "pos" : t.kind === "expense" ? "neg" : "muted"}`}>

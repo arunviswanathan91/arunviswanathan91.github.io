@@ -18,6 +18,7 @@ import { LoanForm } from "./LoanForm.tsx";
 import { PaymentForm, type QuickAmount } from "./PaymentForm.tsx";
 import { DateInput } from "../../../components/ui/DateInput";
 import { fmtDate } from "../../lib/dates.ts";
+import { CategorySelect } from "../budget/CategorySelect.tsx";
 
 type Filter = "active" | "overdue" | "settled" | "all";
 
@@ -471,10 +472,7 @@ function CardSpending({ charges, currency, categories, onChange }: { charges: Ch
             <span className="num">{c.kind === "income" ? "−" : ""}{formatMoney(c.amount, currency)}</span>
             <span className="muted clamp">{c.description}</span>
             {c.kind === "expense" ? (
-              <select className="inline-select" aria-label={`Category for ${c.description}`} value={c.category_id ?? ""} onChange={(e) => void set(c, { category_id: e.target.value || null })}>
-                <option value="">Uncategorised</option>
-                {categories.filter((x) => x.kind === "expense" && (!x.archived_at || x.id === c.category_id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-              </select>
+              <CategorySelect className="inline-select" label={`Category for ${c.description}`} value={c.category_id} categories={categories} onChange={(id) => void set(c, { category_id: id })} />
             ) : <span className="muted">refund / credit</span>}
             <ForSelect label={`Who ${c.description} was for`} value={c.for_contact_id} people={people} onChange={(id) => void set(c, { for_contact_id: id })} />
           </li>

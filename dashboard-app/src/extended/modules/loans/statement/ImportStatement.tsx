@@ -10,6 +10,7 @@ import { PdfPasswordError, readPdfLines } from "./readPdf.ts";
 import { ForSelect, usePeople } from "../../budget/ForSelect.tsx";
 import { DateInput } from "../../../../components/ui/DateInput";
 import { fmtDate } from "../../../lib/dates.ts";
+import { CategorySelect } from "../../budget/CategorySelect.tsx";
 
 const KIND_LABEL: Record<RowKind, string> = { spend: "Purchase", fee: "Interest / fee", payment: "Payment", refund: "Refund / credit" };
 const KIND_TONE: Record<RowKind, string> = { spend: "", fee: "warn", payment: "pos", refund: "pos" };
@@ -112,7 +113,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
 
   const set = (key: number, patch: Partial<ImportRow>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const label = `${loan.account_name || "Card"}${loan.card_last4 ? ` ••${loan.card_last4}` : ""}`;
-  const note = `From statement${statementOn ? ` ${statementOn}` : ""}`;
+  const note = `From statement${statementOn ? ` ${fmtDate(statementOn)}` : ""}`;
 
   async function save() {
     if (!supabase) return;
@@ -201,10 +202,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
                 <td className="num">{money(r.amount)}{r.credit && " CR"}</td>
                 <td>
                   {r.credit ? <span className="muted small">{r.kind === "payment" ? "Recorded as a bill payment" : "Lowers the card balance"}</span> : (
-                    <select aria-label={`Category for ${r.description}`} value={r.categoryId ?? ""} onChange={(e) => set(r.key, { categoryId: e.target.value || null })}>
-                      <option value="">No category</option>
-                      {expense.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    <CategorySelect label={`Category for ${r.description}`} value={r.categoryId} categories={categories} emptyLabel="No category" onChange={(id) => set(r.key, { categoryId: id })} />
                   )}
                 </td>
                 <td>{r.kind === "payment" ? <span className="muted small">—</span> : <ForSelect label={`Who ${r.description} was for`} value={r.forId} people={people} onChange={(id) => set(r.key, { forId: id })} />}</td>
