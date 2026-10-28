@@ -512,6 +512,64 @@ a { color: var(--accent); }
 .tl-org { color: var(--text-muted); font-size: 0.92rem; }
 .tl-date { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.15rem; }
 
+/* ---------- Repos ---------- */
+
+.repos-intro {
+  color: var(--text-muted);
+  margin-bottom: 2rem;
+}
+
+.repo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.1rem;
+}
+
+.repo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.15rem 1.25rem;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  text-decoration: none;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.repo-card:hover,
+.repo-card:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+  border-color: var(--accent-soft);
+  color: var(--text);
+}
+
+.repo-name {
+  font-family: var(--font-head);
+  font-weight: 600;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.repo-name i { margin-right: 0.3rem; }
+
+.repo-desc {
+  flex: 1;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.repo-lang {
+  align-self: flex-start;
+  padding: 0.05rem 0.55rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+
 /* ---------- Contact ---------- */
 
 .contact-emails {
@@ -602,7 +660,7 @@ a { color: var(--accent); }
   }
 
   .nav-links.open {
-    max-height: 320px;
+    max-height: 380px;
     opacity: 1;
   }
 
