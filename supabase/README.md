@@ -22,6 +22,7 @@ always goes at the end of this list, and the commit that adds it says so.
 | 14 | `card-spending-habit-periods-reminders.sql` | Card spending, weekly/monthly habits, daily nudges |
 | 15 | `agenda-recurring-followups.sql` | Agenda, calendar feed, recurring money, publication follow-ups |
 | 16 | `emi-schedule.sql` | EMIs entered one by one (different first or last EMI) |
+| 17 | `friend-spending.sql` | Spends paid for a friend, kept out of your own budget |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set

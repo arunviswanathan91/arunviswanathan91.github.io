@@ -13,6 +13,8 @@ export interface ImportRow extends StatementRow {
   /** Why a row starts unticked. */
   skip: "duplicate" | "before_tracking" | null;
   categoryId: string | null;
+  /** Friend this spend was for (a shared card); null for your own. */
+  forId?: string | null;
 }
 
 const cents = (n: number) => Math.round(n * 100);

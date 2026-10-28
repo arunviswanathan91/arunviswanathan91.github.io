@@ -234,3 +234,26 @@ test("EMIs entered one by one are covered in date order", () => {
   assert.equal(p.nextDue, null);
   assert.equal(p.left, 0);
 });
+
+// ── Spending for a friend ───────────────────────────────────────────────────
+import { friendBalances, friendSummary } from "../src/extended/modules/budget/friends.ts";
+
+test("a friend owes their spends minus what they paid back, and the note lists them by category", () => {
+  const tx = (id: string, kind: "expense" | "income", amount: number, on: string, category_id: string | null, description: string) =>
+    ({ id, kind, amount, currency: "INR", category_id, occurred_on: on, payment_method: null, notes: null, description, for_contact_id: "j" });
+  const txs = [
+    tx("1", "expense", 500, "2026-10-03", "food", "Swiggy"),
+    tx("2", "expense", 1200.5, "2026-10-09", "travel", "Uber"),
+    tx("3", "income", 700, "2026-10-20", null, "Paid back by Justin"),
+    { ...tx("4", "expense", 999, "2026-10-04", "food", "My lunch"), for_contact_id: null },
+  ];
+  assert.deepEqual(friendBalances(txs).get("j"), { INR: 1000.5 });
+  assert.equal(friendBalances(txs).size, 1);
+  const cats = [{ id: "food", name: "Food", kind: "expense" as const, color: null, archived_at: null }, { id: "travel", name: "Travel", kind: "expense" as const, color: null, archived_at: null }];
+  const note = friendSummary("Justin", "October 2026", txs.filter((t) => t.for_contact_id === "j"), cats, { INR: 1000.5 });
+  assert.match(note, /^Hi Justin, your share for October 2026:/);
+  assert.match(note, /Food:\n  03 Oct 2026 · Swiggy · ₹500\.00/);
+  assert.match(note, /Travel:\n  09 Oct 2026 · Uber · ₹1,200\.50/);
+  assert.match(note, /Paid back 20 Oct 2026: ₹700\.00/);
+  assert.match(note, /Total you owe: ₹1,000\.50$/);
+});

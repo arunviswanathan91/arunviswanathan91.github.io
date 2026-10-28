@@ -2,6 +2,8 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Copy, Plus, Settings2, Trash2 } from "lucide-react";
 import { insert, list, remove, rpc, update, upsert, useLoad } from "../../lib/db.ts";
 import { addMonths, fmtDate, startOfMonth, today } from "../../lib/dates.ts";
+import { friendBalances, friendSummary } from "./friends.ts";
+import type { Person } from "./ForSelect.tsx";
 import { setQuery, type Route } from "../../lib/route.ts";
 import { useSettings } from "../../lib/settings.ts";
 import type { BudgetCategory, BudgetLine, MonthlyBudget, Transaction } from "../../lib/types.ts";
@@ -29,18 +31,22 @@ export function BudgetView({ route }: { route: Route }) {
   const kindFilter = (route.query.get("kind") ?? "") as Transaction["kind"] | "";
   const catFilter = route.query.get("category") ?? "";
   const settings = useSettings();
-  const [modal, setModal] = useState<Transaction | "new" | "categories" | null>(null);
+  const forFilter = route.query.get("for") ?? "";
+  const [modal, setModal] = useState<Transaction | "new" | "categories" | { paidBack: string } | null>(null);
+  const [copied, setCopied] = useState("");
   const [error, setError] = useState("");
 
   const { data, error: loadError } = useLoad(async () => {
     await postRecurringOnce();
-    const [categories, txs, budgets, lines] = await Promise.all([
+    const [categories, txs, budgets, lines, friendTxs, people] = await Promise.all([
       list<BudgetCategory>("budget_categories", { order: [["kind"], ["name"]] }),
       list<Transaction>("transactions", { gte: ["occurred_on", month], lt: ["occurred_on", addMonths(month, 1)], order: [["occurred_on", false], ["created_at", false]] }),
       list<MonthlyBudget>("monthly_budgets", { eq: { month } }),
       rpc<BudgetLine[]>("budget_month", { month_start: month }),
+      list<Transaction>("transactions", { notNull: ["for_contact_id"], order: [["occurred_on"]] }),
+      list<Person>("contacts", { order: [["name"]] }),
     ]);
-    return { categories, txs: txs.map((t) => ({ ...t, amount: Number(t.amount) })), budgets, lines };
+    return { categories, txs: txs.map((t) => ({ ...t, amount: Number(t.amount) })), budgets, lines, friendTxs: friendTxs.map((t) => ({ ...t, amount: Number(t.amount) })), people };
   }, [month]);
 
   const categories = data?.categories ?? [];
@@ -49,7 +55,9 @@ export function BudgetView({ route }: { route: Route }) {
 
   // Totals per currency
   const totals = new Map<string, { income: number; expense: number }>();
-  for (const t of txs) {
+  // Your own money: spends for a friend (and their paying back) are kept apart.
+  const mine = txs.filter((t) => !t.for_contact_id);
+  for (const t of mine) {
     if (t.kind === "transfer") continue;
     const x = totals.get(t.currency) ?? { income: 0, expense: 0 };
     x[t.kind] += cents(t.amount);
@@ -63,19 +71,40 @@ export function BudgetView({ route }: { route: Route }) {
   };
 
   // Budget vs actual for expense categories in the default currency (plus uncategorised spending)
-  const expenseCats = categories.filter((c) => c.kind === "expense" && (!c.archived_at || txs.some((t) => t.category_id === c.id)));
+  const expenseCats = categories.filter((c) => c.kind === "expense" && (!c.archived_at || mine.some((t) => t.category_id === c.id)));
   const rows = expenseCats.map((c) => {
     const budget = data?.budgets.find((b) => b.category_id === c.id && b.currency === cur);
-    const actual = txs.filter((t) => t.kind === "expense" && t.category_id === c.id && t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
+    const actual = mine.filter((t) => t.kind === "expense" && t.category_id === c.id && t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
     return { c, budget, budgeted: budget ? cents(budget.amount) : 0, actual };
   });
-  const uncategorised = txs.filter((t) => t.kind === "expense" && !t.category_id && t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
+  const uncategorised = mine.filter((t) => t.kind === "expense" && !t.category_id && t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
   // Budget vs actual only counts categories that have a budget this month.
   const totalBudget = rows.reduce((s, r) => s + r.budgeted, 0);
   const totalActual = rows.filter((r) => r.budgeted > 0).reduce((s, r) => s + r.actual, 0);
   const otherCurrencyLines = (data?.lines ?? []).filter((l) => l.currency !== cur && l.kind === "expense");
 
-  const shown = txs.filter((t) => (!kindFilter || t.kind === kindFilter) && (!catFilter || t.category_id === catFilter));
+  const shown = txs.filter((t) => (!kindFilter || t.kind === kindFilter) && (!catFilter || t.category_id === catFilter) && (!forFilter || t.for_contact_id === forFilter));
+  const people = data?.people ?? [];
+  const personName = (id: string | null | undefined) => people.find((p) => p.id === id)?.name ?? "Friend";
+  const owed = friendBalances(data?.friendTxs ?? []);
+  const monthLabel = fmtDate(month, { month: "long", year: "numeric" });
+  async function recategorise(t: Transaction, categoryId: string) {
+    try {
+      await update("transactions", t.id, { category_id: categoryId || null });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  async function copyNote(id: string) {
+    const text = friendSummary(personName(id), monthLabel, txs.filter((t) => t.for_contact_id === id), categories, owed.get(id) ?? {});
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(id);
+      setTimeout(() => setCopied(""), 2000);
+    } catch {
+      prompt("Copy this note:", text);
+    }
+  }
   const catName = (id: string | null) => categories.find((c) => c.id === id)?.name ?? "Uncategorised";
 
   async function setBudget(categoryId: string, value: string, existing?: MonthlyBudget) {
@@ -149,8 +178,19 @@ export function BudgetView({ route }: { route: Route }) {
                     {shown.map((t) => (
                       <tr key={t.id} className="clickable" onClick={() => setModal(t)}>
                         <td className="date">{fmtDate(t.occurred_on, { day: "2-digit", month: "short" })}</td>
-                        <td>{t.description}{t.payment_method && <div className="muted small">{t.payment_method}</div>}</td>
-                        <td>{t.kind === "transfer" ? <Badge tone="quiet">Transfer</Badge> : catName(t.category_id)}</td>
+                        <td>
+                          {t.description}
+                          {t.for_contact_id && <> <Badge tone="accent">{t.kind === "income" ? "from" : "for"} {personName(t.for_contact_id)}</Badge></>}
+                          {t.payment_method && <div className="muted small">{t.payment_method}</div>}
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {t.kind === "transfer" ? <Badge tone="quiet">Transfer</Badge> : (
+                            <select className="inline-select" aria-label={`Category for ${t.description}`} value={t.category_id ?? ""} onChange={(e) => void recategorise(t, e.target.value)}>
+                              <option value="">Uncategorised</option>
+                              {categories.filter((c) => c.kind === t.kind && (!c.archived_at || c.id === t.category_id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                          )}
+                        </td>
                         <td className={`num ${t.kind === "income" ? "pos" : t.kind === "expense" ? "neg" : "muted"}`}>
                           {t.kind === "income" ? "+" : t.kind === "expense" ? "−" : ""}{formatMoney(t.amount, t.currency)}
                         </td>
@@ -164,6 +204,29 @@ export function BudgetView({ route }: { route: Route }) {
         </div>
 
         <aside className="detail-side">
+          {owed.size > 0 && (
+            <div className="card pad friends-card">
+              <h3>Spent for friends</h3>
+              {[...owed].map(([id, per]) => {
+                const month = txs.filter((t) => t.for_contact_id === id && t.kind === "expense").reduce((s, t) => s + cents(t.amount), 0);
+                const due = Object.entries(per).filter(([, v]) => Math.abs(v) >= 0.01);
+                return (
+                  <div key={id} className="friend-row">
+                    <div className="stat-line">
+                      <span><strong>{personName(id)}</strong>{month > 0 && <span className="muted small"> · {formatMoney(month / 100, cur)} this month</span>}</span>
+                      <strong className={due.length ? "pos" : "muted"}>{due.length ? `owes ${due.map(([c, v]) => formatMoney(v, c)).join(" + ")}` : "settled"}</strong>
+                    </div>
+                    <div className="row wrap">
+                      <button className="small" onClick={() => setQuery("for", forFilter === id ? undefined : id)}>{forFilter === id ? "Show everyone" : "Show spends"}</button>
+                      <button className="small" onClick={() => void copyNote(id)}>{copied === id ? "Copied ✓" : "Copy note to send"}</button>
+                      <button className="small" onClick={() => setModal({ paidBack: id })}>{personName(id)} paid back</button>
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="muted small">Spends marked “for” someone stay on the card but out of your own budget.</p>
+            </div>
+          )}
           {combined && combined.income !== null && combined.expense !== null && (
             <div className="card pad">
               <h3>All currencies ≈ {cur}</h3>
@@ -218,9 +281,14 @@ export function BudgetView({ route }: { route: Route }) {
         </aside>
       </div>
 
-      {(modal === "new" || (modal && typeof modal === "object")) && (
+      {modal && typeof modal === "object" && "paidBack" in modal && (
+        <Modal title={`${personName(modal.paidBack)} paid you back`} onClose={() => setModal(null)}>
+          <TransactionForm categories={categories} currency={cur} presetKind="income" presetFor={modal.paidBack} presetDescription={`Paid back by ${personName(modal.paidBack)}`} onDone={() => setModal(null)} />
+        </Modal>
+      )}
+      {(modal === "new" || (modal && typeof modal === "object" && !("paidBack" in modal))) && (
         <Modal title={modal === "new" ? "New transaction" : "Edit transaction"} onClose={() => setModal(null)}>
-          <TransactionForm tx={modal === "new" ? undefined : modal} categories={categories} currency={cur} onDone={() => setModal(null)} />
+          <TransactionForm tx={modal === "new" ? undefined : (modal as Transaction)} categories={categories} currency={cur} onDone={() => setModal(null)} />
         </Modal>
       )}
       {modal === "categories" && (

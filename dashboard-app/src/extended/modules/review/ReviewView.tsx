@@ -47,12 +47,12 @@ export function ReviewView() {
 
   const overdue = data?.tasks.filter((t) => t.due_date && t.due_date < now) ?? [];
   const week = (data?.txs ?? []).filter((t) => t.occurred_on >= weekStart && t.currency === cur);
-  const spent = week.filter((t) => t.kind === "expense").reduce((s, t) => s + cents(t.amount), 0);
+  const spent = week.filter((t) => t.kind === "expense" && !t.for_contact_id).reduce((s, t) => s + cents(t.amount), 0);
   const income = week.filter((t) => t.kind === "income").reduce((s, t) => s + cents(t.amount), 0);
   const byCat = new Map<string, number>();
-  for (const t of week.filter((x) => x.kind === "expense")) byCat.set(t.category_id ?? "", (byCat.get(t.category_id ?? "") ?? 0) + cents(t.amount));
+  for (const t of week.filter((x) => x.kind === "expense" && !x.for_contact_id)) byCat.set(t.category_id ?? "", (byCat.get(t.category_id ?? "") ?? 0) + cents(t.amount));
   const catName = (id: string) => data?.categories.find((c) => c.id === id)?.name ?? "Uncategorised";
-  const monthSpent = (data?.txs ?? []).filter((t) => t.kind === "expense" && t.currency === cur && t.occurred_on >= startOfMonth(weekEnd)).reduce((s, t) => s + cents(t.amount), 0);
+  const monthSpent = (data?.txs ?? []).filter((t) => t.kind === "expense" && !t.for_contact_id && t.currency === cur && t.occurred_on >= startOfMonth(weekEnd)).reduce((s, t) => s + cents(t.amount), 0);
   const monthBudget = (data?.budgets ?? []).filter((b) => b.currency === cur).reduce((s, b) => s + cents(b.amount), 0);
 
   const habitRows = (data?.habits ?? []).filter((h) => !h.archived_at).map((h) => {

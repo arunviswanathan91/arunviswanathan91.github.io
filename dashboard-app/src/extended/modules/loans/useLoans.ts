@@ -28,7 +28,7 @@ export function useLoans(): LoansData {
       supabase.from("contacts").select("id,name,phone,email,notes").order("name"),
       supabase.from("loans").select("id,contact_id,direction,amount,currency,issued_on,due_on,note,account_type,account_name,card_last4,credit_limit,minimum_due,emi_amount,emi_first_on,emi_tenure,emi_schedule,interest_rate,statement_amount,statement_on,statement_due_on").order("issued_on", { ascending: false }),
       supabase.from("loan_payments").select("id,loan_id,amount,paid_on,note").order("paid_on"),
-      supabase.from("transactions").select("id,loan_id,kind,description,amount,occurred_on").not("loan_id", "is", null).order("occurred_on", { ascending: false }),
+      supabase.from("transactions").select("id,loan_id,kind,description,amount,occurred_on,category_id,for_contact_id").not("loan_id", "is", null).order("occurred_on", { ascending: false }),
     ]);
     const err = c.error ?? l.error ?? p.error ?? t.error;
     setError(err ? err.message : "");

@@ -130,7 +130,7 @@ export function HomeView() {
   const habitsDue = habitNow;
   const habitsDone = habitNow.filter((x) => x.n!.state === "done").length;
 
-  const spent = (data?.txs ?? []).filter((t) => t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
+  const spent = (data?.txs ?? []).filter((t) => t.currency === cur && !t.for_contact_id).reduce((s, t) => s + cents(t.amount), 0);
   const budgeted = (data?.budgets ?? []).filter((b) => b.currency === cur).reduce((s, b) => s + cents(b.amount), 0);
   const loanTotals = totalsByCurrency(loans, payments);
   const overdueLoans = loans.filter((l) => loanStatus(l, payments, now) === "overdue").length;

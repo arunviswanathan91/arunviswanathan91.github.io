@@ -72,6 +72,9 @@ export interface Charge {
   description: string;
   amount: number;
   occurred_on: string;
+  category_id?: string | null;
+  /** Friend this was paid for; still on the card, out of your own budget. */
+  for_contact_id?: string | null;
 }
 
 /** Net spending per card in cents: expenses add, refunds (income) subtract. */

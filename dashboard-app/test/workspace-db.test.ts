@@ -23,6 +23,8 @@ test('workspace integration preserves existing records and enforces isolation',a
  try{await db.exec(agenda);await db.exec(agenda)}catch(e){throw new Error('agenda: '+(e as Error).message)}
  const schedule=readFileSync(new URL('emi-schedule.sql',root),'utf8');
  try{await db.exec(schedule);await db.exec(schedule)}catch(e){throw new Error('emi-schedule: '+(e as Error).message)}
+ const friend=readFileSync(new URL('friend-spending.sql',root),'utf8');
+ try{await db.exec(friend);await db.exec(friend)}catch(e){throw new Error('friend-spending: '+(e as Error).message)}
  await db.exec(`select set_config('request.jwt.claim.sub','${uid}',false);set role authenticated;`);
  assert.equal((await db.query<any>('select title from ws_projects')).rows[0].title,'Existing research');
  await db.exec(`update ws_tasks set title='Changed title' where id='44444444-4444-4444-4444-444444444444'`);
@@ -89,6 +91,15 @@ test('workspace integration preserves existing records and enforces isolation',a
  const schedRows=(await db.query<any>("select detail from ws_agenda(current_date-1,current_date+70) where kind='emi' and title='EMI · Lender' order by day")).rows;
  assert.deepEqual(schedRows.map((r:any)=>r.detail.replace(',','')),['2500.00 INR','1000.00 INR']);
  await assert.rejects(db.query("update ws_loans set emi_schedule='{}'::jsonb where id=$1",[sched]),/emi_schedule_check/);
+ // Spending for a friend stays on the card but out of your own budget.
+ const friendId=(await db.query<any>("insert into ws_contacts(name) values('Friend') returning id")).rows[0].id;
+ const food=(await db.query<any>("insert into ws_budget_categories(name,kind) values('Food','expense') returning id")).rows[0].id;
+ await db.query("insert into ws_transactions(kind,description,amount,category_id,loan_id) values('expense','My lunch',200,$1,$2)",[food,card]);
+ await db.query("insert into ws_transactions(kind,description,amount,category_id,loan_id,for_contact_id) values('expense','Friend dinner',500,$1,$2,$3)",[food,card,friendId]);
+ const foodLine=(await db.query<any>("select actual from ws_budget_month(date_trunc('month',current_date)::date) where category_id=$1",[food])).rows[0];
+ assert.equal(Number(foodLine.actual),200);
+ await assert.rejects(db.query("insert into ws_transactions(kind,description,amount,for_contact_id) values('transfer','Move',1,$1)",[friendId]),/for_contact_kind/);
+ await assert.rejects(db.query("delete from ws_contacts where id=$1",[friendId]),/foreign key|violates/);
  // Calendar feed by token (service role), nothing without one.
  await db.exec("update ws_settings set calendar_token='99999999-9999-9999-9999-999999999999'");
  await db.exec('reset role');
