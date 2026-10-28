@@ -9,7 +9,7 @@ import type { BudgetCategory } from "../../lib/types.ts";
 import { TransactionForm } from "../budget/TransactionForm.tsx";
 import { combine, useFx } from "../../lib/fx.ts";
 import { useSettings } from "../../lib/settings.ts";
-import { amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
+import { sortedSchedule, type EmiInstalment, amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
 import { useLoans } from "./useLoans.ts";
 import { ImportStatement } from "./statement/ImportStatement.tsx";
 import { deleteContacts, uniqueByName, unusedContacts } from "./contacts.ts";
@@ -115,7 +115,7 @@ export function LoansView() {
   function quickAmounts(loan: Loan, left: number): QuickAmount[] {
     const out: QuickAmount[] = [];
     const emi = emiPlan(loan, payments, today);
-    if (emi) out.push({ label: "EMI", amount: Math.min(emi.emi, left) });
+    if (emi) out.push({ label: "EMI", amount: emi.nextAmount || Math.min(emi.emi, left) });
     const st = statementPlan(loan, payments, today, charges);
     if (st) {
       if (st.minimumLeft > 0) out.push({ label: "Minimum amount due", amount: Math.min(st.minimumLeft, left) });
@@ -293,17 +293,18 @@ function EmiDetail({ loan, payments, today }: { loan: Loan; payments: Payment[];
   return (
     <div className="small emi-detail">
       <p>
-        <strong>EMI</strong> {formatMoney(plan.emi, loan.currency)} / month · {plan.covered}{plan.tenure ? ` of ${plan.tenure}` : ""} paid
+        <strong>EMI</strong> {loan.emi_schedule?.length ? "as listed" : `${formatMoney(plan.emi, loan.currency)} / month`} · {plan.covered}{plan.tenure ? ` of ${plan.tenure}` : ""} paid
         {plan.left !== null && ` · ${plan.left} left`}
         {plan.finalDate && ` · last EMI ${plan.finalDate}`}
         {loan.interest_rate != null && ` · ${loan.interest_rate}% interest`}
       </p>
       {plan.tenure && <progress max={plan.tenure} value={plan.covered} aria-label="EMIs paid" />}
       <AmortisationDetail loan={loan} payments={payments} today={today} />
+      {loan.emi_schedule?.length ? <ScheduleList loan={loan} schedule={loan.emi_schedule} payments={payments} today={today} /> : null}
       {plan.nextDue && (
         <p className={plan.overdueCount > 0 ? "neg" : ""}>
           {plan.overdueCount > 0 ? `${plan.overdueCount} EMI${plan.overdueCount > 1 ? "s" : ""} overdue · ` : "Next EMI "}
-          {plan.nextDue}{plan.dueNow > 0 && ` · ${formatMoney(plan.dueNow, loan.currency)} due now`}
+          {plan.nextDue}{plan.dueNow > 0 ? ` · ${formatMoney(plan.dueNow, loan.currency)} due now` : ` · ${formatMoney(plan.nextAmount, loan.currency)}`}
         </p>
       )}
     </div>
@@ -354,6 +355,35 @@ function CardDetail({ loan, payments, charges, today, onRoll, onImport }: { loan
         </p>
       )}
     </div>
+  );
+}
+
+/** EMIs entered one by one, each marked paid, part paid, due or overdue from the payments so far. */
+function ScheduleList({ loan, schedule, payments, today }: { loan: Loan; schedule: EmiInstalment[]; payments: Payment[]; today: string }) {
+  const [open, setOpen] = useState(false);
+  const paid = paidCents(loan, payments);
+  let upto = 0;
+  const rows = sortedSchedule(schedule).map((e) => {
+    const before = upto;
+    upto += Math.round(e.amount * 100);
+    const state = upto <= paid ? "paid" : before < paid ? "part paid" : e.on < today ? "overdue" : "due";
+    return { ...e, state };
+  });
+  return (
+    <>
+      <button className="link small" onClick={() => setOpen(!open)}>{open ? "Hide" : "Show"} all {rows.length} EMIs</button>
+      {open && (
+        <ol className="emi-list">
+          {rows.map((r, i) => (
+            <li key={i}>
+              <span>{r.on}</span>
+              <span className="num">{formatMoney(r.amount, loan.currency)}</span>
+              <span className={`badge ${r.state === "paid" ? "settled" : r.state === "overdue" ? "overdue" : "open"}`}>{r.state}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </>
   );
 }
 

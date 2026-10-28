@@ -21,6 +21,8 @@ export interface Loan {
   emi_first_on?: string | null;
   emi_tenure?: number | null;
   interest_rate?: number | null;
+  /** EMIs entered one by one (date and amount), when they are not all the same. */
+  emi_schedule?: EmiInstalment[] | null;
   statement_amount?: number | null;
   statement_on?: string | null;
   statement_due_on?: string | null;
@@ -101,6 +103,11 @@ export function addMonthsClamped(day: string, n: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
 }
 
+export interface EmiInstalment {
+  on: string;
+  amount: number;
+}
+
 export interface EmiPlan {
   emi: number;
   /** Instalments fully covered by the money paid so far. */
@@ -114,12 +121,71 @@ export interface EmiPlan {
   overdueCount: number;
   /** Amount behind the schedule as of today (instalments due on or before today). */
   dueNow: number;
+  /** What the next instalment needs: the EMI, less any part already paid, and never more than is left (a short last EMI). */
+  nextAmount: number;
   /** Date of the last instalment, when the tenure is known. */
   finalDate: string | null;
 }
 
 /** Match repayments to a fixed monthly EMI schedule. Null when the loan has no EMI set. */
+/** Instalments in date order, as the list the user entered. */
+export function sortedSchedule(schedule: EmiInstalment[]): EmiInstalment[] {
+  return schedule.filter((e) => e.on && e.amount > 0).slice().sort((a, b) => a.on.localeCompare(b.on));
+}
+
+/** EMIs entered one by one: payments cover them in date order, whatever their amounts. */
+function schedulePlan(loan: Loan, schedule: EmiInstalment[], payments: Payment[], today: string): EmiPlan {
+  const list = sortedSchedule(schedule);
+  const paid = paidCents(loan, payments);
+  const left = cents(remaining(loan, payments));
+  let upto = 0;
+  let covered = 0;
+  let nextDue: string | null = null;
+  let nextAmount = 0;
+  let overdueCount = 0;
+  let dueByToday = 0;
+  for (const e of list) {
+    const before = upto;
+    upto += cents(e.amount);
+    if (e.on <= today) dueByToday = upto;
+    if (upto <= paid) {
+      covered++;
+      continue;
+    }
+    if (left === 0) break;
+    if (!nextDue) {
+      nextDue = e.on;
+      nextAmount = Math.min(left, upto - Math.max(paid, before));
+    }
+    if (e.on < today) overdueCount++;
+  }
+  return {
+    emi: list[covered]?.amount ?? list.at(-1)?.amount ?? 0,
+    covered: left === 0 ? list.length : covered,
+    tenure: list.length,
+    left: left === 0 ? 0 : list.length - covered,
+    nextDue: left === 0 ? null : nextDue,
+    overdueCount,
+    dueNow: Math.min(left, Math.max(0, dueByToday - paid)) / 100,
+    nextAmount: left === 0 ? 0 : nextAmount / 100,
+    finalDate: list.at(-1)?.on ?? null,
+  };
+}
+
+/** Same EMI every month from the first EMI date, to fill an editable schedule. */
+export function monthlySchedule(first: string, amount: number, count: number, total?: number): EmiInstalment[] {
+  const out: EmiInstalment[] = [];
+  let leftCents = total === undefined ? Infinity : cents(total);
+  for (let i = 0; i < count && leftCents > 0; i++) {
+    const c = Math.min(cents(amount), leftCents);
+    out.push({ on: addMonthsClamped(first, i), amount: c / 100 });
+    leftCents -= c;
+  }
+  return out;
+}
+
 export function emiPlan(loan: Loan, payments: Payment[], today: string): EmiPlan | null {
+  if (loan.emi_schedule?.length) return schedulePlan(loan, loan.emi_schedule, payments, today);
   if (!loan.emi_amount || !loan.emi_first_on) return null;
   const emi = cents(loan.emi_amount);
   const tenure = loan.emi_tenure ?? null;
@@ -140,7 +206,9 @@ export function emiPlan(loan: Loan, payments: Payment[], today: string): EmiPlan
   }
   // Money already paid beyond the covered instalments counts towards the next one.
   const spill = paidCents(loan, payments) - covered * emi;
-  const dueNow = Math.max(0, dueCount * emi - Math.max(0, spill)) / 100;
+  const left = cents(remaining(loan, payments));
+  const dueNow = Math.min(left, Math.max(0, dueCount * emi - Math.max(0, spill))) / 100;
+  const nextAmount = nextDue ? Math.min(left, emi - Math.max(0, spill)) / 100 : 0;
   return {
     emi: emi / 100,
     covered,
@@ -149,6 +217,7 @@ export function emiPlan(loan: Loan, payments: Payment[], today: string): EmiPlan
     nextDue,
     overdueCount,
     dueNow,
+    nextAmount,
     finalDate: tenure === null ? null : addMonthsClamped(loan.emi_first_on, tenure - 1),
   };
 }
@@ -313,7 +382,8 @@ export interface Amortisation {
  */
 export function amortisation(loan: Loan, payments: Payment[], today: string): Amortisation | null {
   const plan = emiPlan(loan, payments, today);
-  if (!plan || !loan.emi_tenure || loan.interest_rate == null || !loan.emi_first_on) return null;
+  // The interest split assumes equal EMIs, so it is skipped for EMIs entered one by one.
+  if (!plan || loan.emi_schedule?.length || !loan.emi_tenure || loan.interest_rate == null || !loan.emi_first_on) return null;
   const n = loan.emi_tenure;
   const r = loan.interest_rate / 1200;
   const principal = r === 0 ? plan.emi * n : (plan.emi * (1 - Math.pow(1 + r, -n))) / r;

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { supabase } from "../../lib/supabase.ts";
-import { todayISO, type Contact, type Direction, type Loan } from "./balance.ts";
+import { formatMoney, monthlySchedule, sortedSchedule, todayISO, type Contact, type Direction, type EmiInstalment, type Loan } from "./balance.ts";
 
 import { useSettings } from "../../lib/settings.ts";
 import { CURRENCIES } from "../../lib/types.ts";
@@ -30,10 +30,22 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
   const [emiFirst,setEmiFirst]=useState(loan?.emi_first_on ?? "");
   const [tenure,setTenure]=useState(loan?.emi_tenure == null ? "" : String(loan.emi_tenure));
   const [rate,setRate]=useState(loan?.interest_rate == null ? "" : String(loan.interest_rate));
+  // EMIs that differ (a short last one, a bigger first one) are entered one by one.
+  const [emiMode,setEmiMode]=useState<"same"|"each">(loan?.emi_schedule?.length ? "each" : "same");
+  const [rows,setRows]=useState<{on:string;amount:string}[]>(() => (loan?.emi_schedule ?? []).map((e) => ({ on: e.on, amount: String(e.amount) })));
   const [stmtAmount,setStmtAmount]=useState(loan?.statement_amount == null ? "" : String(loan.statement_amount));
   const [stmtOn,setStmtOn]=useState(loan?.statement_on ?? "");
   const [stmtDue,setStmtDue]=useState(loan?.statement_due_on ?? "");
   const hasEmi = accountType !== "credit_card" && (accountType === "bank" || direction === "borrowed");
+  const schedule: EmiInstalment[] = sortedSchedule(rows.map((r) => ({ on: r.on, amount: Number(r.amount) })));
+  const scheduleTotal = schedule.reduce((sum, r) => sum + Math.round(r.amount * 100), 0) / 100;
+  const useSchedule = hasEmi && emiMode === "each" && schedule.length > 0;
+  function fillMonthly() {
+    if (!emiAmount || !emiFirst) return setError("Enter the EMI amount and first EMI date to fill the list.");
+    setError("");
+    const count = tenure ? Number(tenure) : Math.ceil(Number(amount) / Number(emiAmount)) || 12;
+    setRows(monthlySchedule(emiFirst, Number(emiAmount), count, amount ? Number(amount) : undefined).map((e) => ({ on: e.on, amount: String(e.amount) })));
+  }
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!supabase) return;
@@ -65,9 +77,11 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
       card_last4:accountType === "credit_card" ? last4 || null : null,
       credit_limit:accountType === "credit_card" && creditLimit !== "" ? Number(creditLimit) : null,
       minimum_due:accountType === "credit_card" && minimumDue !== "" ? Number(minimumDue) : null,
-      emi_amount:hasEmi && emiAmount !== "" ? Number(emiAmount) : null,
-      emi_first_on:hasEmi && emiAmount !== "" ? emiFirst || null : null,
-      emi_tenure:hasEmi && emiAmount !== "" && tenure !== "" ? Number(tenure) : null,
+      // With a list, the plain EMI fields mirror it (first amount and date, count) for anything that reads them.
+      emi_amount:useSchedule ? schedule[0].amount : hasEmi && emiMode === "same" && emiAmount !== "" ? Number(emiAmount) : null,
+      emi_first_on:useSchedule ? schedule[0].on : hasEmi && emiMode === "same" && emiAmount !== "" ? emiFirst || null : null,
+      emi_tenure:useSchedule ? schedule.length : hasEmi && emiMode === "same" && emiAmount !== "" && tenure !== "" ? Number(tenure) : null,
+      emi_schedule:useSchedule ? schedule : null,
       interest_rate:hasEmi && rate !== "" ? Number(rate) : null,
       statement_amount:accountType === "credit_card" && stmtAmount !== "" && stmtOn ? Number(stmtAmount) : null,
       statement_on:accountType === "credit_card" && stmtAmount !== "" ? stmtOn || null : null,
@@ -127,9 +141,39 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
         <p className="muted small">Balance = starting balance + spending added with “Add spend” (or a Budget expense paid with this card) − bill payments. Enter 0 for a new card. Interest and fees can be added as spending. Only the last four digits are needed.</p>
       </>}
       {hasEmi && <div className="form-group" role="group" aria-label="EMI"><strong className="form-group-title">EMI (optional)</strong>
+        <div className="segmented" role="radiogroup" aria-label="EMI amounts">
+          <button type="button" role="radio" aria-checked={emiMode === "same"} className={emiMode === "same" ? "on" : ""} onClick={() => setEmiMode("same")}>Same EMI every month</button>
+          <button type="button" role="radio" aria-checked={emiMode === "each"} className={emiMode === "each" ? "on" : ""} onClick={() => { setEmiMode("each"); if (!rows.length && emiAmount && emiFirst) fillMonthly(); }}>Enter each EMI</button>
+        </div>
         <div className="grid-2"><label>EMI amount<input type="number" min="0.01" step="0.01" value={emiAmount} onChange={e=>setEmiAmount(e.target.value)}/></label><label>Number of EMIs<input type="number" min="1" step="1" value={tenure} onChange={e=>setTenure(e.target.value)}/></label></div>
-        <div className="grid-2"><label>First EMI date<input type="date" required={emiAmount !== ""} value={emiFirst} onChange={e=>setEmiFirst(e.target.value)}/></label><label>Interest rate % (optional)<input type="number" min="0" step="0.001" value={rate} onChange={e=>setRate(e.target.value)}/></label></div>
-        <p className="muted small">EMIs repeat monthly on the same date. Repayments are matched to them in order; an unpaid EMI past its date marks the loan overdue. Amount above is the total you repay, including interest.</p>
+        <div className="grid-2"><label>First EMI date<input type="date" required={emiMode === "same" && emiAmount !== ""} value={emiFirst} onChange={e=>setEmiFirst(e.target.value)}/></label><label>Interest rate % (optional)<input type="number" min="0" step="0.001" value={rate} onChange={e=>setRate(e.target.value)}/></label></div>
+        {emiMode === "same" ? (
+          <p className="muted small">EMIs repeat monthly on the same date. Repayments are matched to them in order; an unpaid EMI past its date marks the loan overdue. Amount above is the total you repay, including interest.</p>
+        ) : (
+          <>
+            <div className="row wrap">
+              <button type="button" className="small" onClick={fillMonthly}>Fill monthly from the fields above</button>
+              <button type="button" className="small" onClick={() => setRows([...rows, { on: rows.length ? "" : emiFirst, amount: emiAmount }])}>+ Add EMI</button>
+            </div>
+            {rows.length > 0 && (
+              <ol className="emi-rows">
+                {rows.map((r, i) => (
+                  <li key={i}>
+                    <span className="muted small">{i + 1}</span>
+                    <input type="date" aria-label={`EMI ${i + 1} date`} required value={r.on} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, on: e.target.value } : x)))} />
+                    <input type="number" aria-label={`EMI ${i + 1} amount`} required min="0.01" step="0.01" value={r.amount} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
+                    <button type="button" className="icon" aria-label={`Remove EMI ${i + 1}`} onClick={() => setRows(rows.filter((_, j) => j !== i))}>×</button>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <p className="muted small">
+              {schedule.length} EMIs, {formatMoney(scheduleTotal, currency)} in total.
+              {amount !== "" && Math.abs(scheduleTotal - Number(amount)) >= 0.01 && <> Amount above is {formatMoney(Number(amount), currency)}. <button type="button" className="link small" onClick={() => setAmount(String(scheduleTotal))}>Use {formatMoney(scheduleTotal, currency)} as the amount</button></>}
+              {" "}Repayments cover the EMIs in date order; an unpaid EMI past its date marks the loan overdue.
+            </p>
+          </>
+        )}
       </div>}
       <div className="row">
         <label className="grow">

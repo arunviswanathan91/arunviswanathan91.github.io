@@ -21,6 +21,7 @@ always goes at the end of this list, and the commit that adds it says so.
 | 13 | `emi-statements-habit-carry.sql` | EMI loans, card statements, habit carry-over |
 | 14 | `card-spending-habit-periods-reminders.sql` | Card spending, weekly/monthly habits, daily nudges |
 | 15 | `agenda-recurring-followups.sql` | Agenda, calendar feed, recurring money, publication follow-ups |
+| 16 | `emi-schedule.sql` | EMIs entered one by one (different first or last EMI) |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set

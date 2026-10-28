@@ -21,6 +21,8 @@ test('workspace integration preserves existing records and enforces isolation',a
  try{await db.exec(finance2);await db.exec(finance2)}catch(e){throw new Error('card-spending: '+(e as Error).message)}
  const agenda=readFileSync(new URL('agenda-recurring-followups.sql',root),'utf8');
  try{await db.exec(agenda);await db.exec(agenda)}catch(e){throw new Error('agenda: '+(e as Error).message)}
+ const schedule=readFileSync(new URL('emi-schedule.sql',root),'utf8');
+ try{await db.exec(schedule);await db.exec(schedule)}catch(e){throw new Error('emi-schedule: '+(e as Error).message)}
  await db.exec(`select set_config('request.jwt.claim.sub','${uid}',false);set role authenticated;`);
  assert.equal((await db.query<any>('select title from ws_projects')).rows[0].title,'Existing research');
  await db.exec(`update ws_tasks set title='Changed title' where id='44444444-4444-4444-4444-444444444444'`);
@@ -78,6 +80,15 @@ test('workspace integration preserves existing records and enforces isolation',a
  assert.ok(rows.some((r:any)=>r.kind==='emi'&&r.title==='EMI · Bike'&&r.path==='tools/loans'));
  assert.ok(rows.some((r:any)=>r.kind==='recurring'&&r.title==='Netflix'));
  assert.equal(rows.filter((r:any)=>r.kind==='emi').length,2); // second and third EMI left
+ // EMIs entered one by one, with a short last one: reminders and the agenda follow the list.
+ const sched=(await db.query<any>(`insert into ws_loans(contact_id,direction,amount,account_type,account_name,emi_schedule) values($1,'borrowed',7000,'bank','Lender',
+  jsonb_build_array(jsonb_build_object('on',current_date+3,'amount',3000),jsonb_build_object('on',current_date+33,'amount',3000),jsonb_build_object('on',current_date+63,'amount',1000))) returning id`,[contact])).rows[0].id;
+ assert.match((await reminder(sched))[0].body,/^3,?000\.00 INR due on/);
+ await db.query('insert into ws_loan_payments(loan_id,amount,paid_on) values($1,3500,current_date)',[sched]);
+ assert.match((await reminder(sched))[0].body,/^2,?500\.00 INR due on/); // second EMI less the 500 paid ahead
+ const schedRows=(await db.query<any>("select detail from ws_agenda(current_date-1,current_date+70) where kind='emi' and title='EMI · Lender' order by day")).rows;
+ assert.deepEqual(schedRows.map((r:any)=>r.detail.replace(',','')),['2500.00 INR','1000.00 INR']);
+ await assert.rejects(db.query("update ws_loans set emi_schedule='{}'::jsonb where id=$1",[sched]),/emi_schedule_check/);
  // Calendar feed by token (service role), nothing without one.
  await db.exec("update ws_settings set calendar_token='99999999-9999-9999-9999-999999999999'");
  await db.exec('reset role');
