@@ -236,7 +236,7 @@ export function LoansView() {
                                   </li>
                                 ))}
                               </ul>
-                              <EmiDetail loan={loan} payments={payments} today={today} />
+                              <EmiDetail loan={loan} payments={payments} today={today} onChange={reload} />
                               <CardDetail loan={loan} payments={payments} charges={charges} today={today} onRoll={() => setRolling(loan)} onImport={() => setImporting(loan)} />
                               <CardSpending charges={charges.filter((c) => c.loan_id === loan.id)} currency={loan.currency} />
                               <button className="link danger small" onClick={() => void removeLoan(loan)}>Delete loan</button>
@@ -255,7 +255,7 @@ export function LoansView() {
 
       {(adding || editing) && (
         <Modal wide title={editing ? "Edit account" : "New loan or credit card"} onClose={() => {setAdding(false);setEditing(null)}}>
-          <LoanForm loan={editing ?? undefined} contacts={uniqueByName(contacts, loans, editing?.contact_id)} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); setEditing(null); await reload(); }} />
+          <LoanForm loan={editing ?? undefined} payments={payments} contacts={uniqueByName(contacts, loans, editing?.contact_id)} defaultContactId={person ?? undefined} onDone={async () => { setAdding(false); setEditing(null); await reload(); }} />
         </Modal>
       )}
       {spending && (
@@ -287,7 +287,7 @@ function StatusBadge({ status, card }: { status: LoanStatus; card?: boolean }) {
 }
 
 
-function EmiDetail({ loan, payments, today }: { loan: Loan; payments: Payment[]; today: string }) {
+function EmiDetail({ loan, payments, today, onChange }: { loan: Loan; payments: Payment[]; today: string; onChange: () => Promise<void> }) {
   const plan = emiPlan(loan, payments, today);
   if (!plan) return null;
   return (
@@ -300,7 +300,7 @@ function EmiDetail({ loan, payments, today }: { loan: Loan; payments: Payment[];
       </p>
       {plan.tenure && <progress max={plan.tenure} value={plan.covered} aria-label="EMIs paid" />}
       <AmortisationDetail loan={loan} payments={payments} today={today} />
-      {loan.emi_schedule?.length ? <ScheduleList loan={loan} schedule={loan.emi_schedule} payments={payments} today={today} /> : null}
+      {loan.emi_schedule?.length ? <ScheduleList loan={loan} schedule={loan.emi_schedule} payments={payments} today={today} onChange={onChange} /> : null}
       {plan.nextDue && (
         <p className={plan.overdueCount > 0 ? "neg" : ""}>
           {plan.overdueCount > 0 ? `${plan.overdueCount} EMI${plan.overdueCount > 1 ? "s" : ""} overdue · ` : "Next EMI "}
@@ -339,7 +339,15 @@ function CardDetail({ loan, payments, charges, today, onRoll, onImport }: { loan
               {st.mismatch > 0 ? " Payments or refunds from the statement are probably missing" : " Purchases or fees from the statement are probably missing"}: import the statement PDF to add them, or check the starting balance.
             </p>
           )}
-          {st.interestRisk && <p className="neg">Past the due date with the statement unpaid, so interest is likely.</p>}
+          {st.state === "minimum_paid" && !st.interestRisk && (
+            <p className="warn-text">Only the minimum is paid so far. Pay the remaining {money(st.statementLeft)}{st.dueOn ? ` by ${st.dueOn}` : ""} to avoid interest; paying just the minimum keeps the card in good standing but the bank then charges interest, usually on the whole statement from the purchase dates.</p>
+          )}
+          {st.interestRisk && st.state === "minimum_paid" && (
+            <p className="neg">Only the minimum was paid by the due date, so {money(st.statementLeft)} carries over to the next statement with interest and GST on it. Import the next statement PDF to add those charges.</p>
+          )}
+          {st.state === "overdue" && (
+            <p className="neg">The minimum amount due was not paid by the due date: expect a late payment fee as well as interest. Paying at least the minimum now stops it getting worse.</p>
+          )}
         </>
       ) : (
         <p>Minimum amount due: {loan.minimum_due == null ? "Not set" : money(Number(loan.minimum_due))}. No statement entered yet.</p>
@@ -359,16 +367,32 @@ function CardDetail({ loan, payments, charges, today, onRoll, onImport }: { loan
 }
 
 /** EMIs entered one by one, each marked paid, part paid, due or overdue from the payments so far. */
-function ScheduleList({ loan, schedule, payments, today }: { loan: Loan; schedule: EmiInstalment[]; payments: Payment[]; today: string }) {
-  const [open, setOpen] = useState(false);
+function ScheduleList({ loan, schedule, payments, today, onChange }: { loan: Loan; schedule: EmiInstalment[]; payments: Payment[]; today: string; onChange: () => Promise<void> }) {
   const paid = paidCents(loan, payments);
+  // Open straight away when something is overdue, so it can be ticked off.
+  const [open, setOpen] = useState(() => { let u = 0; return sortedSchedule(schedule).some((e) => (u += Math.round(e.amount * 100)) > paid && e.on < today); });
+  const [busy, setBusy] = useState(false);
   let upto = 0;
   const rows = sortedSchedule(schedule).map((e) => {
     const before = upto;
     upto += Math.round(e.amount * 100);
     const state = upto <= paid ? "paid" : before < paid ? "part paid" : e.on < today ? "overdue" : "due";
-    return { ...e, state };
+    return { ...e, before, upto, state };
   });
+  // Marking an EMI paid records what is still owed on it and on any earlier unpaid EMI, each on its own date.
+  async function markPaid(index: number) {
+    if (!supabase) return;
+    const repay = rows.slice(0, index + 1)
+      .filter((r) => r.upto > paid)
+      .map((r) => ({ loan_id: loan.id, amount: (r.upto - Math.max(paid, r.before)) / 100, paid_on: r.on, note: "EMI" }));
+    const total = repay.reduce((sum, r) => sum + r.amount, 0);
+    if (!repay.length || !confirm(`Record ${formatMoney(total, loan.currency)} as paid${repay.length > 1 ? ` (${repay.length} EMIs up to ${rows[index].on})` : ` on ${rows[index].on}`}?`)) return;
+    setBusy(true);
+    const { error } = await supabase.from("loan_payments").insert(repay);
+    setBusy(false);
+    if (error) return alert(error.message);
+    await onChange();
+  }
   return (
     <>
       <button className="link small" onClick={() => setOpen(!open)}>{open ? "Hide" : "Show"} all {rows.length} EMIs</button>
@@ -378,7 +402,9 @@ function ScheduleList({ loan, schedule, payments, today }: { loan: Loan; schedul
             <li key={i}>
               <span>{r.on}</span>
               <span className="num">{formatMoney(r.amount, loan.currency)}</span>
-              <span className={`badge ${r.state === "paid" ? "settled" : r.state === "overdue" ? "overdue" : "open"}`}>{r.state}</span>
+              {r.state === "paid"
+                ? <span className="badge settled">✓ paid</span>
+                : <button className="small" disabled={busy} title={`Mark this EMI${r.before > paid ? " and the earlier unpaid ones" : ""} as paid`} onClick={() => void markPaid(i)}>{r.state === "overdue" ? "Overdue · " : r.state === "part paid" ? "Part paid · " : ""}Mark paid</button>}
             </li>
           ))}
         </ol>

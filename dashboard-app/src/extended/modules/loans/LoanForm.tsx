@@ -1,13 +1,28 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { supabase } from "../../lib/supabase.ts";
-import { formatMoney, monthlySchedule, sortedSchedule, todayISO, type Contact, type Direction, type EmiInstalment, type Loan } from "./balance.ts";
+import { formatMoney, monthlySchedule, sortedSchedule, todayISO, type Contact, type Direction, type EmiInstalment, type Loan, type Payment } from "./balance.ts";
 
 import { useSettings } from "../../lib/settings.ts";
 import { CURRENCIES } from "../../lib/types.ts";
 import { findByName } from "./contacts.ts";
 const NEW = "__new__";
 
-export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contacts: Contact[]; defaultContactId?: string; loan?: Loan; onDone: () => void }) {
+type EmiRow = { on: string; amount: string; paid: boolean };
+const toCents = (n: number) => Math.round(n * 100);
+
+/** Which rows the repayments already cover, taking the EMIs in date order. */
+function markCovered(rows: EmiRow[], paidCents: number): EmiRow[] {
+  const order = rows.map((r, i) => i).sort((a, b) => rows[a].on.localeCompare(rows[b].on));
+  const out = rows.map((r) => ({ ...r }));
+  let upto = 0;
+  for (const i of order) {
+    upto += toCents(Number(rows[i].amount) || 0);
+    if (upto <= paidCents) out[i].paid = true;
+  }
+  return out;
+}
+
+export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDone }: { contacts: Contact[]; defaultContactId?: string; loan?: Loan; payments?: Payment[]; onDone: () => void }) {
   const [contactId, setContactId] = useState(loan?.contact_id ?? defaultContactId ?? NEW);
   const [newName, setNewName] = useState("");
   const [direction, setDirection] = useState<Direction>(loan?.direction ?? "borrowed");
@@ -32,7 +47,14 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
   const [rate,setRate]=useState(loan?.interest_rate == null ? "" : String(loan.interest_rate));
   // EMIs that differ (a short last one, a bigger first one) are entered one by one.
   const [emiMode,setEmiMode]=useState<"same"|"each">(loan?.emi_schedule?.length ? "each" : "same");
-  const [rows,setRows]=useState<{on:string;amount:string}[]>(() => (loan?.emi_schedule ?? []).map((e) => ({ on: e.on, amount: String(e.amount) })));
+  // Money already repaid on this loan; EMIs it covers start ticked and stay ticked.
+  const alreadyPaid = loan ? payments.filter((p) => p.loan_id === loan.id).reduce((sum, p) => sum + toCents(p.amount), 0) : 0;
+  const [rows,setRowsRaw]=useState<EmiRow[]>(() => markCovered((loan?.emi_schedule ?? []).map((e) => ({ on: e.on, amount: String(e.amount), paid: false })), alreadyPaid));
+  const setRows = (next: EmiRow[]) => setRowsRaw(markCovered(next, alreadyPaid));
+  const locked = markCovered(rows.map((r) => ({ ...r, paid: false })), alreadyPaid).map((r) => r.paid);
+  // Ticking an EMI ticks every earlier one (payments cover EMIs in date order); unticking clears the later ones.
+  const tick = (i: number, on: boolean) =>
+    setRowsRaw(rows.map((r, j) => (locked[j] ? r : { ...r, paid: on ? r.paid || (r.on !== "" && r.on <= rows[i].on) : r.paid && r.on < rows[i].on })));
   const [stmtAmount,setStmtAmount]=useState(loan?.statement_amount == null ? "" : String(loan.statement_amount));
   const [stmtOn,setStmtOn]=useState(loan?.statement_on ?? "");
   const [stmtDue,setStmtDue]=useState(loan?.statement_due_on ?? "");
@@ -44,7 +66,7 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
     if (!emiAmount || !emiFirst) return setError("Enter the EMI amount and first EMI date to fill the list.");
     setError("");
     const count = tenure ? Number(tenure) : Math.ceil(Number(amount) / Number(emiAmount)) || 12;
-    setRows(monthlySchedule(emiFirst, Number(emiAmount), count, amount ? Number(amount) : undefined).map((e) => ({ on: e.on, amount: String(e.amount) })));
+    setRows(monthlySchedule(emiFirst, Number(emiAmount), count, amount ? Number(amount) : undefined).map((e) => ({ on: e.on, amount: String(e.amount), paid: false })));
   }
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -87,10 +109,33 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
       statement_on:accountType === "credit_card" && stmtAmount !== "" ? stmtOn || null : null,
       statement_due_on:accountType === "credit_card" && stmtAmount !== "" ? stmtDue || null : null,
     };
-    const {error}=loan ? await supabase.from("loans").update(values).eq("id",loan.id) : await supabase.from("loans").insert(values);
+    const saved = loan ? await supabase.from("loans").update(values).eq("id", loan.id).select("id").single() : await supabase.from("loans").insert(values).select("id").single();
+    if (saved.error) {
+      setBusy(false);
+      return setError(saved.error.message);
+    }
+    // EMIs ticked as paid become repayments on their dates (only the part not repaid already).
+    if (useSchedule) {
+      const ordered = rows.map((r, i) => ({ ...r, i })).filter((r) => r.on && Number(r.amount) > 0).sort((a, b) => a.on.localeCompare(b.on));
+      const repay: { loan_id: string; amount: number; paid_on: string; note: string }[] = [];
+      let upto = 0;
+      for (const r of ordered) {
+        const before = upto;
+        upto += toCents(Number(r.amount));
+        if (!r.paid || locked[r.i]) continue;
+        const part = upto - Math.max(alreadyPaid, before);
+        if (part > 0) repay.push({ loan_id: saved.data.id, amount: part / 100, paid_on: r.on, note: "EMI" });
+      }
+      if (repay.length) {
+        const { error } = await supabase.from("loan_payments").insert(repay);
+        if (error) {
+          setBusy(false);
+          return setError(error.message);
+        }
+      }
+    }
     setBusy(false);
-    if (error) setError(error.message);
-    else onDone();
+    onDone();
   }
 
   return (
@@ -153,7 +198,7 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
           <>
             <div className="row wrap">
               <button type="button" className="small" onClick={fillMonthly}>Fill monthly from the fields above</button>
-              <button type="button" className="small" onClick={() => setRows([...rows, { on: rows.length ? "" : emiFirst, amount: emiAmount }])}>+ Add EMI</button>
+              <button type="button" className="small" onClick={() => setRows([...rows, { on: rows.length ? "" : emiFirst, amount: emiAmount, paid: false }])}>+ Add EMI</button>
             </div>
             {rows.length > 0 && (
               <ol className="emi-rows">
@@ -162,7 +207,10 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
                     <span className="muted small">{i + 1}</span>
                     <input type="date" aria-label={`EMI ${i + 1} date`} required value={r.on} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, on: e.target.value } : x)))} />
                     <input type="number" aria-label={`EMI ${i + 1} amount`} required min="0.01" step="0.01" value={r.amount} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
-                    <button type="button" className="icon" aria-label={`Remove EMI ${i + 1}`} onClick={() => setRows(rows.filter((_, j) => j !== i))}>×</button>
+                    <label className={`emi-paid ${r.paid ? "on" : ""}`} title={locked[i] ? "Covered by repayments already recorded. Delete the repayment to undo." : "Tick if this EMI is already paid"}>
+                      <input type="checkbox" checked={r.paid} disabled={locked[i] || !r.on} onChange={(e) => tick(i, e.target.checked)} /> {r.paid ? "✓ Paid" : "Paid"}
+                    </label>
+                    <button type="button" className="icon" aria-label={`Remove EMI ${i + 1}`} disabled={locked[i]} onClick={() => setRows(rows.filter((_, j) => j !== i))}>×</button>
                   </li>
                 ))}
               </ol>
@@ -170,7 +218,7 @@ export function LoanForm({ contacts, defaultContactId, loan, onDone }: { contact
             <p className="muted small">
               {schedule.length} EMIs, {formatMoney(scheduleTotal, currency)} in total.
               {amount !== "" && Math.abs(scheduleTotal - Number(amount)) >= 0.01 && <> Amount above is {formatMoney(Number(amount), currency)}. <button type="button" className="link small" onClick={() => setAmount(String(scheduleTotal))}>Use {formatMoney(scheduleTotal, currency)} as the amount</button></>}
-              {" "}Repayments cover the EMIs in date order; an unpaid EMI past its date marks the loan overdue.
+              {" "}Tick the EMIs you have already paid; saving records them as repayments on their dates. An unpaid EMI past its date marks the loan overdue.
             </p>
           </>
         )}
