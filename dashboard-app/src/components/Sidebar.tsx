@@ -69,7 +69,7 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
    </div>
 
    <p className="nav-label">Research & planning</p>
-   {(["agenda","review","projects","tasks","papers","notes","meetings","deadlines"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={onTool(key)?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span>{key==="tasks"&&<span className="nav-count">{counts.tasks}</span>}</a>})}
+   {(["agenda","review","projects","tasks","papers","notes","meetings","deadlines","resumes"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={onTool(key)?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span>{key==="tasks"&&<span className="nav-count">{counts.tasks}</span>}</a>})}
    <p className="nav-label">Personal</p>
    {(["budget","loans","habits"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={ui.view==="extended"&&route.path[0]===key?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span></a>})}
    <p className="nav-label">Workflows</p>

@@ -19,6 +19,8 @@ import { PapersView } from "./modules/papers/PapersView.tsx";
 import { PrintMeetings, PrintProject } from "./modules/print/PrintViews.tsx";
 import { ReviewView } from "./modules/review/ReviewView.tsx";
 import { ProjectsView } from "./modules/projects/ProjectsView.tsx";
+import { ResumeEditor } from "./modules/resumes/ResumeEditor.tsx";
+import { ResumesView } from "./modules/resumes/ResumesView.tsx";
 import { SearchView } from "./modules/search/Search.tsx";
 import { TasksView } from "./modules/tasks/TasksView.tsx";
 function Page({ route }: { route: Route }) {
@@ -36,6 +38,7 @@ function Page({ route }: { route: Route }) {
     case "budget": return <BudgetView route={route} />;
     case "loans": return <LoansView />;
     case "habits": return <HabitsView />;
+    case "resumes": return id ? <ResumeEditor id={id} /> : <ResumesView />;
     case "search": return <SearchView route={route} />;
     case "settings": location.replace("#/settings"); return null;
     default: return <HomeView />;
