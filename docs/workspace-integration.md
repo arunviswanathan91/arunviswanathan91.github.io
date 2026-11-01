@@ -64,3 +64,7 @@ Apply `supabase/agenda-recurring-followups.sql` after `card-spending-habit-perio
 - **Recurring** (Budget → Recurring): rent, salary, subscriptions on a day of the month, optionally charged to a card. Due items are posted when the budget loads and by the daily job after 08:00 (at most 24 missed occurrences per item).
 - **Meetings**: "Prepare agenda" appends what changed since the previous meeting of the same type: tasks done, manuscript stage changes, papers read, open high-priority or due-soon tasks and deadlines in the next 30 days (limited to the meeting's projects when linked).
 - **Currencies**: Loans, Budget and Home add an "≈ all in <default currency>" estimate when more than one currency is present, using the free daily fawazahmed0 rates cached for the day; per-currency totals are unchanged.
+
+## Resumes
+
+Apply `supabase/resumes.sql` after `agenda-recurring-followups.sql` (rerunnable). Workspace → Resumes keeps any number of named resumes (create, rename, duplicate, delete; "From my research resume" and "From my teaching CV" seed one with the existing CV content). The editor has a Content tab (personal details, summary, 16 section types, per-entry bullets, reorder, show/hide, undo/redo) and a Customize tab (page format, font sizes, line height and spacing, margins, entry layout, heading style, font, accent colour) beside a live A4/Letter preview. **Download PDF** uses the browser's print dialog, so the PDF has selectable text; turn off "Headers and footers" in that dialog. Resumes are not yet part of the JSON/ZIP backup.
