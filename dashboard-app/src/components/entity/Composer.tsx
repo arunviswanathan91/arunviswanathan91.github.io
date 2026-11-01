@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "../ui/Modal";
 import { FieldInput } from "./FieldInput";
+import { DoiFetch } from "./DoiFetch";
 import { useEntityCtx } from "./ctx";
 import { isEditable } from "../../entities/types";
 import type { EntityDef, FieldDef } from "../../entities/types";
@@ -42,6 +43,7 @@ export function Composer({def,seed,onClose,onSubmit,hiddenFields=[],people}:{
     {busy?"Adding…":"Add"}</button>
   </>}>
   <div className="field-grid">
+   {def.key==="reads"&&<DoiFetch onFill={fill=>setValues(s=>({...s,title:fill.title||s.title,url:fill.url||s.url,notes:String(s.notes??"").trim()?s.notes:(fill.notes||s.notes)}))}/>}
    {shown.map((f,i)=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
     <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
     <FieldInput field={f} value={f.kind==="tags"?tagIds:values[f.key]} ctx={scopedInputCtx}
