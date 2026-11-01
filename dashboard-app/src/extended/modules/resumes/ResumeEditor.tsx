@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight, ChevronUp, Download, Eye, EyeOff, Minus, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
+import { ArrowLeft, Search, ChevronDown, ChevronRight, ChevronUp, Download, Eye, EyeOff, Minus, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
 import { getOne, update, useLoad } from "../../lib/db.ts";
 import { go } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { confirmDanger, ErrorText, SaveIndicator } from "../../components/ui.tsx";
 import {
-  ACCENTS, ACCENT_TARGETS, DEFAULT_STYLE, FONTS, HEADING_STYLES, SECTION_ORDER, SECTION_TYPES, moveBy, newItem, newSection, normalizeResume, pdfFilename,
-  type FontKey, type HeadingStyle, type ItemField, type ResumeData, type ResumeStyle, type ResumeItem, type ResumeSection, type SectionType,
+  ACCENTS, ACCENT_TARGETS, DEFAULT_STYLE, FONTS, HEADING_STYLES, LAYOUT_TYPES, SECTION_ORDER, layoutFor, SECTION_TYPES, moveBy, newItem, newSection, normalizeResume, pdfFilename,
+  type DisplayMode, type FontKey, type HeadingStyle, type SectionLayout, type ItemField, type ResumeData, type ResumeStyle, type ResumeItem, type ResumeSection, type SectionType,
 } from "./model.ts";
 import { ResumePreview } from "./ResumePreview.tsx";
+import { itemFromMeta } from "./doi.ts";
+import { lookupPaper } from "../papers/lookup.ts";
 
 interface Row { id: string; title: string; data: unknown }
 
@@ -167,7 +169,7 @@ function SectionCard({ s, first, last, onChange, onMove, onDelete }: {
   return (
     <div className={`rb-card${s.hidden ? " is-hidden" : ""}`}>
       <div className="rb-card-head">
-        <button className="rb-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<strong>{s.title || def.label}</strong><span className="muted small">{s.items.length}</span></button>
+        <button className="rb-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<strong className="rb-ell">{s.title || def.label}</strong><span className="muted small">{s.items.length}</span></button>
         <span className="rb-actions">
           <button className="icon" aria-label="Move up" disabled={first} onClick={() => onMove(-1)}><ChevronUp size={15} /></button>
           <button className="icon" aria-label="Move down" disabled={last} onClick={() => onMove(1)}><ChevronDown size={15} /></button>
@@ -181,7 +183,7 @@ function SectionCard({ s, first, last, onChange, onMove, onDelete }: {
           {s.items.map((it, n) => (
             <div key={it.id} className={`rb-item${it.hidden ? " is-hidden" : ""}`}>
               <div className="rb-item-head">
-                <button className="rb-toggle" onClick={() => setOpenItem(openItem === it.id ? null : it.id)}>{it.title || it.subtitle || <em className="muted">Untitled</em>}</button>
+                <button className="rb-toggle" onClick={() => setOpenItem(openItem === it.id ? null : it.id)} title={it.title || it.subtitle}><span className="rb-ell">{it.title || it.subtitle || <em className="muted">Untitled</em>}</span></button>
                 <span className="rb-actions">
                   <button className="icon" aria-label="Move up" disabled={n === 0} onClick={() => onChange((x) => ({ ...x, items: moveBy(x.items, n, -1) }))}><ChevronUp size={14} /></button>
                   <button className="icon" aria-label="Move down" disabled={n === s.items.length - 1} onClick={() => onChange((x) => ({ ...x, items: moveBy(x.items, n, 1) }))}><ChevronDown size={14} /></button>
@@ -192,9 +194,43 @@ function SectionCard({ s, first, last, onChange, onMove, onDelete }: {
               {openItem === it.id && <ItemForm type={s.type} item={it} onChange={(p) => setItem(it.id, p)} />}
             </div>
           ))}
+          {s.type === "publications" && (
+            <DoiFetch label="Add a publication from DOI, PubMed id or arXiv id" onFill={(p) => {
+              const it = newItem(p);
+              if (it.link && s.items.some((x) => x.link === it.link)) return; // already listed
+              onChange((x) => ({ ...x, items: [...x.items, it] })); setOpenItem(it.id);
+            }} />
+          )}
           <button onClick={addItem}><Plus size={14} /> Add {def.label.toLowerCase()} entry</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** "Fetch from DOI": same lookup as adding a paper (Crossref, Europe PMC, DataCite). */
+function DoiFetch({ onFill, label = "Fetch from DOI, PubMed id or arXiv id" }: { onFill: (item: Partial<ResumeItem>) => void; label?: string }) {
+  const [ident, setIdent] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const run = async () => {
+    setBusy(true); setMsg("");
+    try {
+      onFill(itemFromMeta(await lookupPaper(ident)));
+      setIdent(""); setMsg("Details filled in. Check and edit anything before downloading.");
+    } catch (e) { setMsg(`${(e as Error).message}. You can enter the details by hand.`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="lookup">
+      <label className="rb-field"><span>{label}</span>
+        <div className="rb-link-row rb-doi-row">
+          <input value={ident} placeholder="10.1038/… · 34265844 · 2401.12345 · or paste a link" onChange={(e) => setIdent(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), void run())} />
+          <button type="button" onClick={() => void run()} disabled={busy || !ident.trim()}><Search size={14} /> {busy ? "Looking up…" : "Fetch"}</button>
+        </div>
+      </label>
+      {msg && <p className="small muted">{msg}</p>}
     </div>
   );
 }
@@ -204,6 +240,7 @@ function ItemForm({ type, item, onChange }: { type: SectionType; item: ResumeIte
   const has = (f: ItemField) => L[f] !== undefined;
   return (
     <div className="rb-item-form">
+      {type === "publications" && <DoiFetch onFill={(p) => onChange(p)} />}
       {has("title") && <Input label={L.title!} value={item.title} onChange={(v) => onChange({ title: v })} />}
       {has("subtitle") && <Input label={L.subtitle!} value={item.subtitle} onChange={(v) => onChange({ subtitle: v })} />}
       {has("link") && <Input label={L.link!} value={item.link} placeholder="https://…" onChange={(v) => onChange({ link: v })} />}
@@ -237,7 +274,57 @@ function Stepper({ label, value, min, max, step, unit, signed, onChange }: { lab
   );
 }
 
-const CUSTOM_GROUPS = ["Document", "Font size", "Spacing", "Entries", "Headings", "Font", "Colors", "Header"] as const;
+/** A scrollable list where every font is shown in its own typeface. */
+function FontList<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string, string][]; onChange: (v: T) => void }) {
+  return (
+    <div className="rb-field"><span>{label}</span>
+      <div className="rb-fontlist" role="listbox" aria-label={label}>
+        {options.map(([k, name, stack]) => (
+          <button key={k} role="option" aria-selected={value === k} className={value === k ? "on" : ""} style={{ fontFamily: stack }} onClick={() => onChange(k)}>
+            <span>{name}</span>{value === k && <span aria-hidden>✓</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SectionsPanel({ data, onChange }: { data: ResumeData; onChange: (d: ResumeData) => void }) {
+  const st = data.style;
+  const set = (patch: Partial<ResumeStyle>) => onChange({ ...data, style: { ...st, ...patch } });
+  const setLayout = (type: SectionType, patch: Partial<SectionLayout>) => set({ layouts: { ...st.layouts, [type]: { ...st.layouts[type], ...patch } } });
+  const has = (t: SectionType) => data.sections.some((s) => s.type === t && s.items.length > 0);
+  return (
+    <>
+      <div className="rb-opt"><h4>Summary</h4>
+        <label className="toggle"><input type="checkbox" checked={st.summaryInHeader} onChange={(e) => set({ summaryInHeader: e.target.checked })} /> Display summary as part of header</label>
+        <label className="toggle"><input type="checkbox" checked={st.summaryHeading} disabled={st.summaryInHeader} onChange={(e) => set({ summaryHeading: e.target.checked })} /> Show summary heading</label>
+      </div>
+      <div className="rb-opt"><h4>Education</h4>
+        <Seg label="Title & subtitle order" value={st.swapEducation ? "b" : "a"} options={[["a", "Degree, School"], ["b", "School, Degree"]]} onChange={(v) => set({ swapEducation: v === "b" })} />
+      </div>
+      <div className="rb-opt"><h4>Work Experience</h4>
+        <Seg label="Title / subtitle order" value={st.swapExperience ? "b" : "a"} options={[["a", "Job Title – Employer"], ["b", "Employer – Job Title"]]} onChange={(v) => set({ swapExperience: v === "b" })} />
+        <label className="toggle"><input type="checkbox" checked={st.groupPromotions} onChange={(e) => set({ groupPromotions: e.target.checked })} /> Group promotions (consecutive roles at one employer share a heading)</label>
+      </div>
+      {LAYOUT_TYPES.map((t) => {
+        const L = layoutFor(st, t);
+        return (
+          <div className="rb-opt" key={t}><h4>{SECTION_TYPES[t].label}</h4>
+            {!has(t) ? <p className="muted small">To see design options, add {SECTION_TYPES[t].label.toLowerCase()}.</p> : <>
+              <Seg<DisplayMode> label="Display" value={L.mode} options={[["grid", "Grid"], ["rows", "Rows"], ["compact", "Compact"], ["bubble", "Bubble"]]} onChange={(v) => setLayout(t, { mode: v })} />
+              {L.mode === "grid" && <Seg label="Columns" value={String(L.cols)} options={[["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"]]} onChange={(v) => setLayout(t, { cols: Number(v) as SectionLayout["cols"] })} />}
+              {L.mode === "compact" && <Seg label="Separator" value={L.sep} options={[["bullet", "Bullet"], ["pipe", "Pipe"], ["comma", "Comma"]]} onChange={(v) => setLayout(t, { sep: v })} />}
+              {L.mode !== "grid" && <Seg label="Subinfo style" value={L.subinfo} options={[["colon", ": Colon"], ["dash", "– Dash"], ["bracket", "( ) Bracket"]]} onChange={(v) => setLayout(t, { subinfo: v })} />}
+            </>}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+const CUSTOM_GROUPS = ["Document", "Font size", "Spacing", "Entries", "Headings", "Font", "Colors", "Header", "Sections"] as const;
 
 function CustomizePanel({ data, onChange }: { data: ResumeData; onChange: (d: ResumeData) => void }) {
   const [group, setGroup] = useState<(typeof CUSTOM_GROUPS)[number]>("Document");
@@ -270,16 +357,16 @@ function CustomizePanel({ data, onChange }: { data: ResumeData; onChange: (d: Re
           <Seg label="Structure" value={st.entryLayout} options={[["full", "Full width"], ["columns", "Columns"]]} onChange={(v) => set({ entryLayout: v })} />
           <Seg label="Date & location position" value={st.datePos} options={[["right", "Right"], ["left", "Left"]]} onChange={(v) => set({ datePos: v })} />
           <Seg label="Subtitle placement" value={st.subtitle} options={[["same", "Try same line"], ["below", "Below title"]]} onChange={(v) => set({ subtitle: v })} />
-          <label className="toggle"><input type="checkbox" checked={st.twoColumnSkills} onChange={(e) => set({ twoColumnSkills: e.target.checked })} /> Skills in two columns</label>
         </>}
         {group === "Headings" && <>
           <Seg<HeadingStyle> label="Style" value={st.headingStyle} options={HEADING_STYLES} onChange={(v) => set({ headingStyle: v })} />
           <Seg label="Capitalization" value={st.caps} options={[["capitalize", "Capitalize"], ["uppercase", "Uppercase"]]} onChange={(v) => set({ caps: v })} />
         </>}
         {group === "Font" && <>
-          <Seg<FontKey> label="Body font" value={st.font} options={(Object.keys(FONTS) as FontKey[]).map((k) => [k, FONTS[k].label])} onChange={(v) => set({ font: v })} />
-          <Seg<FontKey | "same"> label="Name font" value={st.nameFont} options={[["same", "Same as body"], ...(Object.keys(FONTS) as FontKey[]).map((k): [FontKey, string] => [k, FONTS[k].label])]} onChange={(v) => set({ nameFont: v })} />
+          <FontList<FontKey> label="Body font" value={st.font} options={(Object.keys(FONTS) as FontKey[]).map((k) => [k, FONTS[k].label, FONTS[k].stack])} onChange={(v) => set({ font: v })} />
+          <FontList<FontKey | "same"> label="Name font" value={st.nameFont} options={[["same", "Same as body font", FONTS[st.font].stack], ...(Object.keys(FONTS) as FontKey[]).map((k): [FontKey, string, string] => [k, FONTS[k].label, FONTS[k].stack])]} onChange={(v) => set({ nameFont: v })} />
         </>}
+        {group === "Sections" && <SectionsPanel data={data} onChange={onChange} />}
         {group === "Header" && <>
           <Seg label="Text alignment" value={st.align} options={[["left", "Left"], ["center", "Center"]]} onChange={(v) => set({ align: v })} />
           <Seg label="Job title" value={st.headlinePos} options={[["inline", "Next to name"], ["below", "Below name"]]} onChange={(v) => set({ headlinePos: v })} />

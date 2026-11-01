@@ -19,9 +19,36 @@ export type SectionType =
   | "education" | "experience" | "skills" | "languages" | "certification" | "interests" | "projects" | "courses"
   | "awards" | "volunteering" | "publications" | "references" | "conferences" | "scores" | "teaching" | "custom";
 export interface ResumeSection { id: string; type: SectionType; title: string; hidden?: boolean; items: ResumeItem[] }
-export type FontKey = "serif" | "amiri" | "vollkorn" | "lora" | "classic" | "sans" | "mono";
 export type HeadingStyle = "underline" | "box" | "plain" | "bar" | "overline" | "dotted";
 /** Customize tab. Font sizes are in pt; the *Size fields are offsets from the base size (as in the reference builder). */
+export type DisplayMode = "grid" | "rows" | "compact" | "bubble";
+export interface SectionLayout { mode: DisplayMode; cols: 1 | 2 | 3 | 4; subinfo: "colon" | "dash" | "bracket"; sep: "bullet" | "pipe" | "comma" }
+/** Sections whose entries can be shown as a grid, rows, a compact line or bubbles. */
+export const LAYOUT_TYPES: SectionType[] = ["skills", "languages", "interests", "certification", "courses", "awards", "scores"];
+const BASE_LAYOUT: SectionLayout = { mode: "grid", cols: 1, subinfo: "colon", sep: "bullet" };
+const TYPE_LAYOUT: Partial<Record<SectionType, Partial<SectionLayout>>> = {
+  languages: { mode: "compact" }, interests: { mode: "compact", sep: "comma" }, certification: { cols: 3 }, scores: { cols: 3 },
+};
+export function layoutFor(style: Pick<ResumeStyle, "layouts">, type: SectionType): SectionLayout {
+  return { ...BASE_LAYOUT, ...TYPE_LAYOUT[type], ...(style.layouts?.[type] ?? {}) };
+}
+/** "Title: sub", "Title – sub" or "Title (sub)". */
+export function withSubinfo(title: string, sub: string, how: SectionLayout["subinfo"]): string {
+  if (!sub.trim()) return title;
+  return how === "dash" ? `${title} – ${sub}` : how === "bracket" ? `${title} (${sub})` : `${title}: ${sub}`;
+}
+/** Consecutive entries at the same employer (case-insensitive, non-empty) form one run. */
+export function groupRuns<T extends { subtitle: string }>(items: T[]): T[][] {
+  const key = (i: T) => i.subtitle.trim().toLowerCase();
+  const runs: T[][] = [];
+  for (const it of items) {
+    const last = runs[runs.length - 1];
+    if (last && key(it) && key(last[0]) === key(it)) last.push(it);
+    else runs.push([it]);
+  }
+  return runs;
+}
+
 export type AccentTarget = "name" | "headline" | "headings" | "line" | "dates" | "entryTitle";
 export const ACCENT_TARGETS: [AccentTarget, string][] = [["name", "Name"], ["headline", "Job title"], ["headings", "Headings"], ["line", "Headings line"], ["dates", "Dates"], ["entryTitle", "Entry title"]];
 export interface ResumeStyle {
@@ -34,7 +61,14 @@ export interface ResumeStyle {
   marginX: number; marginY: number;             // mm
   entryLayout: "columns" | "full"; datePos: "right" | "left"; subtitle: "same" | "below";
   headingStyle: HeadingStyle; caps: "capitalize" | "uppercase";
-  twoColumnSkills: boolean;
+  /** Summary: shown inside the header block (no heading), and/or with its own "Summary" heading. */
+  summaryInHeader: boolean; summaryHeading: boolean;
+  /** Education/experience: show the school/employer first, then the degree/job title. */
+  swapEducation: boolean; swapExperience: boolean;
+  /** Consecutive roles at the same employer share one employer heading. */
+  groupPromotions: boolean;
+  /** Per-section display (see layoutFor). */
+  layouts: Partial<Record<SectionType, Partial<SectionLayout>>>;
   /** Print footer: email on the left, page n/N on the right. */
   footer: boolean;
 }
@@ -75,17 +109,25 @@ export const DEFAULT_STYLE: ResumeStyle = {
   baseSize: 9.5, nameSize: 8, titleSize: 2, headingSize: 1, entrySize: 0,
   lineHeight: 1.15, spacing: 4, marginX: 12, marginY: 12,
   entryLayout: "columns", datePos: "right", subtitle: "same",
-  headingStyle: "underline", caps: "capitalize", twoColumnSkills: false, footer: false,
+  headingStyle: "underline", caps: "capitalize", summaryInHeader: false, summaryHeading: false, swapEducation: false, swapExperience: false, groupPromotions: true, layouts: {}, footer: false,
 };
-export const FONTS: Record<FontKey, { label: string; stack: string }> = {
+export const FONTS = {
   serif: { label: "Source Serif", stack: '"Source Serif 4", Georgia, "Times New Roman", serif' },
   amiri: { label: "Amiri", stack: 'Amiri, Georgia, serif' },
   vollkorn: { label: "Vollkorn", stack: 'Vollkorn, Georgia, serif' },
   lora: { label: "Lora", stack: 'Lora, Georgia, serif' },
-  classic: { label: "Classic", stack: 'Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif' },
-  sans: { label: "Sans-serif", stack: '"DM Sans", system-ui, "Segoe UI", Arial, sans-serif' },
+  merriweather: { label: "Merriweather", stack: 'Merriweather, Georgia, serif' },
+  garamond: { label: "EB Garamond", stack: '"EB Garamond", Garamond, Georgia, serif' },
+  crimson: { label: "Crimson Pro", stack: '"Crimson Pro", Georgia, serif' },
+  classic: { label: "Palatino", stack: 'Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif' },
+  sans: { label: "DM Sans", stack: '"DM Sans", system-ui, "Segoe UI", Arial, sans-serif' },
+  inter: { label: "Inter", stack: 'Inter, system-ui, "Segoe UI", Arial, sans-serif' },
+  lato: { label: "Lato", stack: 'Lato, system-ui, "Segoe UI", Arial, sans-serif' },
+  opensans: { label: "Open Sans", stack: '"Open Sans", system-ui, "Segoe UI", Arial, sans-serif' },
   mono: { label: "Monospace", stack: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace' },
-};
+} as const satisfies Record<string, { label: string; stack: string }>;
+export type FontKey = keyof typeof FONTS;
+export const fontStack = (k: string): string => (FONTS as Record<string, { stack: string }>)[k]?.stack ?? FONTS.serif.stack;
 export const HEADING_STYLES: [HeadingStyle, string][] = [["underline", "Underline"], ["box", "Box"], ["plain", "Plain"], ["bar", "Side bar"], ["overline", "Overline"], ["dotted", "Dotted"]];
 export const PAGES = { A4: { w: 210, h: 297 }, Letter: { w: 215.9, h: 279.4 } } as const;
 
@@ -112,7 +154,14 @@ export function normalizeResume(raw: unknown): ResumeData {
   const sections = Array.isArray(r.sections) ? r.sections : base.sections;
   return {
     profile: { ...base.profile, ...(r.profile ?? {}), links: Array.isArray(r.profile?.links) ? r.profile!.links : [] },
-    style: { ...DEFAULT_STYLE, ...(r.style ?? {}), accentOn: { ...DEFAULT_STYLE.accentOn, ...(r.style?.accentOn ?? {}) } },
+    style: (() => {
+      const old = (r.style ?? {}) as Partial<ResumeStyle> & { twoColumnSkills?: boolean };
+      const layouts = { ...(old.layouts ?? {}) };
+      if (old.twoColumnSkills && !layouts.skills) layouts.skills = { cols: 2 };
+      const { twoColumnSkills: _drop, ...rest } = old;
+      void _drop;
+      return { ...DEFAULT_STYLE, ...rest, layouts, accentOn: { ...DEFAULT_STYLE.accentOn, ...(old.accentOn ?? {}) } };
+    })(),
     sections: sections.map((s) => ({
       id: s.id || uid(),
       type: s.type in SECTION_TYPES ? s.type : "custom",
