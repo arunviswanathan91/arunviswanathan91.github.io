@@ -112,8 +112,15 @@ export function ResumePreview({ data }: { data: ResumeData }) {
   const base = { below: st.subtitle === "below", full: st.entryLayout === "full", left: st.datePos === "left" };
   return (
     <article className={`rv-page rv-h-${st.headingStyle} rv-${st.caps} rv-a-${st.align} rv-sep-${st.separator} rv-hl-${st.headlinePos}${(Object.keys(st.accentOn) as (keyof typeof st.accentOn)[]).filter((k) => st.accentOn[k]).map((k) => ` rv-ac-${k}`).join("")}`} style={vars}>
-      {/* Margins are per printed page, so they live on @page rather than on the article. */}
-      <style>{`@media print{@page{size:${page.w}mm ${page.h}mm;margin:${st.marginY}mm ${st.marginX}mm${st.footer ? `;@bottom-left{content:${JSON.stringify(p.email.split("|").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(" | "))};font:8pt ${fontStack(st.font)}}@bottom-right{content:counter(page) "/" counter(pages);font:8pt ${fontStack(st.font)}}` : ""}}}`}</style>
+      {/* No @page margin: browsers print their own date/title/URL/page-number lines in a page margin,
+          so the margin is built into the layout instead (see the spacer rows below). */}
+      <style>{`@media print{@page{size:${page.w}mm ${page.h}mm;margin:0}}`}</style>
+      {st.footer && <div className="rv-footer">{p.email.split("|").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(" | ")}</div>}
+      <table className="rv-frame" role="presentation">
+        {/* thead/tfoot repeat on every printed page: that is the top and bottom margin of each page */}
+        <thead><tr><td className="rv-spacer" /></tr></thead>
+        <tfoot><tr><td className="rv-spacer" /></tr></tfoot>
+        <tbody><tr><td className="rv-body">
       <header>
         <h1>{p.name || "Your name"}{p.headline && <span className="rv-headline">{p.headline}</span>}</h1>
         <div className="rv-contact">
@@ -144,6 +151,8 @@ export function ResumePreview({ data }: { data: ResumeData }) {
           </section>
         );
       })}
+        </td></tr></tbody>
+      </table>
     </article>
   );
 }

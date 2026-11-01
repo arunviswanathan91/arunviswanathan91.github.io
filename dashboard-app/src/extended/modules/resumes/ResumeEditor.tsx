@@ -336,8 +336,8 @@ function CustomizePanel({ data, onChange }: { data: ResumeData; onChange: (d: Re
       <div className="rb-card"><div className="rb-card-body">
         {group === "Document" && <>
           <Seg label="Page format" value={st.pageFormat} options={[["A4", "A4"], ["Letter", "US Letter"]]} onChange={(v) => set({ pageFormat: v })} />
-          <p className="muted small">When the print dialog opens, turn off “Headers and footers” so only the resume prints, and leave margins on Default.</p>
-          <label className="toggle"><input type="checkbox" checked={st.footer} onChange={(e) => set({ footer: e.target.checked })} /> Footer with email and page numbers (PDF only)</label>
+          <p className="muted small">In the print dialog choose “Save as PDF”. Margins are built into the page, so the browser’s own date, title and URL lines should not appear; if your browser still adds them, untick “Headers and footers”.</p>
+          <label className="toggle"><input type="checkbox" checked={st.footer} onChange={(e) => set({ footer: e.target.checked })} /> Footer with your email on every page (PDF only)</label>
           <button onClick={() => onChange({ ...data, style: { ...DEFAULT_STYLE, accentOn: { ...DEFAULT_STYLE.accentOn } } })}>Reset all styling</button>
         </>}
         {group === "Font size" && <>

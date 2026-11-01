@@ -101,3 +101,10 @@ test("itemFromMeta maps a looked-up paper onto a publication entry", () => {
   assert.equal(itemFromMeta({ arxiv_id: "2401.12345", title: "T" }).link, "https://arxiv.org/abs/2401.12345");
   assert.equal(itemFromMeta({ title: "T" }).link, "");
 });
+import { hasContent } from "../src/extended/modules/resumes/model.ts";
+test("blank entries are not printed, so no empty headings", () => {
+  const d = emptyResume();
+  d.sections = [newSection("awards", { items: [newItem()] }), newSection("education", { items: [newItem({ title: "PhD" })] })];
+  assert.equal(hasContent(newItem()), false);
+  assert.deepEqual(visibleSections(d).map((s) => s.type), ["education"]);
+});

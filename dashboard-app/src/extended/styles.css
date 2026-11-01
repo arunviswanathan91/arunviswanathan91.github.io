@@ -704,7 +704,7 @@
 @media (max-width: 900px) { .extension-workspace .rb-body { grid-template-columns: 1fr; } .extension-workspace .rb-editor, .extension-workspace .rb-preview { max-height: none; } .extension-workspace .rb-sheet { zoom: 0.45; } }
 
 /* The page. Always white with dark text, whatever the app theme. */
-.extension-workspace .rv-page { box-sizing: border-box; width: var(--rv-w); min-height: var(--rv-h); padding: var(--rv-my) var(--rv-mx); background: #fff; color: #111; font-family: var(--rv-font); font-size: var(--rv-base); line-height: var(--rv-lh); text-align: left; }
+.extension-workspace .rv-page { box-sizing: border-box; width: var(--rv-w); min-height: var(--rv-h); padding: 0; background: #fff; color: #111; font-family: var(--rv-font); font-size: var(--rv-base); line-height: var(--rv-lh); text-align: left; }
 .extension-workspace .rv-page a { color: inherit; text-decoration: none; }
 .extension-workspace .rv-page h1 { margin: 0; font: 700 var(--rv-name)/1.2 var(--rv-name-font); color: #111; }
 .extension-workspace .rv-headline { font: 400 var(--rv-title)/1.2 var(--rv-font); margin-left: 0.6em; }
@@ -817,3 +817,13 @@
 .extension-workspace .rb-gmeta strong { overflow-wrap: anywhere; }
 .extension-workspace .rb-fontlist button { white-space: normal; }
 .extension-workspace .lookup { min-width: 0; }
+
+/* Page frame: left/right margin is padding, top/bottom is a spacer row that repeats on every printed page. */
+.extension-workspace .rv-frame { width: 100%; border-collapse: collapse; border-spacing: 0; table-layout: fixed; }
+.extension-workspace .rv-frame td { padding: 0; vertical-align: top; }
+.extension-workspace .rv-spacer { height: var(--rv-my); }
+.extension-workspace .rv-body { padding: 0 var(--rv-mx) !important; }
+.extension-workspace .rv-footer { display: none; }
+@media print {
+  .extension-workspace .rv-footer { display: block; position: fixed; left: var(--rv-mx); right: var(--rv-mx); bottom: 2.5mm; font: 8pt var(--rv-font); color: #444; }
+}

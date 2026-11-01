@@ -197,10 +197,15 @@ export function dateRange(i: Pick<ResumeItem, "start" | "end">): string {
 }
 
 /** What shows on the page: hidden sections and items are dropped, as are sections left empty. */
+/** A freshly added, still-blank entry should not print an empty heading. */
+export function hasContent(i: ResumeItem): boolean {
+  return [i.title, i.subtitle, i.body, i.start, i.end, i.location, i.link].some((v) => v.trim());
+}
+
 export function visibleSections(d: ResumeData): ResumeSection[] {
   return d.sections
     .filter((s) => !s.hidden)
-    .map((s) => ({ ...s, items: s.items.filter((i) => !i.hidden) }))
+    .map((s) => ({ ...s, items: s.items.filter((i) => !i.hidden && hasContent(i)) }))
     .filter((s) => s.items.length > 0);
 }
 
