@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 import { supabase } from "../../lib/supabase.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { PageHeader } from "../../components/ui.tsx";
-import { list, update, useLoad } from "../../lib/db.ts";
+import { list, trash, update, useLoad } from "../../lib/db.ts";
 import { downloadCsv } from "../../lib/download.ts";
 import type { BudgetCategory } from "../../lib/types.ts";
 import { TransactionForm } from "../budget/TransactionForm.tsx";
@@ -76,21 +76,16 @@ export function LoansView() {
   }
 
   async function remove(table: "loans" | "loan_payments", id: string, what: string) {
-    if (!supabase || !confirm(`Delete this ${what}? This cannot be undone.`)) return;
-    const { error } = await supabase.from(table).delete().eq("id", id);
-    if (error) alert(error.message);
+    if (!supabase || !confirm(`Move this ${what} to Trash? You can restore it from Trash.`)) return;
+    try { await trash(table, id); } catch (e) { alert((e as Error).message); }
     await reload();
   }
 
-  // Deleting a loan also removes its person/bank once nothing else uses the name.
+  // The loan (with its repayments) goes to Trash. Its person/bank is kept, so Restore can put the loan back;
+  // "Clean up names" removes names nothing uses any more.
   async function removeLoan(loan: Loan) {
-    if (!supabase || !confirm("Delete this loan and its repayments? This cannot be undone.")) return;
-    const { error } = await supabase.from("loans").delete().eq("id", loan.id);
-    if (error) return alert(error.message);
-    const rest = loans.filter((l) => l.id !== loan.id);
-    const orphan = await unusedContacts(contacts.filter((c) => c.id === loan.contact_id), rest).catch(() => []);
-    await deleteContacts(orphan.map((c) => c.id)).catch(() => undefined);
-    if (orphan.length && person === loan.contact_id) setPerson(null);
+    if (!supabase || !confirm("Move this loan and its repayments to Trash? You can restore it from Trash.")) return;
+    try { await trash("loans", loan.id); } catch (e) { return alert((e as Error).message); }
     await reload();
   }
 
@@ -98,7 +93,7 @@ export function LoansView() {
     try {
       const unused = await unusedContacts(contacts, loans);
       if (!unused.length) return alert("Every name here is used by a loan or a meeting.");
-      if (!confirm(`Remove ${unused.length} unused name${unused.length > 1 ? "s" : ""} (${unused.map((c) => c.name).join(", ")})? They have no loans, meetings or shared spending.`)) return;
+      if (!confirm(`Move ${unused.length} unused name${unused.length > 1 ? "s" : ""} (${unused.map((c) => c.name).join(", ")}) to Trash? They have no loans, meetings or shared spending.`)) return;
       await deleteContacts(unused.map((c) => c.id));
       await reload();
     } catch (e) {
@@ -109,8 +104,8 @@ export function LoansView() {
   async function removePerson(id: string) {
     if (!supabase) return;
     if (loans.some((l) => l.contact_id === id)) return alert("Delete this person’s loans first.");
-    if (!confirm("Remove this person?")) return;
-    await supabase.from("contacts").delete().eq("id", id);
+    if (!confirm("Move this person to Trash? You can restore it from Trash.")) return;
+    try { await trash("contacts", id); } catch (e) { return alert((e as Error).message); }
     setPerson(null);
     await reload();
   }

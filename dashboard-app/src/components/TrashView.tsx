@@ -9,6 +9,9 @@ const TYPE_LABELS:Record<string,string>={
  tag:"Tag",person:"Person",project_person:"Project person",project_stage:"Project stage",project_link:"Project link",
  project_field:"Custom field",publication_node:"Publication step",
  publication_stage_event:"Publication stage change",
+ paper:"Paper",note:"Note",meeting:"Meeting",action_item:"Action item",deadline:"Deadline",loan:"Loan / card",repayment:"Repayment",
+ transaction:"Transaction",budget_category:"Budget category",recurring_transaction:"Recurring transaction",contact:"Person / bank",
+ resume:"Resume",habit:"Habit",
 };
 const dateTime=(value:string)=>new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(value));
 const timeLeft=(value:string)=>{
@@ -30,6 +33,7 @@ export function TrashView(){
   setBusy(id);setNotice("");
   const error=await action();
   if(error)setNotice(error);
+  else window.dispatchEvent(new Event("ws:changed")); // workspace pages (papers, notes, loans…) reload after a restore
   setBusy(null);
  };
  const clear=()=>ask({title:"Empty Trash permanently?",message:"Every item and restart group in Trash will be permanently deleted. This cannot be undone.",confirmLabel:"Delete everything"},
@@ -38,7 +42,7 @@ export function TrashView(){
  return <div className="entity-view">
   <div className="view-head trash-head">
    <div><p className="kicker">Workspace</p><h1>Trash</h1>
-    <p className="subtitle">Deleted items stay recoverable until their scheduled removal date. Discovery restarts are kept together as dated groups.</p></div>
+    <p className="subtitle">Anything you delete stays here for 30 days (14 if you changed it in Settings), can be restored until then, and is removed for good only after the date shown. Discovery restarts are kept together as dated groups.</p></div>
    {trashItems.rows.length>0&&<button className="danger-button" disabled={busy!==null} onClick={clear}><Trash2/>Empty Trash</button>}
   </div>
 
@@ -48,7 +52,7 @@ export function TrashView(){
   {notice&&<div className="data-notice" role="alert">{notice}</div>}
 
   {!setupError&&trashItems.rows.length===0&&<div className="empty-state trash-empty">
-   <Trash2/><p>Trash is empty.</p><small>Items you delete or archive during a discovery restart will appear here.</small>
+   <Trash2/><p>Trash is empty.</p><small>Papers, notes, meetings, deadlines, loans, budget entries, resumes and other deleted items appear here.</small>
   </div>}
 
   <div className="trash-list">

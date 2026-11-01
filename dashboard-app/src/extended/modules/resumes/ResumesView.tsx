@@ -1,5 +1,5 @@
 import { Copy, Download, FilePlus2, FileText, MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
-import { insert, list, remove, update, useLoad } from "../../lib/db.ts";
+import { insert, list, trash, update, useLoad } from "../../lib/db.ts";
 import { go } from "../../lib/route.ts";
 import { confirmDanger, ErrorText, PageHeader } from "../../components/ui.tsx";
 import { ago, cloneResume, emptyResume, normalizeResume, type ResumeData } from "./model.ts";
@@ -17,7 +17,7 @@ export function ResumesView() {
   const { data, error } = useLoad(() => list<Row>("resumes", { order: [["updated_at", false]] }), []);
   const duplicate = async (r: Row) => { await insert("resumes", { title: `${r.title} (copy)`, data: cloneResume(normalizeResume(r.data)) }); };
   const rename = async (r: Row) => { const t = prompt("Resume name", r.title)?.trim(); if (t) await update("resumes", r.id, { title: t }); };
-  const del = async (r: Row) => { if (confirmDanger(`Delete “${r.title}”? This can’t be undone.`)) await remove("resumes", { id: r.id }); };
+  const del = async (r: Row) => { if (confirmDanger(`Move “${r.title}” to Trash? You can restore it from Trash.`)) await trash("resumes", r.id); };
   const close = (e: React.MouseEvent) => (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
   return (
     <section>

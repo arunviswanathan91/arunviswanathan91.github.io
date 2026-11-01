@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Archive, ArchiveRestore, ArrowLeft, Download, Pin, Trash2 } from "lucide-react";
-import { getOne, list, remove, update, useLoad } from "../../lib/db.ts";
+import { getOne, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDateTime } from "../../lib/dates.ts";
 import { downloadNotes } from "../../lib/download.ts";
 import { go, href } from "../../lib/route.ts";
@@ -35,8 +35,8 @@ function NoteEditor({ initial }: { initial: Note }) {
   }
 
   async function del() {
-    if (!confirmDanger(`Delete “${note.title}”? This cannot be undone. Consider archiving instead.`)) return;
-    await remove("notes", { id: note.id });
+    if (!confirmDanger(`Move “${note.title}” to Trash? You can restore it from Trash.`)) return;
+    await trash("notes", note.id);
     go("notes");
   }
 

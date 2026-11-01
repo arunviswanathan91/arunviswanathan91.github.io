@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Copy, Plus, Settings2, Trash2 } from "lucide-react";
-import { insert, list, remove, rpc, update, upsert, useLoad } from "../../lib/db.ts";
+import { insert, list, remove, rpc, trash, update, upsert, useLoad } from "../../lib/db.ts";
 import { addMonths, fmtDate, startOfMonth, today } from "../../lib/dates.ts";
 import { friendBalances, friendSummary } from "./friends.ts";
 import { MoneyOutCard } from "./MoneyOutCard.tsx";
@@ -319,7 +319,7 @@ function CategoryManager({ categories }: { categories: BudgetCategory[] }) {
                 <button
                   className="icon danger"
                   aria-label={`Delete ${c.name}`}
-                  onClick={() => confirmDanger(`Delete “${c.name}”? Only possible if no transactions use it — archive it otherwise.`) && void run(remove("budget_categories", { id: c.id }))}
+                  onClick={() => confirmDanger(`Move “${c.name}” to Trash? Only possible if no transactions use it — archive it otherwise. You can restore it from Trash.`) && void run(trash("budget_categories", c.id))}
                 >
                   <Trash2 size={14} />
                 </button>

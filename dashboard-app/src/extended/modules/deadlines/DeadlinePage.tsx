@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, Check, Pencil, Plus, Trash2 } from "lucide-react";
-import { getOne, list, remove, update, useLoad } from "../../lib/db.ts";
+import { getOne, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDate, relDay } from "../../lib/dates.ts";
 import { go, href } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
@@ -38,8 +38,8 @@ function DeadlineDetail({ d, tasks }: { d: Deadline; tasks: Task[] }) {
   const open = isOpenDeadline(d);
 
   async function del() {
-    if (!confirmDanger(`Delete “${d.title}”? Preparation tasks are kept. This cannot be undone.`)) return;
-    await remove("deadlines", { id: d.id });
+    if (!confirmDanger(`Move “${d.title}” to Trash? Preparation tasks are kept. You can restore it from Trash.`)) return;
+    await trash("deadlines", d.id);
     go("deadlines");
   }
 
