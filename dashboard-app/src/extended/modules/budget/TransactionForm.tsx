@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { insert, list, remove, update, useLoad } from "../../lib/db.ts";
+import { insert, list, trash, update, useLoad } from "../../lib/db.ts";
 import { today } from "../../lib/dates.ts";
 import { CURRENCIES, type BudgetCategory, type Transaction } from "../../lib/types.ts";
 import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
@@ -71,8 +71,8 @@ export function TransactionForm({ tx, categories, currency, presetKind = "expens
   }
 
   async function del() {
-    if (!tx || !confirmDanger(`Delete “${tx.description}”?`)) return;
-    await remove("transactions", { id: tx.id });
+    if (!tx || !confirmDanger(`Move “${tx.description}” to Trash? You can restore it from Trash.`)) return;
+    await trash("transactions", tx.id);
     onDone();
   }
 

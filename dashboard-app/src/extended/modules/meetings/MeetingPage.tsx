@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Archive, ArchiveRestore, ArrowLeft, CheckSquare, FileDown, ListPlus, Plus, Trash2, UserPlus } from "lucide-react";
 import { supabase as original } from "../../../lib/supabase";
-import { emitChange, getOne, insert, list, remove, rpc, update, useLoad } from "../../lib/db.ts";
+import { emitChange, getOne, insert, list, remove, rpc, trash, update, useLoad } from "../../lib/db.ts";
 import { addDays, fmtDate, fromLocalInput, toLocalInput, today } from "../../lib/dates.ts";
 import { prepAgenda } from "./prep.ts";
 import { go, href } from "../../lib/route.ts";
@@ -58,8 +58,8 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
   }
 
   async function del() {
-    if (!confirmDanger(`Delete “${m.title}” with its notes and action items? Tasks created from it are kept. This cannot be undone.`)) return;
-    await remove("meetings", { id: m.id });
+    if (!confirmDanger(`Move “${m.title}” with its notes and action items to Trash? Tasks created from it are kept. You can restore it from Trash.`)) return;
+    await trash("meetings", m.id);
     go("meetings");
   }
 
@@ -266,7 +266,7 @@ function ActionItems({ meeting, projectIds }: { meeting: Meeting; projectIds: st
                 type="button"
                 className="icon danger"
                 aria-label={`Delete ${it.text}`}
-                onClick={() => confirmDanger("Delete this action item? A task created from it is kept.") && void remove("meeting_action_items", { id: it.id })}
+                onClick={() => confirmDanger("Move this action item to Trash? A task created from it is kept.") && void trash("meeting_action_items", it.id).catch((e: Error) => alert(e.message))}
               >
                 <Trash2 size={14} />
               </button>

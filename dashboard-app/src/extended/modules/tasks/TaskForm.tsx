@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { fmtDate } from "../../lib/dates.ts";
-import { insert, list, remove, update, useLoad } from "../../lib/db.ts";
+import { insert, list, trash, update, useLoad } from "../../lib/db.ts";
 import { PRIORITY, TASK_STATUS, WEEKDAYS, type Deadline, type Priority, type Recurrence, type Task, type TaskStatus } from "../../lib/types.ts";
 import { ProjectSelect } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
@@ -55,8 +55,8 @@ export function TaskForm({ task, preset, onDone }: { task?: Task; preset?: TaskP
   }
 
   async function del() {
-    if (!task || !confirmDanger(`Delete the task “${task.title}”?`)) return;
-    await remove("tasks", { id: task.id });
+    if (!task || !confirmDanger(`Move the task “${task.title}” to Trash? You can restore it from Trash.`)) return;
+    await trash("tasks", task.id);
     onDone();
   }
 

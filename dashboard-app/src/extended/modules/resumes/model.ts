@@ -37,6 +37,13 @@ export function withSubinfo(title: string, sub: string, how: SectionLayout["subi
   if (!sub.trim()) return title;
   return how === "dash" ? `${title} – ${sub}` : how === "bracket" ? `${title} (${sub})` : `${title}: ${sub}`;
 }
+/** Deal items into columns one by one (1st → column 1, 2nd → column 2, 3rd → column 1 …), as FlowCV does for skills. */
+export function roundRobin<T>(items: T[], cols: number): T[][] {
+  const out: T[][] = Array.from({ length: Math.max(1, cols) }, () => []);
+  items.forEach((it, n) => out[n % out.length].push(it));
+  return out;
+}
+
 /** Consecutive entries at the same employer (case-insensitive, non-empty) form one run. */
 export function groupRuns<T extends { subtitle: string }>(items: T[]): T[][] {
   const key = (i: T) => i.subtitle.trim().toLowerCase();

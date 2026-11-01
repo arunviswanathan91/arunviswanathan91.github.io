@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase.ts";
+import { trash } from "../../lib/db.ts";
 import type { Contact, Loan } from "./balance.ts";
 export { findByName, uniqueByName } from "./balance.ts";
 
@@ -23,6 +24,5 @@ export async function unusedContacts(contacts: Contact[], loans: Loan[]): Promis
 
 export async function deleteContacts(ids: string[]): Promise<void> {
   if (!supabase || !ids.length) return;
-  const { error } = await supabase.from("contacts").delete().in("id", ids);
-  if (error) throw new Error(error.message);
+  for (const id of ids) await trash("contacts", id); // to Trash, not gone for good
 }

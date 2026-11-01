@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
-import { getOne, insert, list, remove, update, useLoad } from "../../lib/db.ts";
+import { getOne, insert, list, remove, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDate, today } from "../../lib/dates.ts";
 import { go, href } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
@@ -83,8 +83,8 @@ function PaperDetail({ paper, links, notes }: { paper: Paper; links: ProjectPape
   }
 
   async function del() {
-    if (!confirmDanger(`Delete “${paper.title}” and its reading notes? Linked notes are kept. This cannot be undone.`)) return;
-    await remove("papers", { id: paper.id });
+    if (!confirmDanger(`Move “${paper.title}” and its reading notes to Trash? Linked notes are kept. You can restore it from Trash.`)) return;
+    await trash("papers", paper.id);
     go("papers");
   }
 

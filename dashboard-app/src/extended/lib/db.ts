@@ -72,6 +72,18 @@ export async function update<T>(table: string, id: string, values: object, quiet
   return row;
 }
 
+/** Move a record to Trash: recoverable from Trash until the retention period ends (30 days by default), then deleted. */
+export async function trash(table: string, id: string): Promise<void> {
+  try {
+    await rpc("trash", { p_table: table, p_id: id });
+  } catch (e) {
+    const msg = (e as Error).message;
+    throw new Error(/ws_trash|schema cache/i.test(msg) ? "Trash for this module needs the latest database setup: run supabase/trash-workspace.sql in the Supabase SQL Editor." : msg);
+  }
+  emitChange();
+  window.dispatchEvent(new CustomEvent("dash:trash-changed")); // refresh the Trash list
+}
+
 export async function remove(table: string, match: Record<string, string>): Promise<void> {
   check(await sb().from(table).delete().match(match));
   emitChange();
