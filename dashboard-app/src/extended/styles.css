@@ -272,7 +272,8 @@
 .extension-workspace .pick-list button { width: 100%; flex-direction: column; align-items: flex-start; border: 0; text-align: left; white-space: normal; }
 
 /* ── Cards and grids ───────────────────────────────────────────────────── */
-.extension-workspace .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
+.extension-workspace .card-grid { display: block; column-width: 290px; column-gap: 16px; }
+.extension-workspace .card-grid > * { break-inside: avoid; margin: 0 0 16px; width: 100%; box-sizing: border-box; display: block; }
 .extension-workspace .project-card { display: flex; flex-direction: column; gap: 9px; padding: 18px; color: var(--text); border-top: 3px solid var(--sec-projects); transition: transform 0.2s var(--ease), box-shadow 0.2s; }
 .extension-workspace .project-card:hover { text-decoration: none; transform: translateY(-2px); box-shadow: var(--shadow-hover); }
 .extension-workspace .project-card h3 { text-transform: none; letter-spacing: 0; font-size: 1.2rem; font-weight: 600; color: var(--text); margin: 0; }
@@ -299,7 +300,8 @@
 .extension-workspace .quick-actions { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; margin-bottom: 24px; }
 .extension-workspace .quick-actions button { flex-direction: column; gap: 7px; padding: 12px 6px; border-radius: 14px; font-size: 0.82rem; font-weight: 500; background: var(--surface); box-shadow: var(--shadow); white-space: normal; text-align: center; line-height: 1.2; }
 .extension-workspace .quick-actions button:hover:not(:disabled) { background: var(--tone-soft); border-color: transparent; transform: translateY(-1px); }
-.extension-workspace .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; align-items: start; }
+/* Masonry: cards stack under each other with no gaps, however tall they are. */
+.extension-workspace .home-grid { display: block; column-width: 350px; column-gap: 16px; }
 .extension-workspace .home-card { min-width: 0; animation: rise 0.35s var(--ease) both; }
 .extension-workspace .home-card:nth-child(2) { animation-delay: 0.03s; } .extension-workspace .home-card:nth-child(3) { animation-delay: 0.06s; } .extension-workspace .home-card:nth-child(4) { animation-delay: 0.09s; }
 .extension-workspace .home-card:nth-child(5) { animation-delay: 0.12s; } .extension-workspace .home-card:nth-child(6) { animation-delay: 0.15s; } .extension-workspace .home-card:nth-child(7) { animation-delay: 0.18s; } .extension-workspace .home-card:nth-child(8) { animation-delay: 0.21s; }
@@ -537,7 +539,7 @@
   .extension-workspace h1 { font-size: 1.6rem; }
   .extension-workspace .home-hero h1 { font-size: 1.8rem; }
   .extension-workspace .grid-2, .extension-workspace .reading-notes { grid-template-columns: 1fr; }
-  .extension-workspace .home-grid { grid-template-columns: 1fr; }
+  .extension-workspace .home-grid { column-width: auto; column-count: 1; }
   .extension-workspace .searchbox { max-width: none; }
   .extension-workspace .calendar-day { min-height: 64px; padding: 3px; }
   .extension-workspace .cal-item { font-size: 0.64rem; padding: 1px 3px; }
@@ -614,8 +616,8 @@
 }
 
 /* Weekly review */
-.extension-workspace .review-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; align-items: start; }
-.extension-workspace .review-wide { grid-column: 1 / -1; }
+.extension-workspace .review-grid { display: block; column-width: 320px; column-gap: 14px; }
+.extension-workspace .review-wide { grid-column: 1 / -1; column-span: all; }
 .extension-workspace .review-grid textarea { width: 100%; }
 .extension-workspace .recurring-list li { align-items: flex-start; }
 .extension-workspace .recurring-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
@@ -821,3 +823,5 @@
 .extension-workspace .rv-m-compact .rv-chiplabel + .rv-chip::before { content: none !important; }
 .extension-workspace .rv-main a::after { content: " ↗"; font-size: 0.75em; font-weight: 400; }
 .extension-workspace .rv-skillcols { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 0 16pt; align-items: start; }
+.extension-workspace .home-grid > *, .extension-workspace .review-grid > * { break-inside: avoid; margin: 0 0 16px; width: 100%; box-sizing: border-box; display: block; }
+.extension-workspace .review-grid > * { margin-bottom: 14px; }

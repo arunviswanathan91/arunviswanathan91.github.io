@@ -9,6 +9,7 @@ import { Modal } from "../ui/Modal";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
 import { FieldInput } from "./FieldInput";
 import { GmailLinkPicker } from "./GmailLinkPicker";
+import { DoiFetch } from "./DoiFetch";
 import { useEntityCtx } from "./ctx";
 import { PublicationLifecycle } from "../publications/PublicationLifecycle";
 import { PublicationWorkflow } from "../publications/PublicationWorkflow";
@@ -62,6 +63,13 @@ export function Drawer({def,row,onClose,canEdit=true,canDelete=true,hiddenFields
    </div>}>
    <div className="panel-head"><h2>Details</h2>{canEdit&&<EditToggle editing={editing} onChange={value=>setEditingId(value?row.id:null)} label="record details"/>}</div>
    <div className="record-edit-grid">
+    {def.key==="reads"&&editing&&canEdit&&<DoiFetch currentId={row.id} onFill={fill=>{
+     const patch:Record<string,unknown>={};
+     if(fill.title)patch.title=fill.title;
+     if(fill.url)patch.url=fill.url;
+     if(fill.notes&&!String(row.notes??"").trim())patch.notes=fill.notes;
+     if(Object.keys(patch).length)void table.update(row.id,patch);
+    }}/>}
     {def.key==="publications"&&<PublicationLifecycle publication={row} canEdit={canEdit} canReassign={canDelete}/>} 
     {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
      <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>

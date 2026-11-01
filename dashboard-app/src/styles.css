@@ -1207,7 +1207,7 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 }
 
 .clippings-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.clippings-toolbar input{flex:1;min-width:220px}
-.clippings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr));gap:14px;align-items:start}
+.clippings-grid{display:block;column-width:270px;column-gap:14px}.clippings-grid>*{break-inside:avoid;margin:0 0 14px;width:100%;box-sizing:border-box;display:block}
 .clipping-card{border:1px solid var(--border,#cbd5d1);border-radius:12px;padding:16px;background:rgba(229,185,62,.035);min-width:0}
 .clipping-card h2{font-size:12px;line-height:1.4;margin:0 0 10px;font-weight:600;overflow-wrap:anywhere;opacity:.8}
 .clipping-card blockquote{font-size:12px;line-height:1.65;margin:0 0 14px;padding:0;border:0;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:9;overflow:hidden}
@@ -1301,3 +1301,9 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .date-field{display:flex;flex-direction:column;gap:2px;min-width:0;width:100%}
 .date-field>input{width:100%}
 .date-words{font-size:var(--f-2xs);color:var(--text-2);line-height:1.3}
+
+/* Reads: fetch details from a DOI */
+.doi-fetch{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;padding:12px;border:1px dashed var(--border,#d4d4d8);border-radius:12px;margin-bottom:4px}
+.doi-fetch-row{display:flex;gap:8px;align-items:center}
+.doi-fetch-row .input{flex:1;min-width:0}
+.doi-fetch-msg{margin:0;font-size:.85rem;opacity:.8;overflow-wrap:anywhere}
