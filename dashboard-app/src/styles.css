@@ -1301,3 +1301,10 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .date-field{display:flex;flex-direction:column;gap:2px;min-width:0;width:100%}
 .date-field>input{width:100%}
 .date-words{font-size:var(--f-2xs);color:var(--text-2);line-height:1.3}
+
+.clipping-table-wrap{max-height:260px;overflow:auto;margin:0 0 14px;border:1px solid var(--border,#cbd5d1);border-radius:8px}
+.clipping-table{border-collapse:collapse;font-size:11px;line-height:1.45;width:max-content;min-width:100%}
+.clipping-table caption{text-align:left;font-weight:600;padding:6px 8px;opacity:.8}
+.clipping-table th,.clipping-table td{border:1px solid var(--border,#cbd5d1);padding:4px 7px;text-align:left;vertical-align:top}
+.clipping-table th{background:rgba(229,185,62,.14)}
+.clipping-note{font-size:12px;line-height:1.5;margin:0 0 12px;padding:8px 10px;border-left:3px solid #e5b93e;background:rgba(229,185,62,.08);white-space:pre-wrap;overflow-wrap:anywhere}

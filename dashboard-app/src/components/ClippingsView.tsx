@@ -1,9 +1,14 @@
 import {useCallback,useEffect,useState} from 'react';
 import {supabase} from '../lib/supabase';
-type Clip={id:string;title:string;original_url:string;anchor:{exact:string;authors?:string[]};notes:string;tags:string[];created_at:string;doi:string|null;pmid:string|null;pmcid:string|null;zotero:{url?:string;status?:string;authors?:string[]}|null};
+type TableCell={t:string;h?:number;cs?:number;rs?:number};
+type ClipTable={caption?:string;rows:TableCell[][]};
+type Clip={id:string;title:string;original_url:string;anchor:{exact:string;authors?:string[];table?:ClipTable};notes:string;tags:string[];created_at:string;doi:string|null;pmid:string|null;pmcid:string|null;zotero:{url?:string;status?:string;authors?:string[]}|null};
 function safeLink(value:string){try{const u=new URL(value);return ['http:','https:','zotero:'].includes(u.protocol)?u.href:'#';}catch{return '#';}}
 function source(c:Clip){try{const u=new URL(c.original_url);u.hash='excerptide='+c.id;return safeLink(u.href);}catch{return '#';}}
 function authorLabel(c:Clip){const authors=c.zotero?.authors?.length?c.zotero.authors:c.anchor.authors;return authors?.length?authors[0]+(authors.length>1?' et al.':''):'Author unavailable';}
+function ClipTableView({table}:{table:ClipTable}){
+ return <div className="clipping-table-wrap"><table className="clipping-table">{table.caption&&<caption>{table.caption}</caption>}<tbody>{table.rows.map((row,r)=><tr key={r}>{row.map((cell,c)=>{const Tag=cell.h?'th':'td';return <Tag key={c} colSpan={cell.cs} rowSpan={cell.rs}>{cell.t}</Tag>;})}</tr>)}</tbody></table></div>;
+}
 function Card({clip,onSaved}:{clip:Clip;onSaved():void}){
  const [editing,setEditing]=useState(false);
  const [notes,setNotes]=useState(clip.notes),[tags,setTags]=useState(clip.tags.join(', ')),[status,setStatus]=useState(''),[busy,setBusy]=useState(false),[expanded,setExpanded]=useState(false);
@@ -11,7 +16,8 @@ function Card({clip,onSaved}:{clip:Clip;onSaved():void}){
  const remove=async()=>{if(!window.confirm('Delete this clipping and its browser highlight? Existing Obsidian notes and Zotero references will be kept.'))return;setBusy(true);setStatus('');try{const {error}=await supabase!.from('clippings').delete().eq('id',clip.id);if(error)throw error;onSaved();}catch(e){setStatus(e instanceof Error?e.message:typeof e==='object'&&e&&'message' in e?String(e.message):'Could not delete clipping');}finally{setBusy(false);}};
  return <article className="clipping-card">
  <h2 title={clip.title}>{authorLabel(clip)}</h2>
- <blockquote className={expanded?'expanded':''}>{clip.anchor.exact}</blockquote>
+ {clip.anchor.table&&Array.isArray(clip.anchor.table.rows)?<ClipTableView table={clip.anchor.table}/>:<blockquote className={expanded?'expanded':''}>{clip.anchor.exact}</blockquote>}
+ {clip.notes&&<p className="clipping-note"><strong>Note</strong> {clip.notes}</p>}
  <div className="clipping-actions"><a href={source(clip)} target="_blank" rel="noreferrer">Source ↗</a>{clip.zotero?.url&&<a href={safeLink(clip.zotero.url)}>Zotero ↗</a>}<button className="clipping-delete-button" disabled={busy} onClick={()=>void remove()} aria-label="Delete clipping">Delete</button><button className="clipping-details-button" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{expanded?'Close':'Details'}</button></div>
  {expanded&&<div className="clipping-details"><p className="clipping-reference">{clip.title}</p><small>{new Date(clip.created_at).toLocaleString()}</small><p><a href={safeLink(clip.original_url)} target="_blank" rel="noreferrer">Original page</a></p><small>{[clip.doi&&'DOI: '+clip.doi,clip.pmid&&'PMID: '+clip.pmid,clip.pmcid].filter(Boolean).join(' · ')}</small>{editing?<><label>Note<textarea className="input" value={notes} onChange={e=>setNotes(e.target.value)}/></label><label>Tags<input className="input" value={tags} onChange={e=>setTags(e.target.value)} placeholder="Comma-separated tags"/></label><button className="primary" onClick={()=>void save()} disabled={busy}>{busy?'Saving…':'Save'}</button><button className="secondary" disabled={busy} onClick={()=>{setNotes(clip.notes);setTags(clip.tags.join(", "));setEditing(false)}}>Cancel</button></>:<div className="detail-summary"><div><strong>Note</strong><p>{clip.notes||"No note yet."}</p></div><div><strong>Tags</strong><p>{clip.tags.join(", ")||"No tags yet."}</p></div><button className="secondary" onClick={()=>{setNotes(clip.notes);setTags(clip.tags.join(", "));setEditing(true)}}>Edit</button></div>}<span role="status"> {status}</span></div>}
  {!expanded&&status&&<p role="alert">{status}</p>}
