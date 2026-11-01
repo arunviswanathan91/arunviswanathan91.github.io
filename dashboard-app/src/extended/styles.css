@@ -709,8 +709,8 @@
 .extension-workspace .rv-page h1 { margin: 0; font: 700 var(--rv-name)/1.2 var(--rv-name-font); color: #111; }
 .extension-workspace .rv-headline { font: 400 var(--rv-title)/1.2 var(--rv-font); margin-left: 0.6em; }
 .extension-workspace .rv-contact { display: flex; flex-wrap: wrap; gap: 0 0.8em; margin-top: 3pt; }
-.extension-workspace .rv-sep-bar .rv-contact > span + span::before { content: "|"; margin-right: 0.8em; color: #777; }
-.extension-workspace .rv-sep-bullet .rv-contact > span + span::before { content: "•"; margin-right: 0.8em; color: #777; }
+.extension-workspace .rv-sep-bar .rv-contact > span:not(:last-child)::after { content: "|"; margin-left: 0.8em; color: #777; }
+.extension-workspace .rv-sep-bullet .rv-contact > span:not(:last-child)::after { content: "•"; margin-left: 0.8em; color: #777; }
 .extension-workspace .rv-sep-none .rv-contact { gap: 0 1.2em; }
 .extension-workspace .rv-a-center header { text-align: center; }
 .extension-workspace .rv-a-center .rv-contact { justify-content: center; }
@@ -827,3 +827,15 @@
 @media print {
   .extension-workspace .rv-footer { display: block; position: fixed; left: var(--rv-mx); right: var(--rv-mx); bottom: 2.5mm; font: 8pt var(--rv-font); color: #444; }
 }
+
+/* Match the FlowCV page: skills flow down two columns; compact lines run on; linked entries get a small mark */
+.extension-workspace .rv-gridlist.rv-flow { display: block; column-count: var(--cols, 1); column-gap: 16pt; }
+.extension-workspace .rv-gridlist.rv-flow .rv-entry { break-inside: avoid; }
+.extension-workspace .rv-gridlist .rv-sub { font-style: normal; }
+.extension-workspace .rv-m-compact { display: block; }
+.extension-workspace .rv-m-compact .rv-chiprow { display: inline; }
+.extension-workspace .rv-m-compact .rv-chiprow + .rv-chiprow::before { content: ", "; }
+.extension-workspace .rv-m-compact.rv-dash .rv-chiplabel::after { content: " —"; font-weight: 400; }
+.extension-workspace .rv-m-compact .rv-chiplabel { margin-right: 0.3em; }
+.extension-workspace .rv-m-compact .rv-chiplabel + .rv-chip::before { content: none !important; }
+.extension-workspace .rv-main a::after { content: " ↗"; font-size: 0.75em; font-weight: 400; }

@@ -27,7 +27,7 @@ export interface SectionLayout { mode: DisplayMode; cols: 1 | 2 | 3 | 4; subinfo
 export const LAYOUT_TYPES: SectionType[] = ["skills", "languages", "interests", "certification", "courses", "awards", "scores"];
 const BASE_LAYOUT: SectionLayout = { mode: "grid", cols: 1, subinfo: "colon", sep: "bullet" };
 const TYPE_LAYOUT: Partial<Record<SectionType, Partial<SectionLayout>>> = {
-  languages: { mode: "compact" }, interests: { mode: "compact", sep: "comma" }, certification: { cols: 3 }, scores: { cols: 3 },
+  languages: { mode: "compact" }, interests: { mode: "compact", sep: "comma" }, certification: { cols: 3 }, scores: { mode: "compact", sep: "pipe", subinfo: "dash" },
 };
 export function layoutFor(style: Pick<ResumeStyle, "layouts">, type: SectionType): SectionLayout {
   return { ...BASE_LAYOUT, ...TYPE_LAYOUT[type], ...(style.layouts?.[type] ?? {}) };

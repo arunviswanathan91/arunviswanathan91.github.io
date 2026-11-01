@@ -45,7 +45,8 @@ test("cloneResume gives fresh ids and no shared references", () => {
 });
 test("starter resume keeps the hidden skill groups hidden", () => {
   const skills = starterResume().sections.find((s) => s.type === "skills")!;
-  assert.deepEqual(skills.items.filter((i) => i.hidden).map((i) => i.title), ["Teaching Skills", "Project Management & Consulting"]);
+  assert.deepEqual(skills.items.filter((i) => i.hidden).map((i) => i.title).sort(), ["Instructional Technology & Online Teaching Tools", "Multicolor Flowcytometry", "Project Management & Consulting", "Teaching Skills"]);
+  assert.equal(starterResume().sections.find((s) => s.type === "publications")!.items.length, 7);
 });
 test("pdfFilename falls back and strips illegal characters", () => {
   assert.equal(pdfFilename("Research/CV: v2", "Arun"), "Research CV v2");

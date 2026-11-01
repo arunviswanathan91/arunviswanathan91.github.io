@@ -68,7 +68,7 @@ function Group({ s, st }: { s: ResumeSection; st: ResumeStyle }) {
   if (L.mode === "grid" || L.mode === "rows") {
     const cols = L.mode === "rows" ? 1 : L.cols;
     return (
-      <div className="rv-items rv-gridlist" style={{ "--cols": cols } as CSSProperties}>
+      <div className={`rv-items rv-gridlist${s.type === "skills" ? " rv-flow" : ""}`} style={{ "--cols": cols } as CSSProperties}>
         {s.items.map((i) => (
           <div key={i.id} className="rv-entry">
             <div className="rv-main"><strong>{i.title}</strong>{i.subtitle && (L.mode === "rows" ? <span>{L.subinfo === "dash" ? " – " : L.subinfo === "bracket" ? " (" : ": "}{i.subtitle}{L.subinfo === "bracket" ? ")" : ""}</span> : <div className="rv-sub">{i.link ? <a href={i.link}>{i.subtitle}</a> : i.subtitle}</div>)}</div>
@@ -80,7 +80,7 @@ function Group({ s, st }: { s: ResumeSection; st: ResumeStyle }) {
   }
   // compact / bubble: an item with bullet lines is a labelled group of chips, otherwise it is one chip
   return (
-    <div className={`rv-items rv-chips rv-m-${L.mode} rv-s-${L.sep}`}>
+    <div className={`rv-items rv-chips rv-m-${L.mode} rv-s-${L.sep}${L.subinfo === "dash" ? " rv-dash" : ""}`}>
       {s.items.map((i) => {
         const lines = bullets(i.body);
         const chips = lines.length ? lines : [withSubinfo(i.title, i.subtitle, L.subinfo)];
