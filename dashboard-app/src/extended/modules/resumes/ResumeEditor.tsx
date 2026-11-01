@@ -48,28 +48,27 @@ function Editor({ row }: { row: Row }) {
   const redo = () => { const nxt = future.current.pop(); if (!nxt) return; past.current.push(data); lastEdit.current = 0; apply(nxt); bump((n) => n + 1); };
   const setSection = (sid: string, f: (s: ResumeSection) => ResumeSection) => edit({ ...data, sections: data.sections.map((s) => (s.id === sid ? f(s) : s)) });
 
+  // The PDF is generated directly (real text, embedded fonts, page numbers); no browser print dialog.
+  const [making, setMaking] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   const download = async () => {
-    await flush();
-    const prev = document.title;
-    document.title = pdfFilename(title, data.profile.name); // becomes the PDF's file name
-    const restore = () => { document.title = prev; window.removeEventListener("afterprint", restore); };
-    window.addEventListener("afterprint", restore);
-    window.print();
+    if (making) return;
+    setMaking(true); setPdfError("");
+    try {
+      await flush();
+      const { downloadResumePdf } = await import("./pdf/make.tsx"); // loaded on first use: it is a large library
+      await downloadResumePdf(data, title);
+    } catch (e) { setPdfError((e as Error).message || "Could not create the PDF"); }
+    finally { setMaking(false); }
   };
-  // "Download PDF" from the gallery opens the editor with ?print=1 and prints straight away.
+  // "Download PDF" in the gallery opens the editor with ?print=1 and starts the download.
   const autoPrint = useRef(/[?&]print=1\b/.test(window.location.hash));
   useEffect(() => {
     if (!autoPrint.current) return;
     autoPrint.current = false;
     history.replaceState(null, "", window.location.hash.replace(/[?&]print=1\b/, ""));
-    const t = window.setTimeout(() => void download(), 700); // let fonts and layout settle
-    return () => window.clearTimeout(t);
+    void download();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  // Printing hides everything but the page (see styles.css).
-  useEffect(() => {
-    document.body.classList.add("resume-print");
-    return () => document.body.classList.remove("resume-print");
   }, []);
 
   return (
@@ -84,8 +83,9 @@ function Editor({ row }: { row: Row }) {
         <button className="icon" aria-label="Undo" title="Undo" disabled={!past.current.length} onClick={undo}><Undo2 size={16} /></button>
         <button className="icon" aria-label="Redo" title="Redo" disabled={!future.current.length} onClick={redo}><Redo2 size={16} /></button>
         <SaveIndicator status={status} error={error} />
-        <button className="primary" onClick={() => void download()}><Download size={15} /> Download PDF</button>
+        <button className="primary" disabled={making} onClick={() => void download()}><Download size={15} /> {making ? "Creating PDF…" : "Download PDF"}</button>
       </div>
+      {pdfError && <ErrorText error={`PDF failed: ${pdfError}. Check your connection (fonts are fetched when the PDF is made) and try again.`} />}
       <div className="rb-body">
         <div className="rb-editor">
           {tab === "content" ? (
@@ -336,8 +336,8 @@ function CustomizePanel({ data, onChange }: { data: ResumeData; onChange: (d: Re
       <div className="rb-card"><div className="rb-card-body">
         {group === "Document" && <>
           <Seg label="Page format" value={st.pageFormat} options={[["A4", "A4"], ["Letter", "US Letter"]]} onChange={(v) => set({ pageFormat: v })} />
-          <p className="muted small">In the print dialog choose “Save as PDF”. Margins are built into the page, so the browser’s own date, title and URL lines should not appear; if your browser still adds them, untick “Headers and footers”.</p>
-          <label className="toggle"><input type="checkbox" checked={st.footer} onChange={(e) => set({ footer: e.target.checked })} /> Footer with your email on every page (PDF only)</label>
+          <p className="muted small">The PDF is created directly: real selectable text, your chosen font embedded, and page numbers if the footer is on. Fonts are fetched from the web when you press Download.</p>
+          <label className="toggle"><input type="checkbox" checked={st.footer} onChange={(e) => set({ footer: e.target.checked })} /> Footer with your email and page numbers (PDF)</label>
           <button onClick={() => onChange({ ...data, style: { ...DEFAULT_STYLE, accentOn: { ...DEFAULT_STYLE.accentOn } } })}>Reset all styling</button>
         </>}
         {group === "Font size" && <>

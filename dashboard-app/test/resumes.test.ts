@@ -109,3 +109,9 @@ test("blank entries are not printed, so no empty headings", () => {
   assert.equal(hasContent(newItem()), false);
   assert.deepEqual(visibleSections(d).map((s) => s.type), ["education"]);
 });
+import { roundRobin } from "../src/extended/modules/resumes/model.ts";
+test("roundRobin deals items across columns like FlowCV skills", () => {
+  assert.deepEqual(roundRobin(["comp", "exp", "pre", "add", "soft"], 2), [["comp", "pre", "soft"], ["exp", "add"]]);
+  assert.deepEqual(roundRobin([1, 2, 3], 1), [[1, 2, 3]]);
+  assert.deepEqual(roundRobin([], 3), [[], [], []]);
+});

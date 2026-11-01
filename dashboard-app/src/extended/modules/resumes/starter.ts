@@ -43,7 +43,7 @@ export function starterResume(): ResumeData {
         i({ title: "Tutor", subtitle: "Aifer Education", start: "Feb 2024", end: "present", location: "Kozhikode, India", body: L("Conducting online CSIR-UGC exam preparation classes through Zoom for the subject of Developmental Biology.", "Delivering structured topic-wise lectures, sharing digital notes, and conducting weekly assessments.", "Designed and led MCQ practice sessions, PYQ (previous year question) discussions, and comprehensive revision classes.", "Engaging students through interactive sessions, Q&A discussions, and exam-focused strategy support.") }),
         i({ title: "Tutor", subtitle: "Research World Coaching Centre", start: "Dec 2016", end: "Jan 2020", location: "Calicut, India", body: L("Taught Developmental Biology, Endocrinology, Reproductive Biology, and Molecular Biology.", "Designed MCQ question banks and crash courses for national-level competitive exams.") }),
       ] }),
-      // Items are listed in the order that makes two flowing columns match the FlowCV page.
+      // Skill groups are dealt into the two columns one by one, so this order matches the FlowCV page.
       newSection("skills", { items: [
         i({ title: "Computational and statistical analysis", body: L(
           "R programming: Data processing, statistical analysis and custom scripting using RStudio and Google Colab.",
@@ -54,8 +54,6 @@ export function starterResume(): ResumeData {
           "Metabolomics and microbiome analysis: Data analysis and visualisation using MetaboAnalyst and MicrobiomeAnalyst.",
           "Functional enrichment: GSEA, GO, KEGG and Reactome analyses using clusterProfiler and ReactomePA.",
           "Data visualisation: Publication figures using ggplot2, ComplexHeatmap and EnhancedVolcano.") }),
-        i({ title: "Pre-clinical Animal Studies", body: L("Mouse handling, breeding of genetically modified mouse lines and PCR-based genotyping.", "Experimental mouse models of pancreatic and colorectal cancer. IVIS imaging and quantitative image analysis.", "Human tissue processing for patient-derived xenograft (PDX) models.") }),
-        i({ title: "Softwares", body: L("Statistical analysis and graphing: RStudio and GraphPad Prism.", "Flow cytometry acquisition and analysis: FlowJo, BD FACSDiva, and CytExpert.", "Image analysis: ImageJ, Custom image analysis using Segmentation models") }),
         i({ title: "Experimental Cancer Biology", body: L(
           "Cell culture: Mammalian cell culture and cancer cell-based experiments.",
           "Multicolor flow cytometry: Design of six-color panels for murine tumor immunophenotyping.",
@@ -65,7 +63,9 @@ export function starterResume(): ResumeData {
           "Functional assays: Cell viability, migration, colony formation, apoptosis, and reactive oxygen species measurements.",
           "Fluorescence microscopy: Multicolor imaging with five or more fluorescence channels and it analysis using segmentation models like cellposeSAM",
           "Histological staining: Hematoxylin and eosin (H&E), Masson’s trichrome, and Alcian blue staining.") }),
+        i({ title: "Pre-clinical Animal Studies", body: L("Mouse handling, breeding of genetically modified mouse lines and PCR-based genotyping.", "Experimental mouse models of pancreatic and colorectal cancer. IVIS imaging and quantitative image analysis.", "Human tissue processing for patient-derived xenograft (PDX) models.") }),
         i({ title: "Additional Laboratory Techniques", body: L("Bacterial cell culture.", "Circular dichroism and UV–visible spectroscopy.", "Dynamic light scattering.", "Cyclic voltammetry.") }),
+        i({ title: "Softwares", body: L("Statistical analysis and graphing: RStudio and GraphPad Prism.", "Flow cytometry acquisition and analysis: FlowJo, BD FACSDiva, and CytExpert.", "Image analysis: ImageJ, Custom image analysis using Segmentation models") }),
         // Hidden in the FlowCV resume; kept (hidden) so the content is not lost.
         i({ title: "Teaching Skills", hidden: true, body: "question skills, reinforcement skills, explaining skills, opening and close skills, small group discussions skills, class management skills, skills of organizing small group work and invidual work." }),
         i({ title: "Instructional Technology & Online Teaching Tools", hidden: true, body: L("Proficient in Zoom for virtual lectures, breakout rooms, screen sharing, and live Q&A.", "Experienced with Google Classroom for managing coursework, announcements, and submissions.", "Worked with Blackboard to deliver quizzes, track performance, and create learning modules.") }),
