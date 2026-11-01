@@ -704,13 +704,13 @@
 @media (max-width: 900px) { .extension-workspace .rb-body { grid-template-columns: 1fr; } .extension-workspace .rb-editor, .extension-workspace .rb-preview { max-height: none; } .extension-workspace .rb-sheet { zoom: 0.45; } }
 
 /* The page. Always white with dark text, whatever the app theme. */
-.extension-workspace .rv-page { box-sizing: border-box; width: var(--rv-w); min-height: var(--rv-h); padding: var(--rv-my) var(--rv-mx); background: #fff; color: #111; font-family: var(--rv-font); font-size: var(--rv-base); line-height: var(--rv-lh); text-align: left; }
+.extension-workspace .rv-page { box-sizing: border-box; width: var(--rv-w); min-height: var(--rv-h); padding: 0; background: #fff; color: #111; font-family: var(--rv-font); font-size: var(--rv-base); line-height: var(--rv-lh); text-align: left; }
 .extension-workspace .rv-page a { color: inherit; text-decoration: none; }
 .extension-workspace .rv-page h1 { margin: 0; font: 700 var(--rv-name)/1.2 var(--rv-name-font); color: #111; }
 .extension-workspace .rv-headline { font: 400 var(--rv-title)/1.2 var(--rv-font); margin-left: 0.6em; }
 .extension-workspace .rv-contact { display: flex; flex-wrap: wrap; gap: 0 0.8em; margin-top: 3pt; }
-.extension-workspace .rv-sep-bar .rv-contact > span + span::before { content: "|"; margin-right: 0.8em; color: #777; }
-.extension-workspace .rv-sep-bullet .rv-contact > span + span::before { content: "•"; margin-right: 0.8em; color: #777; }
+.extension-workspace .rv-sep-bar .rv-contact > span:not(:last-child)::after { content: "|"; margin-left: 0.8em; color: #777; }
+.extension-workspace .rv-sep-bullet .rv-contact > span:not(:last-child)::after { content: "•"; margin-left: 0.8em; color: #777; }
 .extension-workspace .rv-sep-none .rv-contact { gap: 0 1.2em; }
 .extension-workspace .rv-a-center header { text-align: center; }
 .extension-workspace .rv-a-center .rv-contact { justify-content: center; }
@@ -737,7 +737,6 @@
 .extension-workspace .rv-side { text-align: right; white-space: nowrap; flex-shrink: 0; }
 .extension-workspace .rv-full .rv-side { text-align: left; white-space: normal; }
 .extension-workspace .rv-page ul { margin: 1pt 0 0; padding-left: 1.1em; }
-.extension-workspace .rv-cols .rv-items { column-count: 2; column-gap: 16pt; }
 
 @media print {
   body.resume-print .sidebar, body.resume-print .topbar, body.resume-print .rb-bar, body.resume-print .rb-editor { display: none !important; }
@@ -751,8 +750,6 @@
 }
 .extension-workspace .rb-swatches { flex-wrap: wrap; } .extension-workspace .rb-swatches input[type=color] { width: 28px; height: 28px; padding: 0; border: 0; background: none; }
 .extension-workspace .rb-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
-.extension-workspace .rv-grid3 .rv-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 14pt; }
-.extension-workspace .rv-inline .rv-items { display: flex; flex-wrap: wrap; gap: 0 28pt; }
 
 /* Resume gallery */
 .extension-workspace .rb-gallery { display: grid; grid-template-columns: repeat(auto-fill, 265px); gap: 22px; align-items: start; }
@@ -770,3 +767,75 @@
 .extension-workspace .rb-menu-list a:hover, .extension-workspace .rb-menu-list button:hover { background: var(--surface-2); }
 .extension-workspace .rb-menu-list .danger { color: #b42318; }
 .extension-workspace .rb-starters { margin-top: 22px; }
+
+/* Entry groups: grid/rows, compact, bubbles; promotions; summary */
+.extension-workspace .rv-gridlist { display: grid; grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr)); gap: 0 14pt; }
+.extension-workspace .rv-sub { font-style: italic; }
+.extension-workspace .rv-chips { display: flex; flex-direction: column; gap: 2pt; }
+.extension-workspace .rv-chiprow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2pt 0; }
+.extension-workspace .rv-chiplabel { margin-right: 0.6em; }
+.extension-workspace .rv-m-compact .rv-chiprow:not(:has(.rv-chiplabel)) { display: inline; }
+.extension-workspace .rv-m-compact .rv-chip + .rv-chip::before { margin: 0 0.5em; color: #777; }
+.extension-workspace .rv-m-compact.rv-s-bullet .rv-chip + .rv-chip::before { content: "•"; }
+.extension-workspace .rv-m-compact.rv-s-pipe .rv-chip + .rv-chip::before { content: "|"; }
+.extension-workspace .rv-m-compact.rv-s-comma .rv-chip + .rv-chip::before { content: ","; margin: 0 0.3em 0 0; }
+.extension-workspace .rv-m-bubble .rv-chiprow { gap: 4pt; }
+.extension-workspace .rv-m-bubble .rv-chip { border: 1px solid #999; border-radius: 99px; padding: 0 7pt; }
+.extension-workspace .rv-group > .rv-main { margin-bottom: 1pt; }
+.extension-workspace .rv-roles { border-left: 1px solid #bbb; padding-left: 8pt; display: flex; flex-direction: column; gap: var(--rv-gap); }
+.extension-workspace .rv-summary.rv-plain { margin-top: 0; }
+.extension-workspace .rv-a-center .rv-summary { text-align: center; }
+.extension-workspace .rb-fontlist { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.extension-workspace .rb-fontlist button { display: flex; justify-content: space-between; width: 100%; border: 0; background: none; border-radius: 0; padding: 7px 12px; text-align: left; font-size: 1.05rem; color: var(--text); }
+.extension-workspace .rb-fontlist button:hover { background: var(--surface-2); }
+.extension-workspace .rb-fontlist button.on { background: var(--tone-soft); font-weight: 600; }
+.extension-workspace .rb-opt { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 1px solid var(--border); }
+.extension-workspace .rb-opt:first-child { border-top: 0; padding-top: 0; }
+.extension-workspace .rb-opt h4 { margin: 0; font-size: 1rem; }
+.extension-workspace .rb-ell { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.extension-workspace .rb-toggle { overflow: hidden; }
+.extension-workspace .rb-editor { overflow-x: hidden; }
+.extension-workspace .rb-item, .extension-workspace .rb-card { min-width: 0; }
+.extension-workspace .rb-card-body .tabs { flex-wrap: wrap; }
+.extension-workspace .rb-doi-row { grid-template-columns: 1fr auto; }
+
+/* Resume builder: nothing may run past its box. Buttons default to one line, so wrap them. */
+.extension-workspace .rb, .extension-workspace .rb-body > * { min-width: 0; }
+.extension-workspace .rb button, .extension-workspace .rb-gallery button, .extension-workspace .rb-gmeta { white-space: normal; overflow-wrap: anywhere; }
+.extension-workspace .rb-tiles { grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); }
+.extension-workspace .rb-tile { align-items: flex-start; justify-content: flex-start; text-align: left; min-width: 0; height: auto; line-height: 1.35; }
+.extension-workspace .rb-tile > * { display: block; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.extension-workspace .modal:has(.rb-tiles) { overflow-x: hidden; }
+.extension-workspace .rb-card-body .toggle, .extension-workspace .rb-opt .toggle { display: flex; align-items: flex-start; gap: 8px; white-space: normal; overflow-wrap: anywhere; }
+.extension-workspace .rb-card-body .tabs { max-width: 100%; overflow-x: visible; flex-wrap: wrap; }
+.extension-workspace .rb-card-body .tabs button { white-space: normal; text-align: left; }
+.extension-workspace .rb-field, .extension-workspace .rb-opt, .extension-workspace .rb-card-body { min-width: 0; overflow-wrap: anywhere; }
+.extension-workspace .rb-field input, .extension-workspace .rb-field textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.extension-workspace .rb-link-row > * { min-width: 0; }
+.extension-workspace .rb-title { min-width: 0; flex: 1 1 180px; }
+.extension-workspace .rb-bar { min-width: 0; }
+.extension-workspace .rb-gmeta strong { overflow-wrap: anywhere; }
+.extension-workspace .rb-fontlist button { white-space: normal; }
+.extension-workspace .lookup { min-width: 0; }
+
+/* Page frame: left/right margin is padding, top/bottom is a spacer row that repeats on every printed page. */
+.extension-workspace .rv-frame { width: 100%; border-collapse: collapse; border-spacing: 0; table-layout: fixed; }
+.extension-workspace .rv-frame td { padding: 0; vertical-align: top; }
+.extension-workspace .rv-spacer { height: var(--rv-my); }
+.extension-workspace .rv-body { padding: 0 var(--rv-mx) !important; }
+.extension-workspace .rv-footer { display: none; }
+@media print {
+  .extension-workspace .rv-footer { display: block; position: fixed; left: var(--rv-mx); right: var(--rv-mx); bottom: 2.5mm; font: 8pt var(--rv-font); color: #444; }
+}
+
+/* Match the FlowCV page: skills flow down two columns; compact lines run on; linked entries get a small mark */
+.extension-workspace .rv-gridlist.rv-flow { display: block; column-count: var(--cols, 1); column-gap: 16pt; }
+.extension-workspace .rv-gridlist.rv-flow .rv-entry { break-inside: avoid; }
+.extension-workspace .rv-gridlist .rv-sub { font-style: normal; }
+.extension-workspace .rv-m-compact { display: block; }
+.extension-workspace .rv-m-compact .rv-chiprow { display: inline; }
+.extension-workspace .rv-m-compact .rv-chiprow + .rv-chiprow::before { content: ", "; }
+.extension-workspace .rv-m-compact.rv-dash .rv-chiplabel::after { content: " —"; font-weight: 400; }
+.extension-workspace .rv-m-compact .rv-chiplabel { margin-right: 0.3em; }
+.extension-workspace .rv-m-compact .rv-chiplabel + .rv-chip::before { content: none !important; }
+.extension-workspace .rv-main a::after { content: " ↗"; font-size: 0.75em; font-weight: 400; }

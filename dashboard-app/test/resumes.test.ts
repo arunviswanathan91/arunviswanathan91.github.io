@@ -45,7 +45,8 @@ test("cloneResume gives fresh ids and no shared references", () => {
 });
 test("starter resume keeps the hidden skill groups hidden", () => {
   const skills = starterResume().sections.find((s) => s.type === "skills")!;
-  assert.deepEqual(skills.items.filter((i) => i.hidden).map((i) => i.title), ["Teaching Skills", "Project Management & Consulting"]);
+  assert.deepEqual(skills.items.filter((i) => i.hidden).map((i) => i.title).sort(), ["Instructional Technology & Online Teaching Tools", "Multicolor Flowcytometry", "Project Management & Consulting", "Teaching Skills"]);
+  assert.equal(starterResume().sections.find((s) => s.type === "publications")!.items.length, 7);
 });
 test("pdfFilename falls back and strips illegal characters", () => {
   assert.equal(pdfFilename("Research/CV: v2", "Arun"), "Research CV v2");
@@ -67,4 +68,44 @@ test("ago reads like the gallery label", () => {
   assert.equal(ago("2026-11-01T12:00:00Z", now), "4 days ago");
   assert.equal(ago("2026-11-05T11:00:00Z", now), "1 hour ago");
   assert.equal(ago("2026-11-05T11:59:50Z", now), "just now");
+});
+import { groupRuns, layoutFor, withSubinfo } from "../src/extended/modules/resumes/model.ts";
+test("groupRuns joins only consecutive roles at the same employer", () => {
+  const r = groupRuns([{ subtitle: "RGCB" }, { subtitle: "rgcb " }, { subtitle: "Other" }, { subtitle: "RGCB" }, { subtitle: "" }, { subtitle: "" }]);
+  assert.deepEqual(r.map((x) => x.length), [2, 1, 1, 1, 1]);
+});
+test("layoutFor layers defaults, type defaults and overrides", () => {
+  assert.equal(layoutFor({ layouts: {} }, "certification").cols, 3);
+  assert.equal(layoutFor({ layouts: {} }, "languages").mode, "compact");
+  assert.equal(layoutFor({ layouts: { skills: { cols: 2 } } }, "skills").cols, 2);
+  assert.equal(layoutFor({ layouts: {} }, "skills").mode, "grid");
+});
+test("withSubinfo styles", () => {
+  assert.equal(withSubinfo("R", "expert", "colon"), "R: expert");
+  assert.equal(withSubinfo("R", "expert", "dash"), "R – expert");
+  assert.equal(withSubinfo("R", "expert", "bracket"), "R (expert)");
+  assert.equal(withSubinfo("R", " ", "dash"), "R");
+});
+test("old twoColumnSkills is migrated into the skills layout", () => {
+  const d = normalizeResume({ style: { twoColumnSkills: true } });
+  assert.equal(layoutFor(d.style, "skills").cols, 2);
+  assert.ok(!("twoColumnSkills" in d.style));
+});
+import { itemFromMeta } from "../src/extended/modules/resumes/doi.ts";
+test("itemFromMeta maps a looked-up paper onto a publication entry", () => {
+  const i = itemFromMeta({ title: "  A  title\nwith breaks ", publication: "Cell Death Discovery", year: 2026, doi: "10.1038/x", authors: ["Uttroside B", "Lee C"] });
+  assert.equal(i.title, "A title with breaks");
+  assert.equal(i.subtitle, "Cell Death Discovery");
+  assert.equal(i.link, "https://doi.org/10.1038/x");
+  assert.equal(i.start, "2026");
+  assert.equal(i.body, "Uttroside B, Lee C");
+  assert.equal(itemFromMeta({ arxiv_id: "2401.12345", title: "T" }).link, "https://arxiv.org/abs/2401.12345");
+  assert.equal(itemFromMeta({ title: "T" }).link, "");
+});
+import { hasContent } from "../src/extended/modules/resumes/model.ts";
+test("blank entries are not printed, so no empty headings", () => {
+  const d = emptyResume();
+  d.sections = [newSection("awards", { items: [newItem()] }), newSection("education", { items: [newItem({ title: "PhD" })] })];
+  assert.equal(hasContent(newItem()), false);
+  assert.deepEqual(visibleSections(d).map((s) => s.type), ["education"]);
 });
