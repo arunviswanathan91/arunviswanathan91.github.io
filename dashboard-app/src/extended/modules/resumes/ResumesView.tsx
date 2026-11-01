@@ -4,7 +4,7 @@ import { go } from "../../lib/route.ts";
 import { fmtDateTime } from "../../lib/dates.ts";
 import { confirmDanger, Empty, ErrorText, PageHeader } from "../../components/ui.tsx";
 import { cloneResume, emptyResume, normalizeResume, type ResumeData } from "./model.ts";
-import { starterResume } from "./starter.ts";
+import { starterResume, teachingResume } from "./starter.ts";
 
 interface Row { id: string; title: string; data: unknown; created_at: string; updated_at: string }
 
@@ -23,6 +23,7 @@ export function ResumesView() {
       <PageHeader section="papers" title="Resumes" subtitle="Build resumes and CVs, keep as many versions as you like, and download any of them as a PDF."
         actions={<>
           <button onClick={() => void create("Research Resume", starterResume())}><FilePlus2 size={15} /> From my research resume</button>
+          <button onClick={() => void create("Teaching CV", teachingResume())}><FilePlus2 size={15} /> From my teaching CV</button>
           <button className="primary" onClick={() => void create("Untitled resume", emptyResume())}><Plus size={16} /> New resume</button>
         </>} />
       <ErrorText error={error} />

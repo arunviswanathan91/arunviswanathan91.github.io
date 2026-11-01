@@ -19,18 +19,24 @@ export type SectionType =
   | "education" | "experience" | "skills" | "languages" | "certification" | "interests" | "projects" | "courses"
   | "awards" | "volunteering" | "publications" | "references" | "conferences" | "scores" | "teaching" | "custom";
 export interface ResumeSection { id: string; type: SectionType; title: string; hidden?: boolean; items: ResumeItem[] }
-export type FontKey = "serif" | "sans" | "classic" | "mono";
+export type FontKey = "serif" | "amiri" | "vollkorn" | "lora" | "classic" | "sans" | "mono";
 export type HeadingStyle = "underline" | "box" | "plain" | "bar" | "overline" | "dotted";
 /** Customize tab. Font sizes are in pt; the *Size fields are offsets from the base size (as in the reference builder). */
+export type AccentTarget = "name" | "headline" | "headings" | "line" | "dates" | "entryTitle";
+export const ACCENT_TARGETS: [AccentTarget, string][] = [["name", "Name"], ["headline", "Job title"], ["headings", "Headings"], ["line", "Headings line"], ["dates", "Dates"], ["entryTitle", "Entry title"]];
 export interface ResumeStyle {
   pageFormat: "A4" | "Letter";
-  font: FontKey; accent: string;
+  font: FontKey; nameFont: FontKey | "same"; accent: string;
+  accentOn: Record<AccentTarget, boolean>;
+  align: "left" | "center"; headlinePos: "inline" | "below"; separator: "bar" | "bullet" | "none";
   baseSize: number; nameSize: number; titleSize: number; headingSize: number; entrySize: number;
   lineHeight: number; spacing: number;          // spacing = gap between entries, pt
   marginX: number; marginY: number;             // mm
   entryLayout: "columns" | "full"; datePos: "right" | "left"; subtitle: "same" | "below";
   headingStyle: HeadingStyle; caps: "capitalize" | "uppercase";
   twoColumnSkills: boolean;
+  /** Print footer: email on the left, page n/N on the right. */
+  footer: boolean;
 }
 export interface ResumeData { profile: ResumeProfile; sections: ResumeSection[]; style: ResumeStyle }
 
@@ -61,16 +67,21 @@ export const SECTION_TYPES: Record<SectionType, SectionTypeDef> = {
 };
 export const SECTION_ORDER = Object.keys(SECTION_TYPES) as SectionType[];
 
-export const ACCENTS = ["#111111", "#2f6b4f", "#1d4ed8", "#7c3aed", "#be123c", "#b45309"];
+export const ACCENTS = ["#111111", "#455a64", "#527a80", "#3589a6", "#355c7d", "#3b6ea8", "#42246e", "#6b2d52", "#c4607a", "#f4606c", "#2f6b4f", "#b45309"];
 export const DEFAULT_STYLE: ResumeStyle = {
-  pageFormat: "A4", font: "serif", accent: "#111111",
+  pageFormat: "A4", font: "serif", nameFont: "same", accent: "#111111",
+  accentOn: { name: false, headline: false, headings: true, line: true, dates: false, entryTitle: false },
+  align: "left", headlinePos: "inline", separator: "bar",
   baseSize: 9.5, nameSize: 8, titleSize: 2, headingSize: 1, entrySize: 0,
   lineHeight: 1.15, spacing: 4, marginX: 12, marginY: 12,
   entryLayout: "columns", datePos: "right", subtitle: "same",
-  headingStyle: "underline", caps: "capitalize", twoColumnSkills: false,
+  headingStyle: "underline", caps: "capitalize", twoColumnSkills: false, footer: false,
 };
 export const FONTS: Record<FontKey, { label: string; stack: string }> = {
-  serif: { label: "Serif", stack: '"Source Serif 4", Georgia, "Times New Roman", serif' },
+  serif: { label: "Source Serif", stack: '"Source Serif 4", Georgia, "Times New Roman", serif' },
+  amiri: { label: "Amiri", stack: 'Amiri, Georgia, serif' },
+  vollkorn: { label: "Vollkorn", stack: 'Vollkorn, Georgia, serif' },
+  lora: { label: "Lora", stack: 'Lora, Georgia, serif' },
   classic: { label: "Classic", stack: 'Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif' },
   sans: { label: "Sans-serif", stack: '"DM Sans", system-ui, "Segoe UI", Arial, sans-serif' },
   mono: { label: "Monospace", stack: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace' },
@@ -101,7 +112,7 @@ export function normalizeResume(raw: unknown): ResumeData {
   const sections = Array.isArray(r.sections) ? r.sections : base.sections;
   return {
     profile: { ...base.profile, ...(r.profile ?? {}), links: Array.isArray(r.profile?.links) ? r.profile!.links : [] },
-    style: { ...DEFAULT_STYLE, ...(r.style ?? {}) },
+    style: { ...DEFAULT_STYLE, ...(r.style ?? {}), accentOn: { ...DEFAULT_STYLE.accentOn, ...(r.style?.accentOn ?? {}) } },
     sections: sections.map((s) => ({
       id: s.id || uid(),
       type: s.type in SECTION_TYPES ? s.type : "custom",

@@ -16,4 +16,7 @@ drop trigger if exists resumes_touch on public.ws_resumes;
 create trigger resumes_touch before update on public.ws_resumes
   for each row execute function ws_private.touch_updated_at();
 
+-- RLS does not cover TRUNCATE, so signed-in users must not hold it (or REFERENCES/TRIGGER).
+revoke truncate, references, trigger on public.ws_resumes from authenticated, anon, public;
+
 commit;

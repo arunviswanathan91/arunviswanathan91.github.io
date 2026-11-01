@@ -52,3 +52,13 @@ test("pdfFilename falls back and strips illegal characters", () => {
   assert.equal(pdfFilename(" ", "Arun"), "Arun");
   assert.equal(pdfFilename("", ""), "Resume");
 });
+import { teachingResume } from "../src/extended/modules/resumes/starter.ts";
+test("teaching CV starter normalizes unchanged and keeps its look", () => {
+  const t = teachingResume();
+  assert.deepEqual(normalizeResume(JSON.parse(JSON.stringify(t))).style, t.style);
+  assert.equal(t.style.align, "center");
+  assert.ok(t.sections.length >= 9);
+});
+test("normalizeResume merges partial accentOn", () => {
+  assert.equal(normalizeResume({ style: { accentOn: { name: true } } }).style.accentOn.headings, true);
+});

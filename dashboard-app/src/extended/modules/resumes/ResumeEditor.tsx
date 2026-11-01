@@ -6,7 +6,7 @@ import { useAutosave } from "../../lib/useAutosave.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { confirmDanger, ErrorText, SaveIndicator } from "../../components/ui.tsx";
 import {
-  ACCENTS, DEFAULT_STYLE, FONTS, HEADING_STYLES, SECTION_ORDER, SECTION_TYPES, moveBy, newItem, newSection, normalizeResume, pdfFilename,
+  ACCENTS, ACCENT_TARGETS, DEFAULT_STYLE, FONTS, HEADING_STYLES, SECTION_ORDER, SECTION_TYPES, moveBy, newItem, newSection, normalizeResume, pdfFilename,
   type FontKey, type HeadingStyle, type ItemField, type ResumeData, type ResumeStyle, type ResumeItem, type ResumeSection, type SectionType,
 } from "./model.ts";
 import { ResumePreview } from "./ResumePreview.tsx";
@@ -227,7 +227,7 @@ function Stepper({ label, value, min, max, step, unit, signed, onChange }: { lab
   );
 }
 
-const CUSTOM_GROUPS = ["Document", "Font size", "Spacing", "Entries", "Headings", "Font", "Colors"] as const;
+const CUSTOM_GROUPS = ["Document", "Font size", "Spacing", "Entries", "Headings", "Font", "Colors", "Header"] as const;
 
 function CustomizePanel({ data, onChange }: { data: ResumeData; onChange: (d: ResumeData) => void }) {
   const [group, setGroup] = useState<(typeof CUSTOM_GROUPS)[number]>("Document");
@@ -240,7 +240,8 @@ function CustomizePanel({ data, onChange }: { data: ResumeData; onChange: (d: Re
         {group === "Document" && <>
           <Seg label="Page format" value={st.pageFormat} options={[["A4", "A4"], ["Letter", "US Letter"]]} onChange={(v) => set({ pageFormat: v })} />
           <p className="muted small">When the print dialog opens, turn off “Headers and footers” so only the resume prints, and leave margins on Default.</p>
-          <button onClick={() => onChange({ ...data, style: { ...DEFAULT_STYLE } })}>Reset all styling</button>
+          <label className="toggle"><input type="checkbox" checked={st.footer} onChange={(e) => set({ footer: e.target.checked })} /> Footer with email and page numbers (PDF only)</label>
+          <button onClick={() => onChange({ ...data, style: { ...DEFAULT_STYLE, accentOn: { ...DEFAULT_STYLE.accentOn } } })}>Reset all styling</button>
         </>}
         {group === "Font size" && <>
           <Stepper label="Base font size" value={st.baseSize} min={8} max={12} step={0.5} unit="pt" onChange={(v) => set({ baseSize: v })} />
@@ -265,9 +266,20 @@ function CustomizePanel({ data, onChange }: { data: ResumeData; onChange: (d: Re
           <Seg<HeadingStyle> label="Style" value={st.headingStyle} options={HEADING_STYLES} onChange={(v) => set({ headingStyle: v })} />
           <Seg label="Capitalization" value={st.caps} options={[["capitalize", "Capitalize"], ["uppercase", "Uppercase"]]} onChange={(v) => set({ caps: v })} />
         </>}
-        {group === "Font" && <Seg<FontKey> label="Body font" value={st.font} options={(Object.keys(FONTS) as FontKey[]).map((k) => [k, FONTS[k].label])} onChange={(v) => set({ font: v })} />}
+        {group === "Font" && <>
+          <Seg<FontKey> label="Body font" value={st.font} options={(Object.keys(FONTS) as FontKey[]).map((k) => [k, FONTS[k].label])} onChange={(v) => set({ font: v })} />
+          <Seg<FontKey | "same"> label="Name font" value={st.nameFont} options={[["same", "Same as body"], ...(Object.keys(FONTS) as FontKey[]).map((k): [FontKey, string] => [k, FONTS[k].label])]} onChange={(v) => set({ nameFont: v })} />
+        </>}
+        {group === "Header" && <>
+          <Seg label="Text alignment" value={st.align} options={[["left", "Left"], ["center", "Center"]]} onChange={(v) => set({ align: v })} />
+          <Seg label="Job title" value={st.headlinePos} options={[["inline", "Next to name"], ["below", "Below name"]]} onChange={(v) => set({ headlinePos: v })} />
+          <Seg label="Details separator" value={st.separator} options={[["bar", "Bar"], ["bullet", "Bullet"], ["none", "None"]]} onChange={(v) => set({ separator: v })} />
+        </>}
         {group === "Colors" && <div className="rb-field"><span>Accent colour (headings and rules)</span>
-          <div className="rb-swatches">{ACCENTS.map((c) => <button key={c} aria-label={c} className={st.accent === c ? "on" : ""} style={{ background: c }} onClick={() => set({ accent: c })} />)}</div>
+          <div className="rb-swatches">{ACCENTS.map((c) => <button key={c} aria-label={c} className={st.accent === c ? "on" : ""} style={{ background: c }} onClick={() => set({ accent: c })} />)}<input type="color" aria-label="Custom colour" value={st.accent} onChange={(e) => set({ accent: e.target.value })} /></div>
+        </div>}
+        {group === "Colors" && <div className="rb-field"><span>Apply accent colour to</span>
+          <div className="rb-checks">{ACCENT_TARGETS.map(([k, l]) => <label key={k} className="toggle"><input type="checkbox" checked={st.accentOn[k]} onChange={(e) => set({ accentOn: { ...st.accentOn, [k]: e.target.checked } })} /> {l}</label>)}</div>
         </div>}
       </div></div>
     </div>
