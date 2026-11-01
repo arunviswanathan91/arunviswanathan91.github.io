@@ -54,6 +54,16 @@ function Editor({ row }: { row: Row }) {
     window.addEventListener("afterprint", restore);
     window.print();
   };
+  // "Download PDF" from the gallery opens the editor with ?print=1 and prints straight away.
+  const autoPrint = useRef(/[?&]print=1\b/.test(window.location.hash));
+  useEffect(() => {
+    if (!autoPrint.current) return;
+    autoPrint.current = false;
+    history.replaceState(null, "", window.location.hash.replace(/[?&]print=1\b/, ""));
+    const t = window.setTimeout(() => void download(), 700); // let fonts and layout settle
+    return () => window.clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Printing hides everything but the page (see styles.css).
   useEffect(() => {
     document.body.classList.add("resume-print");

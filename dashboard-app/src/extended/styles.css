@@ -753,3 +753,20 @@
 .extension-workspace .rb-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
 .extension-workspace .rv-grid3 .rv-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 14pt; }
 .extension-workspace .rv-inline .rv-items { display: flex; flex-wrap: wrap; gap: 0 28pt; }
+
+/* Resume gallery */
+.extension-workspace .rb-gallery { display: grid; grid-template-columns: repeat(auto-fill, 265px); gap: 22px; align-items: start; }
+.extension-workspace .rb-new { height: 375px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 2px dashed var(--border); background: none; border-radius: 12px; color: var(--muted); }
+.extension-workspace .rb-new:hover { border-color: var(--tone); color: var(--text); }
+.extension-workspace .rb-thumb { display: block; height: 375px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
+.extension-workspace .rb-thumb-in { zoom: 0.33; pointer-events: none; }
+.extension-workspace .rb-thumb:hover { border-color: var(--tone); }
+.extension-workspace .rb-gmeta { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; padding: 8px 2px; }
+.extension-workspace .rb-menu { position: relative; }
+.extension-workspace .rb-menu summary { list-style: none; cursor: pointer; padding: 4px; border-radius: 8px; border: 1px solid var(--border); display: flex; }
+.extension-workspace .rb-menu summary::-webkit-details-marker { display: none; }
+.extension-workspace .rb-menu-list { position: absolute; right: 0; top: 32px; z-index: 5; min-width: 170px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; }
+.extension-workspace .rb-menu-list a, .extension-workspace .rb-menu-list button { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 0; background: none; border-radius: 7px; color: var(--text); text-align: left; text-decoration: none; }
+.extension-workspace .rb-menu-list a:hover, .extension-workspace .rb-menu-list button:hover { background: var(--surface-2); }
+.extension-workspace .rb-menu-list .danger { color: #b42318; }
+.extension-workspace .rb-starters { margin-top: 22px; }

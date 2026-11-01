@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bullets, cloneResume, dateRange, emptyResume, moveBy, newItem, newSection, normalizeResume, pdfFilename, visibleSections, DEFAULT_STYLE } from "../src/extended/modules/resumes/model.ts";
+import { ago, bullets, cloneResume, dateRange, emptyResume, moveBy, newItem, newSection, normalizeResume, pdfFilename, visibleSections, DEFAULT_STYLE } from "../src/extended/modules/resumes/model.ts";
 import { starterResume } from "../src/extended/modules/resumes/starter.ts";
 
 test("bullets: one per line, markers and blanks dropped", () => {
@@ -61,4 +61,10 @@ test("teaching CV starter normalizes unchanged and keeps its look", () => {
 });
 test("normalizeResume merges partial accentOn", () => {
   assert.equal(normalizeResume({ style: { accentOn: { name: true } } }).style.accentOn.headings, true);
+});
+test("ago reads like the gallery label", () => {
+  const now = Date.parse("2026-11-05T12:00:00Z");
+  assert.equal(ago("2026-11-01T12:00:00Z", now), "4 days ago");
+  assert.equal(ago("2026-11-05T11:00:00Z", now), "1 hour ago");
+  assert.equal(ago("2026-11-05T11:59:50Z", now), "just now");
 });

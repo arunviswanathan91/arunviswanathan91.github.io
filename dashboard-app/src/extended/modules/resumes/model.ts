@@ -159,3 +159,12 @@ export function pdfFilename(title: string, name: string): string {
   const clean = (s: string) => s.replace(/[\\/:*?"<>|\n\r]+/g, " ").replace(/\s+/g, " ").trim();
   return clean(title) || clean(name) || "Resume";
 }
+
+/** "edited 4 days ago" */
+export function ago(ts: string, now = Date.now()): string {
+  const s = Math.max(0, (now - new Date(ts).getTime()) / 1000);
+  const units: [number, string][] = [[86400 * 30, "month"], [86400, "day"], [3600, "hour"], [60, "minute"]];
+  for (const [n, name] of units) if (s >= n) { const v = Math.floor(s / n); return `${v} ${name}${v > 1 ? "s" : ""} ago`; }
+  return "just now";
+}
+
