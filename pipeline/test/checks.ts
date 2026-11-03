@@ -226,9 +226,11 @@ const decisionPayload = () => ({
  const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
  eq("Cerebras joins the fallback chain when configured",
   contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: "c", CEREBRAS_API_KEY: "d" })), ["openrouter", "cerebras"]);
- eq("DeepSeek is ordered last since it is the only paid provider",
-  contextProviders(readEnv({ ...base, DEEPSEEK_API_KEY: "e", OPENROUTER_API_KEY: "c", CEREBRAS_API_KEY: "d" })),
-  ["openrouter", "cerebras", "deepseek"]);
+ eq("DeepSeek is tried first when configured; the free providers are only fallbacks",
+  contextProviders(readEnv({ ...base, DEEPSEEK_API_KEY: "e", OPENROUTER_API_KEY: "c", CEREBRAS_API_KEY: "d", GROQ_API_KEY: "b", GEMINI_API_KEY: "a" })),
+  ["deepseek", "openrouter", "groq", "gemini", "cerebras"]);
+ eq("without a DeepSeek key the free chain is unchanged",
+  contextProviders(readEnv({ ...base, OPENROUTER_API_KEY: "c", GROQ_API_KEY: "b", GEMINI_API_KEY: "a" })), ["openrouter", "groq", "gemini"]);
  eq("DeepSeek model defaults to deepseek-chat", readEnv({ ...base, DEEPSEEK_API_KEY: "e" }).deepseekModel, "deepseek-chat");
 
  eq("institution cache key normalizes case and whitespace",
