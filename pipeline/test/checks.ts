@@ -867,6 +867,11 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  const fakeNext = async () => "fallback-html";
  check("makeCrawl4aiRenderer with no url and no fallback is null", makeCrawl4aiRenderer(null, null, null) === null);
  check("makeCrawl4aiRenderer with no url passes through the fallback renderer unchanged", makeCrawl4aiRenderer(null, null, fakeNext) === fakeNext);
+ {
+  const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
+  eq("blank Crawl4AI settings count as not set", [readEnv({ ...base, CRAWL4AI_URL: "  ", CRAWL4AI_API_TOKEN: "" }).crawl4aiUrl, readEnv({ ...base, CRAWL4AI_URL: "  ", CRAWL4AI_API_TOKEN: "" }).crawl4aiApiToken], [null, null]);
+  eq("Crawl4AI url and token are trimmed", [readEnv({ ...base, CRAWL4AI_URL: " https://c4.example ", CRAWL4AI_API_TOKEN: " t " }).crawl4aiUrl, readEnv({ ...base, CRAWL4AI_URL: " https://c4.example ", CRAWL4AI_API_TOKEN: " t " }).crawl4aiApiToken], ["https://c4.example", "t"]);
+ }
  check("makeCrawl4aiRenderer with a url but no fallback still returns a function", typeof makeCrawl4aiRenderer("https://crawl4ai.example", null, null) === "function");
 }
 
