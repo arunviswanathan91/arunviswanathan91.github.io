@@ -825,3 +825,13 @@
 .extension-workspace .rv-skillcols { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 0 16pt; align-items: start; }
 .extension-workspace .home-grid > *, .extension-workspace .review-grid > * { break-inside: avoid; margin: 0 0 16px; width: 100%; box-sizing: border-box; display: block; }
 .extension-workspace .review-grid > * { margin-bottom: 14px; }
+
+/* Savings accounts and currency conversion in the Budget */
+.extension-workspace .account-rows { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.extension-workspace .account-rows li { display: flex; align-items: center; gap: 4px; border-radius: 10px; }
+.extension-workspace .account-rows li.on { background: var(--tone-soft); }
+.extension-workspace .account-main { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; background: none; border: 0; padding: 8px 8px; white-space: normal; }
+.extension-workspace .account-main > span:first-child { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.extension-workspace .account-main .num { text-align: right; flex-shrink: 0; }
+.extension-workspace .fx-box { display: grid; gap: 4px; padding: 10px 12px; border: 1px dashed var(--border-strong, var(--border)); border-radius: 12px; }
+.extension-workspace .fx-box p { margin: 0; }

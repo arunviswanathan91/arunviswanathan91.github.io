@@ -36,6 +36,77 @@ export async function loadFx(base: string): Promise<Fx | null> {
   return null;
 }
 
+/** Rates for a past day (the API publishes one snapshot per date); falls back to the latest rates. `exact` says which. */
+export async function loadFxOn(base: string, date: string): Promise<{ fx: Fx; exact: boolean } | null> {
+  const b = base.toLowerCase();
+  const day = new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date >= day) {
+    const fx = await loadFx(base);
+    return fx ? { fx, exact: date >= day } : null;
+  }
+  const key = `ws:fx:${b}:on:${date}`;
+  try {
+    const hit = localStorage.getItem(key);
+    if (hit) return { fx: JSON.parse(hit) as Fx, exact: true };
+  } catch { /* storage unavailable */ }
+  for (const url of [
+    `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${date}/v1/currencies/${b}.json`,
+    `https://${date}.currency-api.pages.dev/v1/currencies/${b}.json`,
+  ]) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (!j[b] || typeof j[b] !== "object") continue;
+      const fx: Fx = { base: base.toUpperCase(), date: String(j.date), rates: j[b] };
+      try { localStorage.setItem(key, JSON.stringify(fx)); } catch { /* ignore */ }
+      return { fx, exact: true };
+    } catch { /* try the next mirror */ }
+  }
+  const latest = await loadFx(base);
+  return latest ? { fx: latest, exact: false } : null;
+}
+
+/** How many units of `to` one unit of `from` is worth, using rates whose base is `to`; null when unknown. */
+export function rateFromBase(from: string, fx: Fx): number | null {
+  if (from.toUpperCase() === fx.base) return 1;
+  const r = fx.rates[from.toLowerCase()];
+  return r > 0 ? 1 / r : null;
+}
+
+/** The pieces of a transaction needed to value it in the default currency. */
+export interface Valued { amount: number; currency: string; base_currency?: string | null; base_amount?: number | null }
+
+/** Value in `base`: as entered when already in `base`; else the amount stored with the transaction when it was
+ *  saved (same base); else an estimate at the supplied rates; null when no rate is known. */
+export function inBase(t: Valued, base: string, fx: Fx | null): number | null {
+  const amount = Number(t.amount);
+  if (t.currency.toUpperCase() === base.toUpperCase()) return amount;
+  if (t.base_amount != null && t.base_currency?.toUpperCase() === base.toUpperCase()) return Number(t.base_amount);
+  return fx ? toBase(amount, t.currency, fx) : null;
+}
+
+/** True when some transaction needs today's rates to be valued in `base`. */
+export function needsFx(txs: Valued[], base: string): boolean {
+  return txs.some((t) => t.currency.toUpperCase() !== base.toUpperCase() && !(t.base_amount != null && t.base_currency?.toUpperCase() === base.toUpperCase()));
+}
+
+/** Rate (units of `to` per 1 `from`) on a date, for the transaction form. */
+export function useRateOn(from: string, to: string, date: string, enabled: boolean) {
+  const [state, setState] = useState<{ rate: number | null; date: string; exact: boolean; loading: boolean }>({ rate: null, date: "", exact: true, loading: false });
+  useEffect(() => {
+    if (!enabled || from.toUpperCase() === to.toUpperCase()) { setState({ rate: from.toUpperCase() === to.toUpperCase() ? 1 : null, date: "", exact: true, loading: false }); return; }
+    let live = true;
+    setState((s) => ({ ...s, loading: true }));
+    void loadFxOn(to, date).then((r) => {
+      if (!live) return;
+      setState(r ? { rate: rateFromBase(from, r.fx), date: r.fx.date, exact: r.exact, loading: false } : { rate: null, date: "", exact: true, loading: false });
+    });
+    return () => { live = false; };
+  }, [from, to, date, enabled]);
+  return state;
+}
+
 /** Amount in `from` expressed in the base currency, or null when no rate is known. */
 export function toBase(amount: number, from: string, fx: Fx): number | null {
   if (from.toUpperCase() === fx.base) return amount;

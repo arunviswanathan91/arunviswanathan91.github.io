@@ -5,7 +5,7 @@ import { addDays, fmtDateTime, relDay, startOfMonth, today } from "../../lib/dat
 import { href } from "../../lib/route.ts";
 import { SECTIONS, toneStyle, type SectionId } from "../../lib/sections.ts";
 import { useSettings } from "../../lib/settings.ts";
-import { combine, useFx } from "../../lib/fx.ts";
+import { combine, inBase, needsFx, useFx } from "../../lib/fx.ts";
 import type { Deadline, Habit, HabitCheckin, Meeting, MonthlyBudget, Note, Paper, Project, Task, Transaction } from "../../lib/types.ts";
 import { openQuick, QUICK_ACTIONS } from "../../components/QuickAdd.tsx";
 import { Ring } from "../../components/Ring.tsx";
@@ -130,11 +130,12 @@ export function HomeView() {
   const habitsDue = habitNow;
   const habitsDone = habitNow.filter((x) => x.n!.state === "done").length;
 
-  const spent = (data?.txs ?? []).filter((t) => t.currency === cur && !t.for_contact_id).reduce((s, t) => s + cents(t.amount), 0);
-  const budgeted = (data?.budgets ?? []).filter((b) => b.currency === cur).reduce((s, b) => s + cents(b.amount), 0);
   const loanTotals = totalsByCurrency(loans, payments);
+  // Foreign-currency spending counts too: the value saved with the transaction, else today's rate.
+  const fx = useFx(cur, Object.keys(loanTotals).length > 1 || needsFx(data?.txs ?? [], cur));
+  const spent = (data?.txs ?? []).filter((t) => !t.for_contact_id).reduce((s, t) => s + cents(inBase(t, cur, fx) ?? 0), 0);
+  const budgeted = (data?.budgets ?? []).filter((b) => b.currency === cur).reduce((s, b) => s + cents(b.amount), 0);
   const overdueLoans = loans.filter((l) => loanStatus(l, payments, now) === "overdue").length;
-  const fx = useFx(cur, Object.keys(loanTotals).length > 1);
   const loansNetAll = fx ? combine(Object.fromEntries(Object.entries(loanTotals).map(([c, t]) => [c, t.net])), fx) : null;
 
   return (
