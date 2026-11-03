@@ -19,6 +19,7 @@ import { parseEuraxessJob, typeFromResearcherProfile } from "../src/normalize/eu
 import { euraxessAdapter } from "../src/sources/euraxess.js";
 import { FirecrawlBudget, makeRenderer } from "../src/sources/firecrawl.js";
 import { makeCrawl4aiRenderer } from "../src/sources/crawl4ai.js";
+import { CRAWL_SEEDS } from "../src/sources/catalog/sites.js";
 import { defaultSourceRows } from "../src/sources/catalog/defaults.js";
 import { isFreshSearch, shouldEvaluate, shouldPersistRunItem, termsForDiscovery, termsForRun } from "../src/search/query.js";
 import { enrichMetadataLocally, enrichMetadataWithOpenRouter } from "../src/enrich/metadata.js";
@@ -871,6 +872,25 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
   const base = { SUPABASE_URL: "https://example.org", SUPABASE_SERVICE_ROLE_KEY: "test-only" };
   eq("blank Crawl4AI settings count as not set", [readEnv({ ...base, CRAWL4AI_URL: "  ", CRAWL4AI_API_TOKEN: "" }).crawl4aiUrl, readEnv({ ...base, CRAWL4AI_URL: "  ", CRAWL4AI_API_TOKEN: "" }).crawl4aiApiToken], [null, null]);
   eq("Crawl4AI url and token are trimmed", [readEnv({ ...base, CRAWL4AI_URL: " https://c4.example ", CRAWL4AI_API_TOKEN: " t " }).crawl4aiUrl, readEnv({ ...base, CRAWL4AI_URL: " https://c4.example ", CRAWL4AI_API_TOKEN: " t " }).crawl4aiApiToken], ["https://c4.example", "t"]);
+ }
+ {
+  const seeds = Object.fromEntries(CRAWL_SEEDS.map(s => [s.key, s]));
+  const detail: Record<string, string[]> = {
+   "crawl:jobsacuk": ["/job/DTN118/postdoctoral-research-associate"],
+   "crawl:sciencecareers": ["/job/681097/postdoctoral-research-fellow-rehm-lab-generative-biology-institute/"],
+   "crawl:timeshighereducation": ["/unijobs/listing/417210/university-assistant-postdoctoral-law/"],
+   "crawl:naturecareers": ["/naturecareers/job/12864938/postdoctoral-position-addressing-the-mechanical-evolution/"],
+  };
+  const nav = ["/", "/css/responsive.css", "/jobs/europe/postdoc/", "/unijobs/listings/europe/postdocs/2/", "/naturecareers/jobs/postdoctoral/europe/4/", "/legal/cookie-policy", "/unijobs/assets/dist/css/package.css", "/categories/postdoc-jobs/2"];
+  // universitypositions has no pattern yet: its job-detail URLs are not obvious and it does return some postings.
+  // Add one (and drop it from this list) once its detail-page shape is confirmed.
+  const knownGap = new Set(["crawl:universitypositions"]);
+  for (const seed of CRAWL_SEEDS.filter(s => !knownGap.has(s.key))) check(`crawl seed ${seed.key} restricts links to job pages`, Boolean(seed.allowPathRe), seed.key);
+  for (const [key, paths] of Object.entries(detail)) {
+   const re = new RegExp(seeds[key].allowPathRe!, "i");
+   for (const path of paths) check(`${key} follows job-detail links`, re.test(path), path);
+   for (const path of nav) check(`${key} ignores navigation and asset links`, !re.test(path), path);
+  }
  }
  check("makeCrawl4aiRenderer with a url but no fallback still returns a function", typeof makeCrawl4aiRenderer("https://crawl4ai.example", null, null) === "function");
 }

@@ -49,6 +49,14 @@ export interface CrawlSeed {
  maxPages?: number;
 }
 
+// Every seed needs allowPathRe. Without it the crawler follows the first few same-site links on the listing page,
+// which are style sheets, icons and menu pages, and never reaches a job page, so the source reports "ok" with 0 items
+// (what happened to the four sites below for their whole history). The patterns match the job-detail URLs, which carry
+// the schema.org JobPosting data the crawler reads.
+//
+// Access note: when this was checked, jobs.ac.uk answered the pipeline with a JavaScript bot-check page and
+// Science Careers with HTTP 403 (both served a normal page to curl). They block automated clients, so those two may
+// stay empty; their patterns are correct for if that changes. Do not work around the block: prefer an official feed.
 export const CRAWL_SEEDS: CrawlSeed[] = [
  {
   key: "crawl:jobrxiv",
@@ -68,24 +76,28 @@ export const CRAWL_SEEDS: CrawlSeed[] = [
   key: "crawl:jobsacuk",
   seedUrls: ["https://www.jobs.ac.uk/categories/postdoc-jobs/1"],
   organization: "jobs.ac.uk",
+  allowPathRe: "^/job/[^/]+/",
   maxPages: 12,
  },
  {
   key: "crawl:sciencecareers",
   seedUrls: ["https://jobs.sciencecareers.org/jobs/europe/postdoc/"],
   organization: "Science Careers",
+  allowPathRe: "^/job/\\d+/",
   maxPages: 12,
  },
  {
   key: "crawl:timeshighereducation",
   seedUrls: ["https://www.timeshighereducation.com/unijobs/listings/europe/postdocs/"],
   organization: "Times Higher Education",
+  allowPathRe: "^/unijobs/listing/\\d+/",
   maxPages: 12,
  },
  {
   key: "crawl:naturecareers",
   seedUrls: ["https://www.nature.com/naturecareers/jobs/postdoctoral/europe/5/"],
   organization: "Nature Careers",
+  allowPathRe: "^/naturecareers/job/\\d+/",
   maxPages: 12,
  },
  {
