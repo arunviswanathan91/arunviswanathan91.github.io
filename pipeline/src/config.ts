@@ -60,8 +60,10 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   telegramBotToken: env.TELEGRAM_BOT_TOKEN ?? null,
   userId: env.DISCOVERY_USER_ID ?? null,
   firecrawlApiKey: env.FIRECRAWL_API_KEY ?? null,
-  crawl4aiUrl: env.CRAWL4AI_URL ?? null,
-  crawl4aiApiToken: env.CRAWL4AI_API_TOKEN ?? null,
+  // A blank value means "not set". An empty string used to slip through `??` and stop the Cloud Run worker from
+  // minting its own identity token, so every Crawl4AI call went out unauthenticated and was refused.
+  crawl4aiUrl: env.CRAWL4AI_URL?.trim() || null,
+  crawl4aiApiToken: env.CRAWL4AI_API_TOKEN?.trim() || null,
   geminiApiKey: env.GEMINI_API_KEY ?? null,
   // Gemini rejects 2.5 Flash for newly provisioned API users and directs them
   // to this stable model. Keep the exact model override available for future

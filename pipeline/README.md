@@ -62,6 +62,7 @@ npm run check           # offline checks — no network, no database
 | `GROQ_MODEL` | no | Groq model override; defaults to `openai/gpt-oss-20b` |
 | `OPENROUTER_API_KEY` | no | primary context provider; Groq and Gemini are automatic fallbacks |
 | `OPENROUTER_MODEL` | no | defaults to `openrouter/free`, which automatically selects a currently available free model supporting the requested features |
+| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | no | When the key is set, DeepSeek (default `deepseek-chat`, paid) is the **first** AI provider for context and decision briefs; OpenRouter (free), Groq, Gemini and Cerebras are fallbacks used only if DeepSeek fails. Without the key the free chain is used as before |
 
 Search geography comes only from `discovery_profiles.countries` (edited by the dashboard's
 **Search destinations** control) plus the separate remote toggle. Nationality, current residence,

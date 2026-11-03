@@ -39,12 +39,12 @@ const FIELDS = ["institution", "place", "population", "climate", "transport", "l
 export type ContextProvider = "gemini" | "groq" | "openrouter" | "cerebras" | "deepseek";
 
 export function contextProviders(env: Env): ContextProvider[] {
- // OpenRouter's free router selects a currently available zero-cost model that
- // supports the requested structured-output features. Groq, Gemini and
- // Cerebras remain free fallbacks when the free route is busy or unavailable.
- // DeepSeek is paid (not free-tier), so it's ordered last: only reached once
- // every free option has failed or is unconfigured.
- return (["openrouter", "groq", "gemini", "cerebras", "deepseek"] as const).filter(provider =>
+ // DeepSeek goes first when its key is configured: it reliably returns the
+ // structured JSON the assessment needs, where the free routes were returning
+ // empty or rate-limited replies and failing every enrichment. It is paid, so
+ // without DEEPSEEK_API_KEY nothing changes. OpenRouter's free router, Groq,
+ // Gemini and Cerebras follow as fallbacks, used only if DeepSeek fails.
+ return (["deepseek", "openrouter", "groq", "gemini", "cerebras"] as const).filter(provider =>
   Boolean(env[`${provider}ApiKey`]?.trim()));
 }
 
