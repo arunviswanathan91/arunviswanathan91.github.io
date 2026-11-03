@@ -88,7 +88,7 @@ begin
     when 'loans' then 'loan' when 'loan_payments' then 'repayment' when 'transactions' then 'transaction'
     when 'budget_categories' then 'budget_category' when 'recurring' then 'recurring_transaction'
     when 'contacts' then 'contact' when 'resumes' then 'resume' when 'meeting_action_items' then 'action_item'
-    when 'habits' then 'habit' else null end;
+    when 'habits' then 'habit' when 'savings_accounts' then 'savings_account' else null end;
   if v_type is null then raise exception 'Table is not trash-enabled: %',p_table; end if;
   v_full:='ws_'||p_table;
   execute format('select exists(select 1 from public.%I where id=$1 and user_id=$2)',v_full) into v_exists using p_id,v_user;

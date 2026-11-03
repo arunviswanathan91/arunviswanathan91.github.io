@@ -11,7 +11,7 @@ const TYPE_LABELS:Record<string,string>={
  publication_stage_event:"Publication stage change",
  paper:"Paper",note:"Note",meeting:"Meeting",action_item:"Action item",deadline:"Deadline",loan:"Loan / card",repayment:"Repayment",
  transaction:"Transaction",budget_category:"Budget category",recurring_transaction:"Recurring transaction",contact:"Person / bank",
- resume:"Resume",habit:"Habit",
+ resume:"Resume",habit:"Habit",savings_account:"Savings account",
 };
 const dateTime=(value:string)=>new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(value));
 const timeLeft=(value:string)=>{

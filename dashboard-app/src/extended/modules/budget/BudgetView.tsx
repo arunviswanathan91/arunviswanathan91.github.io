@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Copy, Plus, Settings2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Landmark, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
 import { insert, list, remove, rpc, trash, update, upsert, useLoad } from "../../lib/db.ts";
 import { addMonths, fmtDate, startOfMonth, today } from "../../lib/dates.ts";
 import { friendBalances, friendSummary } from "./friends.ts";
@@ -7,13 +7,15 @@ import { MoneyOutCard } from "./MoneyOutCard.tsx";
 import type { Person } from "./ForSelect.tsx";
 import { setQuery, type Route } from "../../lib/route.ts";
 import { useSettings } from "../../lib/settings.ts";
-import type { BudgetCategory, BudgetLine, MonthlyBudget, Transaction } from "../../lib/types.ts";
+import type { BudgetCategory, MonthlyBudget, SavingsAccount, Transaction } from "../../lib/types.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { Badge, confirmDanger, Empty, ErrorText, PageHeader, Select } from "../../components/ui.tsx";
 import { formatMoney } from "../loans/balance.ts";
 import { TransactionForm } from "./TransactionForm.tsx";
 import { RecurringCard } from "./Recurring.tsx";
-import { combine, useFx } from "../../lib/fx.ts";
+import { inBase, needsFx, useFx } from "../../lib/fx.ts";
+import { AccountForm } from "./AccountForm.tsx";
+import { accountLabel, balanceMap } from "./accounts.ts";
 import { CategorySelect } from "./CategorySelect.tsx";
 
 const cents = (n: number) => Math.round(Number(n) * 100);
@@ -34,21 +36,25 @@ export function BudgetView({ route }: { route: Route }) {
   const catFilter = route.query.get("category") ?? "";
   const settings = useSettings();
   const forFilter = route.query.get("for") ?? "";
+  const accountFilter = route.query.get("account") ?? "";
+  const [accountModal, setAccountModal] = useState<SavingsAccount | "new" | null>(null);
   const [modal, setModal] = useState<Transaction | "new" | "categories" | { paidBack: string } | null>(null);
   const [copied, setCopied] = useState("");
   const [error, setError] = useState("");
 
   const { data, error: loadError } = useLoad(async () => {
     await postRecurringOnce();
-    const [categories, txs, budgets, lines, friendTxs, people] = await Promise.all([
+    const [categories, txs, budgets, friendTxs, people, accounts, balances] = await Promise.all([
       list<BudgetCategory>("budget_categories", { order: [["kind"], ["name"]] }),
       list<Transaction>("transactions", { gte: ["occurred_on", month], lt: ["occurred_on", addMonths(month, 1)], order: [["occurred_on", false], ["created_at", false]] }),
       list<MonthlyBudget>("monthly_budgets", { eq: { month } }),
-      rpc<BudgetLine[]>("budget_month", { month_start: month }),
       list<Transaction>("transactions", { notNull: ["for_contact_id"], order: [["occurred_on"]] }),
       list<Person>("contacts", { order: [["name"]] }),
+      list<SavingsAccount>("savings_accounts", { order: [["bank_name"], ["name"]] }),
+      rpc<{ account_id: string; balance: number | string }[]>("account_balances").catch(() => []), // until the migration has run
     ]);
-    return { categories, txs: txs.map((t) => ({ ...t, amount: Number(t.amount) })), budgets, lines, friendTxs: friendTxs.map((t) => ({ ...t, amount: Number(t.amount) })), people };
+    const num = (t: Transaction) => ({ ...t, amount: Number(t.amount), to_amount: t.to_amount == null ? null : Number(t.to_amount), base_amount: t.base_amount == null ? null : Number(t.base_amount) });
+    return { categories, txs: txs.map(num), budgets, friendTxs: friendTxs.map(num), people, accounts: accounts.map((a) => ({ ...a, opening_balance: Number(a.opening_balance) })), balances: balanceMap(balances) };
   }, [month]);
 
   const categories = data?.categories ?? [];
@@ -66,27 +72,37 @@ export function BudgetView({ route }: { route: Route }) {
     totals.set(t.currency, x);
   }
   if (!totals.size) totals.set(cur, { income: 0, expense: 0 });
-  const fx = useFx(cur, totals.size > 1);
-  const combined = fx && {
-    income: combine(Object.fromEntries([...totals].map(([c, t]) => [c, t.income / 100])), fx),
-    expense: combine(Object.fromEntries([...totals].map(([c, t]) => [c, t.expense / 100])), fx),
-  };
+  const accounts = data?.accounts ?? [];
+  // Foreign-currency entries are valued in the default currency: the amount saved with the entry, else today's rate.
+  const fx = useFx(cur, needsFx(mine, cur) || accounts.some((a) => a.currency !== cur && !a.archived_at));
+  const val = (t: Transaction) => cents(inBase(t, cur, fx) ?? 0);
+  let combIncome = 0, combExpense = 0, unvalued = 0;
+  for (const t of mine) {
+    if (t.kind === "transfer") continue;
+    const v = inBase(t, cur, fx);
+    if (v === null) { unvalued++; continue; }
+    if (t.kind === "income") combIncome += cents(v); else combExpense += cents(v);
+  }
+  const hasForeign = mine.some((t) => t.kind !== "transfer" && t.currency !== cur);
 
   // Budget vs actual for expense categories in the default currency (plus uncategorised spending)
   const expenseCats = categories.filter((c) => c.kind === "expense" && (!c.archived_at || mine.some((t) => t.category_id === c.id)));
   const rows = expenseCats.map((c) => {
     const budget = data?.budgets.find((b) => b.category_id === c.id && b.currency === cur);
-    const actual = mine.filter((t) => t.kind === "expense" && t.category_id === c.id && t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
+    const actual = mine.filter((t) => t.kind === "expense" && t.category_id === c.id).reduce((s, t) => s + val(t), 0);
     return { c, budget, budgeted: budget ? cents(budget.amount) : 0, actual };
   });
-  const uncategorised = mine.filter((t) => t.kind === "expense" && !t.category_id && t.currency === cur).reduce((s, t) => s + cents(t.amount), 0);
+  const uncategorised = mine.filter((t) => t.kind === "expense" && !t.category_id).reduce((s, t) => s + val(t), 0);
   // Budget vs actual only counts categories that have a budget this month.
   const totalBudget = rows.reduce((s, r) => s + r.budgeted, 0);
   const totalActual = rows.filter((r) => r.budgeted > 0).reduce((s, r) => s + r.actual, 0);
-  const otherCurrencyLines = (data?.lines ?? []).filter((l) => l.currency !== cur && l.kind === "expense");
 
-  const shown = txs.filter((t) => (!kindFilter || t.kind === kindFilter) && (!catFilter || t.category_id === catFilter) && (!forFilter || t.for_contact_id === forFilter));
+  const shown = txs.filter((t) => (!kindFilter || t.kind === kindFilter) && (!catFilter || t.category_id === catFilter) && (!forFilter || t.for_contact_id === forFilter) && (!accountFilter || t.account_id === accountFilter || t.to_account_id === accountFilter));
   const people = data?.people ?? [];
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const activeAccounts = accounts.filter((a) => !a.archived_at);
+  const archivedAccounts = accounts.filter((a) => a.archived_at);
+  const banks = [...new Set(accounts.map((a) => a.bank_name).filter(Boolean))];
   const personName = (id: string | null | undefined) => people.find((p) => p.id === id)?.name ?? "Friend";
   const owed = friendBalances(data?.friendTxs ?? []);
   const monthLabel = fmtDate(month, { month: "long", year: "numeric" });
@@ -169,6 +185,7 @@ export function BudgetView({ route }: { route: Route }) {
               <h2 className="section-title">Transactions</h2>
               <span className="row">
                 <Select label="Type" allLabel="All types" value={kindFilter} options={[["expense", "Expenses"], ["income", "Income"], ["transfer", "Transfers"]]} onChange={(v) => setQuery("kind", v)} />
+                {accounts.length > 0 && <Select label="Account" allLabel="All accounts" value={accountFilter} options={accounts.map((a) => [a.id, accountLabel(a)] as [string, string])} onChange={(v) => setQuery("account", v)} />}
                 <Select label="Category" allLabel="All categories" value={catFilter} options={categories.map((c) => [c.id, c.name] as [string, string])} onChange={(v) => setQuery("category", v)} />
               </span>
             </div>
@@ -183,6 +200,12 @@ export function BudgetView({ route }: { route: Route }) {
                         <td>
                           {t.description}
                           {t.for_contact_id && <> <Badge tone="accent">{t.kind === "income" ? "from" : "for"} {personName(t.for_contact_id)}</Badge></>}
+                          {(t.account_id || t.to_account_id) && (
+                            <div className="muted small">
+                              {t.account_id && accountById.get(t.account_id) ? accountLabel(accountById.get(t.account_id)!) : ""}
+                              {t.kind === "transfer" && t.to_account_id && accountById.get(t.to_account_id) ? ` → ${accountLabel(accountById.get(t.to_account_id)!)}` : ""}
+                            </div>
+                          )}
                           {t.payment_method && <div className="muted small">{t.payment_method}</div>}
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
@@ -192,6 +215,8 @@ export function BudgetView({ route }: { route: Route }) {
                         </td>
                         <td className={`num ${t.kind === "income" ? "pos" : t.kind === "expense" ? "neg" : "muted"}`}>
                           {t.kind === "income" ? "+" : t.kind === "expense" ? "−" : ""}{formatMoney(t.amount, t.currency)}
+                          {t.kind === "transfer" && t.to_amount != null && t.to_account_id && accountById.get(t.to_account_id) && <div className="small">→ {formatMoney(t.to_amount, accountById.get(t.to_account_id)!.currency)}</div>}
+                          {t.kind !== "transfer" && t.currency !== cur && (() => { const v = inBase(t, cur, fx); return v === null ? null : <div className="muted small">≈ {formatMoney(v, cur)}</div>; })()}
                         </td>
                       </tr>
                     ))}
@@ -203,6 +228,35 @@ export function BudgetView({ route }: { route: Route }) {
         </div>
 
         <aside className="detail-side">
+          <div className="card pad accounts-card">
+            <div className="section-head">
+              <h3><Landmark size={15} /> Savings accounts</h3>
+              <button className="small" onClick={() => setAccountModal("new")}><Plus size={13} /> Account</button>
+            </div>
+            {activeAccounts.length === 0 ? <p className="muted small">Add a savings account (bank and name) to record income and spending against it and see its balance.</p> : (
+              <ul className="account-rows">
+                {activeAccounts.map((a) => {
+                  const balance = data?.balances.get(a.id) ?? a.opening_balance;
+                  const est = a.currency !== cur && fx ? inBase({ amount: balance, currency: a.currency }, cur, fx) : null;
+                  return (
+                    <li key={a.id} className={accountFilter === a.id ? "on" : ""}>
+                      <button className="account-main" title="Show only this account’s transactions" onClick={() => setQuery("account", accountFilter === a.id ? undefined : a.id)}>
+                        <span>{a.bank_name && <small className="muted">{a.bank_name}</small>}<strong>{a.name}</strong></span>
+                        <span className={`num ${balance < 0 ? "neg" : ""}`}>{formatMoney(balance, a.currency)}{est !== null && <small className="muted"> ≈ {formatMoney(est, cur)}</small>}</span>
+                      </button>
+                      <button className="icon" aria-label={`Edit ${a.name}`} onClick={() => setAccountModal(a)}><Pencil size={14} /></button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {archivedAccounts.length > 0 && (
+              <details className="small muted"><summary>Archived ({archivedAccounts.length})</summary>
+                {archivedAccounts.map((a) => <div key={a.id}><button className="link small" onClick={() => setAccountModal(a)}>{accountLabel(a)}</button></div>)}
+              </details>
+            )}
+            <p className="muted small">The balance is the opening balance plus the income, spending and transfers recorded against the account.</p>
+          </div>
           <MoneyOutCard month={month} nextMonth={addMonths(month, 1)} currency={cur} txs={txs} />
           {owed.size > 0 && (
             <div className="card pad friends-card">
@@ -227,12 +281,15 @@ export function BudgetView({ route }: { route: Route }) {
               <p className="muted small">Spends marked “for” someone stay on the card but out of your own budget.</p>
             </div>
           )}
-          {combined && combined.income !== null && combined.expense !== null && (
+          {hasForeign && (
             <div className="card pad">
-              <h3>All currencies ≈ {cur}</h3>
-              <div className="stat-line"><span>Income</span><strong className="pos">{formatMoney(combined.income, cur)}</strong></div>
-              <div className="stat-line"><span>Spent</span><strong>{formatMoney(combined.expense, cur)}</strong></div>
-              <p className="muted small">Estimate at rates of {fmtDate(fx!.date)}; totals above stay in their own currencies.</p>
+              <h3>All currencies in {cur}</h3>
+              <div className="stat-line"><span>Income</span><strong className="pos">{formatMoney(combIncome / 100, cur)}</strong></div>
+              <div className="stat-line"><span>Spent</span><strong>{formatMoney(combExpense / 100, cur)}</strong></div>
+              <p className="muted small">
+                Foreign-currency entries count at the {cur} amount saved with them (the exchange rate of their date, or what you entered).
+                {fx ? ` Entries without one use the rate of ${fmtDate(fx.date)}.` : ""}{unvalued > 0 ? ` ${unvalued} entr${unvalued === 1 ? "y has" : "ies have"} no rate yet and ${unvalued === 1 ? "is" : "are"} left out.` : ""}
+              </p>
             </div>
           )}
           <div className="card pad">
@@ -271,11 +328,7 @@ export function BudgetView({ route }: { route: Route }) {
                 {uncategorised > 0 && <li className="small muted">Uncategorised: {formatMoney(uncategorised / 100, cur)}</li>}
               </ul>
             )}
-            {otherCurrencyLines.length > 0 && (
-              <p className="small muted">
-                Other currencies: {otherCurrencyLines.map((l) => `${l.category} ${formatMoney(Number(l.actual), l.currency)}`).join(", ")}
-              </p>
-            )}
+            {hasForeign && <p className="small muted">Spending in other currencies is included at its {cur} value.</p>}
           </div>
           <RecurringCard categories={categories} currency={cur} />
         </aside>
@@ -288,7 +341,12 @@ export function BudgetView({ route }: { route: Route }) {
       )}
       {(modal === "new" || (modal && typeof modal === "object" && !("paidBack" in modal))) && (
         <Modal title={modal === "new" ? "New transaction" : "Edit transaction"} onClose={() => setModal(null)}>
-          <TransactionForm tx={modal === "new" ? undefined : (modal as Transaction)} categories={categories} currency={cur} onDone={() => setModal(null)} />
+          <TransactionForm tx={modal === "new" ? undefined : (modal as Transaction)} categories={categories} currency={cur} presetAccountId={modal === "new" ? accountFilter || undefined : undefined} onDone={() => setModal(null)} />
+        </Modal>
+      )}
+      {accountModal && (
+        <Modal title={accountModal === "new" ? "New savings account" : "Edit savings account"} onClose={() => setAccountModal(null)}>
+          <AccountForm account={accountModal === "new" ? undefined : accountModal} currency={cur} banks={banks} onDone={() => setAccountModal(null)} />
         </Modal>
       )}
       {modal === "categories" && (

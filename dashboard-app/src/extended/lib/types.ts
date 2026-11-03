@@ -183,6 +183,24 @@ export interface Transaction {
   loan_id?: string | null;
   /** Friend this was paid for (or who paid you back); kept out of your own budget. */
   for_contact_id?: string | null;
+  /** Savings account the money came from (expense, transfer) or went into (income). */
+  account_id?: string | null;
+  /** Transfers: the receiving account, and what arrived there when its currency differs. */
+  to_account_id?: string | null;
+  to_amount?: number | null;
+  /** Value in the default currency (INR) when the transaction was saved; set for foreign-currency entries. */
+  base_currency?: string | null;
+  base_amount?: number | null;
+}
+export interface SavingsAccount {
+  id: string;
+  name: string;
+  bank_name: string;
+  currency: string;
+  opening_balance: number;
+  opening_on: string;
+  notes: string | null;
+  archived_at: string | null;
 }
 export interface MonthlyBudget {
   id: string;
