@@ -97,7 +97,7 @@ function Shell(){
      {!projectOnly&&<button className="chip-button" onClick={()=>ui.setPalette(true)} aria-label="Open command palette">
       <Command/><span>Search & commands</span><span className="kbd-hint">K</span>
      </button>}
-     <button className="icon-button" onClick={()=>void supabase?.auth.signOut()} aria-label="Sign out"><CircleUserRound/></button>
+     <button className="icon-button" onClick={()=>void supabase?.auth.signOut({scope:"local"})} aria-label="Sign out"><CircleUserRound/></button>
     </div>
    </header>
 
