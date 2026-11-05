@@ -48,7 +48,9 @@ export function PaperPage({ id }: { id: string }) {
   }, [id]);
 
   if (error) return <ErrorText error={error} />;
-  if (!data) return <Loading rows={6} />;
+  // Moving straight from one record to another, the previous one is still on hand while the
+  // next loads: never build the editor from it, or its text could be saved into the new record.
+  if (!data || (data.paper && data.paper.id !== id)) return <Loading rows={6} />;
   if (!data.paper) return <Empty>This paper doesn’t exist (it may have been deleted). <a href={href("papers")}>Back to papers</a></Empty>;
   return <PaperDetail key={id} paper={data.paper} links={data.links} notes={data.notes} />;
 }

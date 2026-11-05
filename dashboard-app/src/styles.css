@@ -1262,7 +1262,8 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
   --sec-meetings: #b5476f;  --sec-meetings-soft: #f8e3eb;  --sec-meetings-ink: #72243e;
   --sec-deadlines: #c2552f; --sec-deadlines-soft: #f8e4db; --sec-deadlines-ink: #712b13;
   --sec-money: #5b8a3a;     --sec-money-soft: #e6f0da;     --sec-money-ink: #2c5212;
-  --sec-habits: #8a6f4e;    --sec-habits-soft: #efe6d8;    --sec-habits-ink: #4a3a28;}
+  --sec-habits: #8a6f4e;    --sec-habits-soft: #efe6d8;    --sec-habits-ink: #4a3a28;
+  --sec-lab: #8d4bb8;       --sec-lab-soft: #f1e5f8;       --sec-lab-ink: #4d1f6b;}
 /* One look for every sidebar item: the same chip, spacing, hover and active state. */
 .sidebar .sec-chip{display:inline-grid;place-items:center;flex:none;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent)}
 .sidebar .sec-chip svg{width:16px;height:16px}
@@ -1289,13 +1290,13 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
   --sec-tasks:#7fb2e5;--sec-tasks-soft:#1d2f42;--sec-tasks-ink:#c3dcf5;--sec-papers:#e2b05a;--sec-papers-soft:#3a2c14;--sec-papers-ink:#f5dba7;
   --sec-notes:#7fc0d1;--sec-notes-soft:#183039;--sec-notes-ink:#c2e3ec;--sec-meetings:#e88aad;--sec-meetings-soft:#3c1f2b;--sec-meetings-ink:#f6c6d7;
   --sec-deadlines:#ee9473;--sec-deadlines-soft:#3d241a;--sec-deadlines-ink:#f8cbb8;--sec-money:#a6d07d;--sec-money-soft:#24311a;--sec-money-ink:#d5eabd;
-  --sec-habits:#cdb08a;--sec-habits-soft:#332a1f;--sec-habits-ink:#eadcc6;}}
+  --sec-habits:#cdb08a;--sec-habits-soft:#332a1f;--sec-habits-ink:#eadcc6;--sec-lab:#c79ae6;--sec-lab-soft:#2f2140;--sec-lab-ink:#e6d2f5;}}
 :root[data-theme="dark"]{
   --sec-home:#7cc29c;--sec-home-soft:#1e3328;--sec-home-ink:#bfe3cd;--sec-projects:#a99cf0;--sec-projects-soft:#2c2847;--sec-projects-ink:#d4cdfa;
   --sec-tasks:#7fb2e5;--sec-tasks-soft:#1d2f42;--sec-tasks-ink:#c3dcf5;--sec-papers:#e2b05a;--sec-papers-soft:#3a2c14;--sec-papers-ink:#f5dba7;
   --sec-notes:#7fc0d1;--sec-notes-soft:#183039;--sec-notes-ink:#c2e3ec;--sec-meetings:#e88aad;--sec-meetings-soft:#3c1f2b;--sec-meetings-ink:#f6c6d7;
   --sec-deadlines:#ee9473;--sec-deadlines-soft:#3d241a;--sec-deadlines-ink:#f8cbb8;--sec-money:#a6d07d;--sec-money-soft:#24311a;--sec-money-ink:#d5eabd;
-  --sec-habits:#cdb08a;--sec-habits-soft:#332a1f;--sec-habits-ink:#eadcc6;}
+  --sec-habits:#cdb08a;--sec-habits-soft:#332a1f;--sec-habits-ink:#eadcc6;--sec-lab:#c79ae6;--sec-lab-soft:#2f2140;--sec-lab-ink:#e6d2f5;}
 
 /* Settings: stacked actions and the restore preview */
 .button-column{display:flex;flex-direction:column;align-items:stretch;gap:var(--s-2)}

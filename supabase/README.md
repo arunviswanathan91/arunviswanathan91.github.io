@@ -26,6 +26,7 @@ always goes at the end of this list, and the commit that adds it says so.
 | 18 | `resumes.sql` | Resume builder |
 | 19 | `trash-workspace.sql` | Trash for workspace items (papers, notes, accounts and more) |
 | 20 | `savings-accounts.sql` | Savings accounts, balances, and loan/card payments paid from an account |
+| 21 | `experiments.sql` | Experiment log (protocol, samples, results), linked to projects and manuscripts |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, CheckSquare, FileText, Folder, NotebookPen, Search as SearchIcon, Users } from "lucide-react";
+import { CalendarClock, CheckSquare, FileText, FlaskConical, Folder, NotebookPen, Search as SearchIcon, Users } from "lucide-react";
 import { rpc } from "../../lib/db.ts";
 import { fmtDate } from "../../lib/dates.ts";
 import { go, href, setQuery, type Route } from "../../lib/route.ts";
@@ -17,6 +17,7 @@ export const KIND = {
   task: { label: "Task", icon: CheckSquare, path: (h: SearchHit) => (h.project_id ? `projects/${h.project_id}?tab=tasks` : "tasks?view=all") },
   paper: { label: "Paper", icon: FileText, path: (h: SearchHit) => `papers/${h.id}` },
   note: { label: "Note", icon: NotebookPen, path: (h: SearchHit) => `notes/${h.id}` },
+  experiment: { label: "Experiment", icon: FlaskConical, path: (h: SearchHit) => `experiments/${h.id}` },
   meeting: { label: "Meeting", icon: Users, path: (h: SearchHit) => `meetings/${h.id}` },
   deadline: { label: "Deadline", icon: CalendarClock, path: (h: SearchHit) => `deadlines/${h.id}` },
 };
@@ -73,7 +74,7 @@ export function SearchView({ route }: { route: Route }) {
   const { hits, error } = useSearch(q);
   return (
     <section>
-      <PageHeader section="search" title="Search" subtitle="Search research, work boards, papers, notes, meetings, deadlines and clippings." />
+      <PageHeader section="search" title="Search" subtitle="Search research, work boards, papers, notes, experiments, meetings, deadlines and clippings." />
       <div className="filters"><SearchBox value={q} onChange={(v) => setQuery("q", v)} placeholder="Search everything" /></div>
       <ErrorText error={error} />
       <div className="card list-card">

@@ -6,7 +6,7 @@ import { fmtBytes, fmtDate } from "../lib/dates.ts";
 import type { Attachment } from "../lib/types.ts";
 import { ErrorText } from "./ui.tsx";
 
-type Owner = { project_id: string } | { paper_id: string } | { note_id: string } | { meeting_id: string } | { deadline_id: string };
+type Owner = { project_id: string } | { paper_id: string } | { note_id: string } | { meeting_id: string } | { deadline_id: string } | { experiment_id: string };
 
 /** Private files attached to one record. Opened through short-lived signed links. */
 export function Attachments({ owner, accept, title = "Files" }: { owner: Owner; accept?: string; title?: string }) {

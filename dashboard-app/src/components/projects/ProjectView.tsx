@@ -20,7 +20,7 @@ import { ProjectSection, type ProjectSectionTab } from "../../extended/modules/p
 import { DateInput } from "../ui/DateInput";
 
 type ProjectTab="overview"|"work"|"publications"|ProjectSectionTab|"reads"|"people";
-const PROJECT_TABS:ProjectTab[]=["overview","work","publications","papers","notes","meetings","deadlines","reads","files","people"];
+const PROJECT_TABS:ProjectTab[]=["overview","work","publications","papers","notes","experiments","meetings","deadlines","reads","files","people"];
 // Old workspace links say ?tab=tasks for the work board.
 const tabFromHash=():ProjectTab=>{const t=new URLSearchParams(location.hash.split("?")[1]??"").get("tab");return t==="tasks"?"work":PROJECT_TABS.includes(t as ProjectTab)?t as ProjectTab:"overview"};
 // Phase is the one project stage the user edits; the workspace lists read the coarser ws_status.
@@ -79,7 +79,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
  const tabs:{key:ProjectTab;label:string;count?:number}[]=[
   {key:"overview",label:"Overview"},{key:"work",label:"Work board",count:projectTasks.length},
   {key:"publications",label:"Publications",count:directPapers.length+relatedPapers.length},
-  {key:"papers",label:"Papers"},{key:"notes",label:"Notes"},{key:"meetings",label:"Meetings"},{key:"deadlines",label:"Deadlines"},
+  {key:"papers",label:"Papers"},{key:"notes",label:"Notes"},{key:"experiments",label:"Experiments"},{key:"meetings",label:"Meetings"},{key:"deadlines",label:"Deadlines"},
   {key:"reads",label:"Reads",count:projectReads.length},{key:"files",label:"Files"},{key:"people",label:"People"},
  ];
 
@@ -107,7 +107,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
    canEdit={canEdit} onAdd={stageId=>newEntity("tasks",{stage_id:stageId})} onOpen={id=>ui.openDrawer("tasks",id)} onManage={()=>setManageStages(true)}/>}
   {tab==="publications"&&<ProjectPublications project={project} direct={directPapers} related={relatedPapers}
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("publications")} onOpen={ui.openPublication}/>}
-  {(tab==="papers"||tab==="notes"||tab==="meetings"||tab==="deadlines"||tab==="files")&&<ProjectSection key={tab} id={projectId} tab={tab}/>}
+  {(tab==="papers"||tab==="notes"||tab==="experiments"||tab==="meetings"||tab==="deadlines"||tab==="files")&&<ProjectSection key={tab} id={projectId} tab={tab}/>}
   {tab==="reads"&&<ProjectReads project={project} rows={projectReads}
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("reads")} onOpen={id=>ui.openDrawer("reads",id)}/>}
   {tab==="people"&&<ProjectPeople projectId={projectId} isOwner={isOwner} onAdd={()=>setPerson({person:"new"})}

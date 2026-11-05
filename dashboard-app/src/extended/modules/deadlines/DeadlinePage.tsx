@@ -25,7 +25,9 @@ export function DeadlinePage({ id }: { id: string }) {
     return { deadline, tasks };
   }, [id]);
   if (error) return <ErrorText error={error} />;
-  if (!data) return <Loading rows={6} />;
+  // Moving straight from one record to another, the previous one is still on hand while the
+  // next loads: never build the editor from it, or its text could be saved into the new record.
+  if (!data || (data.deadline && data.deadline.id !== id)) return <Loading rows={6} />;
   if (!data.deadline) return <Empty>This deadline doesn’t exist (it may have been deleted). <a href={href("deadlines")}>Back</a></Empty>;
   return <DeadlineDetail key={id} d={data.deadline} tasks={data.tasks} />;
 }

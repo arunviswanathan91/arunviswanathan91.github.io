@@ -870,3 +870,26 @@
   .extension-workspace section.is-loading::after, .ws-skeleton-row { animation: none; }
   .extension-workspace section:not(.is-loading) > :not(header):not(dialog) { animation: none; }
 }
+
+/* ── Experiments ──────────────────────────────────────────────────────────── */
+.extension-workspace .experiment-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) {
+  /* Aim across; protocol beside samples; results across; conclusion beside next steps; files across. */
+  .extension-workspace .experiment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .extension-workspace .experiment-grid > :nth-child(1), .extension-workspace .experiment-grid > :nth-child(4),
+  .extension-workspace .experiment-grid > :nth-child(7) { grid-column: 1 / -1; }
+}
+.extension-workspace .experiment .link-row { flex-wrap: wrap; }
+.extension-workspace .link-row a { display: inline-flex; align-items: center; gap: 4px; }
+/* Same heading as the Markdown sections beside it (Aim, Protocol…). */
+.extension-workspace .samples .section-head h3 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 1.12rem; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0; }
+.extension-workspace .samples .section-head h3 .small { font-weight: 400; font-size: var(--f-sm); }
+.extension-workspace .samples-table { width: 100%; border-collapse: collapse; font-size: var(--f-sm); }
+.extension-workspace .samples-table th { text-align: left; font-weight: 600; color: var(--muted); font-size: var(--f-xs); padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.extension-workspace .samples-table td { padding: 3px 4px; border-bottom: 1px solid var(--border); }
+.extension-workspace .samples-table td:last-child { width: 1%; }
+.extension-workspace .samples-table input { width: 100%; min-width: 80px; border: 1px solid transparent; background: transparent; padding: 5px 6px; border-radius: 6px; font: inherit; color: inherit; }
+.extension-workspace .samples-table input:hover { border-color: var(--border); }
+.extension-workspace .samples-table input:focus { border-color: var(--tone); outline: none; background: var(--surface); }
+.extension-workspace .samples-paste { display: grid; gap: 8px; margin: 6px 0 10px; }
+.extension-workspace .samples-paste textarea { width: 100%; font: 0.85rem/1.45 ui-monospace, monospace; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: inherit; tab-size: 12; }

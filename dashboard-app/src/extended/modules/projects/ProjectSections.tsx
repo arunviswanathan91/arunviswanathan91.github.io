@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FileDown, Link2, Plus, X } from "lucide-react";
 import { insert, list, remove, useLoad } from "../../lib/db.ts";
 import { go } from "../../lib/route.ts";
-import { type Deadline, type Meeting, type MeetingProject, type Note, type Paper, type ProjectPaper } from "../../lib/types.ts";
+import { type Deadline, type Experiment, type Meeting, type MeetingProject, type Note, type Paper, type ProjectPaper } from "../../lib/types.ts";
 import { Attachments } from "../../components/Attachments.tsx";
 import { Modal } from "../../components/Modal.tsx";
 import { ErrorText } from "../../components/ui.tsx";
@@ -14,24 +14,28 @@ import { createNote } from "../notes/NotesView.tsx";
 import { NoteRows } from "../notes/NoteRows.tsx";
 import { PaperForm } from "../papers/PaperForm.tsx";
 import { PaperRows } from "../papers/PaperRows.tsx";
+import { ExperimentRows } from "../experiments/ExperimentRows.tsx";
+import { createExperiment } from "../experiments/create.ts";
+import { sortExperiments } from "../experiments/logic.ts";
 
-export type ProjectSectionTab = "papers" | "notes" | "meetings" | "deadlines" | "files";
+export type ProjectSectionTab = "papers" | "notes" | "experiments" | "meetings" | "deadlines" | "files";
 
 /** The library-side parts of a project (papers, notes, meetings, deadlines, files), shown as tabs on the one project page. */
 export function ProjectSection({ id, tab }: { id: string; tab: ProjectSectionTab }) {
   const [modal, setModal] = useState<"paper" | "link-paper" | "meeting" | "deadline" | null>(null);
   const { data, error } = useLoad(async () => {
-    const [pp, notes, mp, deadlines] = await Promise.all([
+    const [pp, notes, mp, deadlines, experiments] = await Promise.all([
       list<ProjectPaper>("project_papers", { eq: { project_id: id } }),
       list<Note>("notes", { eq: { project_id: id }, order: [["updated_at", false]] }),
       list<MeetingProject>("meeting_projects", { eq: { project_id: id } }),
       list<Deadline>("deadlines", { eq: { project_id: id }, order: [["due_date"]] }),
+      list<Experiment>("experiments", { eq: { project_id: id }, order: [["updated_at", false]] }),
     ]);
     const [papers, meetings] = await Promise.all([
       list<Paper>("papers", { in: ["id", pp.map((l) => l.paper_id)], order: [["created_at", false]] }),
       list<Meeting>("meetings", { in: ["id", mp.map((l) => l.meeting_id)], order: [["starts_at", false]] }),
     ]);
-    return { papers, notes: notes.filter((n) => !n.archived_at), meetings, deadlines };
+    return { papers, notes: notes.filter((n) => !n.archived_at), meetings, deadlines, experiments: sortExperiments(experiments.filter((e) => !e.archived_at)) };
   }, [id]);
 
   if (error) return <ErrorText error={error} />;
@@ -67,6 +71,16 @@ export function ProjectSection({ id, tab }: { id: string; tab: ProjectSectionTab
             <button className="primary" onClick={() => void createNote({ project_id: id, type: "research_idea" })}><Plus size={14} /> Note</button>
           </div>
           <NoteRows notes={data.notes} empty="No notes for this project yet." />
+        </div>
+      )}
+
+      {tab === "experiments" && (
+        <div className="card list-card">
+          <div className="section-head pad-x">
+            <h2 className="section-title">Experiments</h2>
+            <button className="primary" onClick={() => void createExperiment({ project_id: id })}><Plus size={14} /> Experiment</button>
+          </div>
+          <ExperimentRows experiments={data.experiments} empty="No experiments logged for this project yet." />
         </div>
       )}
 

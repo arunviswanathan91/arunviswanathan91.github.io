@@ -16,7 +16,9 @@ import { Empty, ErrorText, SaveIndicator, Loading } from "../../components/ui.ts
 export function NotePage({ id }: { id: string }) {
   const { data: note, error, loading } = useLoad(() => getOne<Note>("notes", id), [id]);
   if (error) return <ErrorText error={error} />;
-  if (loading && !note) return <Loading rows={6} />;
+  // Moving straight from one record to another, the previous one is still on hand while the
+  // next loads: never build the editor from it, or its text could be saved into the new record.
+  if ((loading && !note) || (note && note.id !== id)) return <Loading rows={6} />;
   if (!note) return <Empty>This note doesn’t exist (it may have been deleted). <a href={href("notes")}>Back to notes</a></Empty>;
   return <NoteEditor key={id} initial={note} />;
 }
