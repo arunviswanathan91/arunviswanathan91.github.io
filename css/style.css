@@ -1,7 +1,7 @@
 /* ==========================================================================
    Arun Viswanathan, academic profile
-   Built on Bootstrap 5 utilities; this file supplies the academic theme,
-   the minimal nav, and all hover/scroll animations.
+   Plain CSS with no framework: this file supplies the base reset, the
+   academic theme, the minimal nav, and all load/hover/scroll animations.
    ========================================================================== */
 
 :root {
@@ -31,19 +31,44 @@
   }
 }
 
-* { box-sizing: border-box; }
+/* ---------- Base (the few Bootstrap "reboot" rules this site relied on) ---------- */
+
+*, *::before, *::after { box-sizing: border-box; }
 
 html {
   scroll-behavior: smooth;
+  color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
+  margin: 0;
+  font-size: 1rem;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
 }
+
+h1, h2, h3 { margin: 0 0 0.5rem; line-height: 1.2; }
+p, ul, ol { margin: 0 0 1rem; }
+ul, ol { padding-left: 2rem; }
+img, svg { vertical-align: middle; }
+button { font: inherit; }
+strong, b { font-weight: 600; }
+
+/* SVG icons from assets/img/icons.svg; sized and coloured like text. */
+.icon {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  flex: none;
+  vertical-align: -0.125em;
+}
+
+/* Cross-page fade between the home page and Repos (browsers that support it). */
+@view-transition { navigation: auto; }
 
 h1, h2, h3 {
   font-family: var(--font-head);
@@ -78,6 +103,7 @@ a { color: var(--accent); }
 
 .site-header {
   position: sticky;
+  isolation: isolate;
   top: 0;
   z-index: 1000;
   height: var(--nav-height);
@@ -94,6 +120,21 @@ a { color: var(--accent); }
   border-bottom-color: var(--border);
   box-shadow: var(--shadow);
 }
+
+.scroll-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.site-header.scrolled .scroll-progress { opacity: 1; }
 
 .site-nav {
   width: 100%;
@@ -228,10 +269,61 @@ a { color: var(--accent); }
   opacity: 1;
   transform: none;
 }
+
+/* Items inside a revealed section follow it in one after another. main.js
+   numbers them with --i; the delay is capped so long lists don't drag. */
+/* `translate`/`scale` (not `transform`) so these never fight the hover lifts. */
+.js .reveal .stagger > * {
+  opacity: 0;
+  translate: 0 10px;
+  transition: opacity 0.5s ease, translate 0.5s ease, background-color 0.25s ease, color 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+  transition-delay: calc(min(var(--i, 0), 8) * 60ms + 150ms);
+}
+.js .reveal.in-view .stagger > * {
+  opacity: 1;
+  translate: none;
+}
+/* Once shown, hover effects should respond at once, not after the stagger delay. */
+.js .reveal.in-view .stagger.settled > * { transition-delay: 0s; }
+
+/* Page-load entrance for the first screen: photo, name, then the rest. */
+@keyframes rise-in {
+  from { opacity: 0; translate: 0 14px; }
+  to   { opacity: 1; translate: none; }
+}
+@keyframes photo-in {
+  from { opacity: 0; scale: 0.92; }
+  to   { opacity: 1; scale: none; }
+}
+.hero > * { animation: rise-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.hero > .hero-photo-wrap { animation-name: photo-in; animation-delay: 0s; }
+.hero > h1 { animation-delay: 0.08s; }
+.hero > .tagline { animation-delay: 0.16s; }
+.hero > .location { animation-delay: 0.22s; }
+.hero > .social-icons { animation-delay: 0.28s; }
+.hero > .bio { animation-delay: 0.36s; }
+
+@keyframes fade-in { from { opacity: 0; } }
+.site-header { animation: fade-in 0.5s ease both; }
+.repos-section > h2,
+.repos-section > .repos-intro { animation: rise-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.repos-section > .repos-intro { animation-delay: 0.08s; }
+.repo-grid > * {
+  animation: rise-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(min(var(--i, 0), 10) * 45ms + 120ms);
+}
+
+/* Photo: a soft shimmer sits behind the image while it downloads; the image
+   paints over it, and main.js stops the shimmer once it has loaded. */
+.hero-photo-wrap { background: linear-gradient(110deg, var(--bg-alt) 30%, var(--border) 50%, var(--bg-alt) 70%) 0 0 / 250% 100%; }
+.hero > .hero-photo-wrap.loading { animation: photo-in 0.7s both, shimmer 1.4s linear infinite; }
+@keyframes shimmer { to { background-position: -150% 0; } }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .reveal { opacity: 1; transform: none; transition: none; }
-  * { animation: none !important; transition-duration: 0.001ms !important; }
+  .js .reveal, .js .reveal .stagger > * { opacity: 1; transform: none; transition: none; }
+  *, *::before, *::after { animation: none !important; transition-duration: 0.001ms !important; transition-delay: 0s !important; }
+  .scroll-progress { display: none; }
 }
 
 /* ---------- Hero / about ---------- */
@@ -475,14 +567,7 @@ a { color: var(--accent); }
   color: #fff;
 }
 .btn-cv:hover::before { transform: translateX(0); }
-
-.btn-cv.is-pending {
-  background: var(--bg-alt);
-  color: var(--text-muted);
-  border: 1px dashed var(--border);
-  pointer-events: none;
-}
-.btn-cv.is-pending::before { display: none; }
+.btn-cv:active, .social-icons a:active, .back-to-top:active { transform: scale(0.96); }
 
 .timeline-grid {
   display: grid;
@@ -551,7 +636,7 @@ a { color: var(--accent); }
   color: var(--accent);
   overflow-wrap: anywhere;
 }
-.repo-name i { margin-right: 0.3rem; }
+.repo-name .icon { margin-right: 0.3rem; }
 
 .repo-desc {
   flex: 1;
@@ -660,7 +745,7 @@ a { color: var(--accent); }
   }
 
   .nav-links.open {
-    max-height: 380px;
+    max-height: 480px;
     opacity: 1;
   }
 
@@ -674,11 +759,7 @@ a { color: var(--accent); }
     opacity: 1;
     transform: none;
   }
-  .nav-links.open li:nth-child(1) { transition-delay: 0.05s; }
-  .nav-links.open li:nth-child(2) { transition-delay: 0.1s; }
-  .nav-links.open li:nth-child(3) { transition-delay: 0.15s; }
-  .nav-links.open li:nth-child(4) { transition-delay: 0.2s; }
-  .nav-links.open li:nth-child(5) { transition-delay: 0.25s; }
+  .nav-links.open li { transition-delay: calc(var(--i, 0) * 40ms + 50ms); }
 
   .nav-link {
     display: block;

@@ -1137,6 +1137,12 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .auth-card label{display:grid;gap:5px;color:var(--text-2);font-size:var(--f-xs);font-weight:600}
 .auth-card .primary{width:100%;margin-top:var(--s-2);padding:9px}
 .auth-card a{font-size:var(--f-xs)}
+.auth-card{animation:auth-in .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes auth-in{from{opacity:0;transform:translateY(8px) scale(.99)}}
+.auth-progress{display:block;height:3px;margin-top:var(--s-3);border-radius:3px;background:var(--border);overflow:hidden;position:relative}
+.auth-progress::after{content:"";position:absolute;inset:0;width:40%;border-radius:inherit;background:var(--accent);animation:auth-bar 1.1s ease-in-out infinite}
+@keyframes auth-bar{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media (prefers-reduced-motion:reduce){.auth-card{animation:none}.auth-progress::after{animation-duration:2.4s}}
 .auth-message{display:block;min-height:16px;color:var(--danger);font-size:var(--f-xs)}
 
 /* ============================================================================

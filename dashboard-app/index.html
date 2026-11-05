@@ -10,7 +10,9 @@
 <meta name="theme-color" content="#0e1211" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Crimson+Pro:ital,wght@0,400;0,700;1,400;1,700&family=EB+Garamond:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;700&family=Lato:ital,wght@0,400;0,700;1,400;1,700&family=Merriweather:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,400;0,700;1,400;1,700&family=DM+Sans:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Source+Serif+4:ital,wght@0,400;0,700;1,400;1,700&family=Vollkorn:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<!-- Only the interface font loads here. The résumé fonts are fetched by the résumé
+     pages when they open (see extended/modules/resumes/fonts.ts). -->
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
 // Applies the stored theme before first paint so a dark-mode load never flashes light.
 // Reads the same key/format lib/persist.ts writes (JSON under "dash.v1.theme").
@@ -19,6 +21,16 @@ try{
  if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);
 }catch(e){}
 </script>
+<style>
+/* Shown until the app's JavaScript renders; React replaces it on first render. */
+.boot{min-height:100dvh;display:grid;place-items:center;margin:0;background:#f5f6f5;font-family:"DM Sans",system-ui,sans-serif}
+.boot-mark{width:40px;height:40px;display:grid;place-items:center;border-radius:8px;background:#1f6b4f;color:#fff;font-weight:700;animation:boot-pulse 1.2s ease-in-out infinite}
+@keyframes boot-pulse{50%{opacity:.55;transform:scale(.94)}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .boot{background:#0e1211}:root:not([data-theme="light"]) .boot-mark{background:#48b98a;color:#0e1211}}
+:root[data-theme="dark"] .boot{background:#0e1211}:root[data-theme="dark"] .boot-mark{background:#48b98a;color:#0e1211}
+@media (prefers-reduced-motion:reduce){.boot-mark{animation:none}}
+body{margin:0}
+</style>
 </head>
-<body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
+<body><div id="root"><div class="boot" role="status" aria-label="Loading workspace"><span class="boot-mark">AV</span></div></div><script type="module" src="/src/main.tsx"></script></body>
 </html>

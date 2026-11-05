@@ -1,19 +1,26 @@
 (function () {
   "use strict";
 
-  document.documentElement.classList.add("js");
+  // The `.js` class is set by an inline script in <head>, before first paint.
 
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---------- Element references ---------- */
   var photo = document.getElementById("profile-photo");
-  var cvButton = document.getElementById("cv-button");
   var header = document.getElementById("top");
   var navToggle = document.getElementById("nav-toggle");
   var navLinks = document.getElementById("nav-links");
   var backToTop = document.getElementById("back-to-top");
   var sections = Array.prototype.slice.call(document.querySelectorAll("main .section[id]"));
   var revealEls = document.querySelectorAll(".reveal");
+  var progressBar = document.querySelector(".scroll-progress");
+
+  /* ---------- Number list items so CSS can stagger them (--i) ---------- */
+  document.querySelectorAll(".stagger, .nav-links, .repo-grid").forEach(function (list) {
+    Array.prototype.forEach.call(list.children, function (child, i) {
+      child.style.setProperty("--i", i);
+    });
+  });
 
   /* ---------- Fallback avatar if profile.jpg hasn't been uploaded yet ---------- */
   function initialsAvatarDataUri(initials, bg) {
@@ -26,24 +33,18 @@
   }
 
   if (photo) {
+    var wrap = photo.parentElement;
+    var photoDone = function () { wrap.classList.remove("loading"); };
+    if (photo.complete) photoDone();
+    else {
+      photo.addEventListener("load", photoDone, { once: true });
+      photo.addEventListener("error", photoDone, { once: true });
+    }
     photo.addEventListener("error", function onErr() {
       photo.removeEventListener("error", onErr);
       photo.src = initialsAvatarDataUri("AV", "#1d3557");
       photo.classList.add("is-fallback");
     });
-  }
-
-  /* ---------- CV button: grey out until the PDF actually exists ---------- */
-  if (cvButton) {
-    fetch(cvButton.getAttribute("href"), { method: "HEAD" })
-      .then(function (res) {
-        if (!res.ok) throw new Error("missing");
-      })
-      .catch(function () {
-        cvButton.classList.add("is-pending");
-        cvButton.setAttribute("aria-disabled", "true");
-        cvButton.innerHTML = '<i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> CV coming soon';
-      });
   }
 
   /* ---------- Mobile nav toggle ---------- */
@@ -105,8 +106,13 @@
       function (entries, obs) {
         entries.forEach(function (entry) {
           if (entry.isIntersecting) {
-            entry.target.classList.add("in-view");
-            obs.unobserve(entry.target);
+            var section = entry.target;
+            section.classList.add("in-view");
+            obs.unobserve(section);
+            // After the staggered entrance, drop the delays so hovers react at once.
+            setTimeout(function () {
+              section.querySelectorAll(".stagger").forEach(function (l) { l.classList.add("settled"); });
+            }, 1400);
           }
         });
       },
@@ -115,6 +121,7 @@
     revealEls.forEach(function (el) { reveal.observe(el); });
   } else {
     revealEls.forEach(function (el) { el.classList.add("in-view"); });
+    document.querySelectorAll(".stagger").forEach(function (l) { l.classList.add("settled"); });
   }
 
   /* ---------- Back to top ---------- */
@@ -129,15 +136,33 @@
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   });
 
+  /* ---------- Reading progress bar under the header ---------- */
+  function updateProgress() {
+    if (!progressBar) return;
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    progressBar.style.setProperty("--progress", max > 0 ? Math.min(1, window.scrollY / max) : 0);
+  }
+
   /* ---------- Header scroll state ---------- */
+  var ticking = false;
   function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      ticking = false;
+      applyScroll();
+    });
+  }
+  function applyScroll() {
     if (window.scrollY > 12) {
       header.classList.add("scrolled");
     } else {
       header.classList.remove("scrolled");
     }
     toggleBackToTop();
+    updateProgress();
   }
   window.addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
+  window.addEventListener("resize", onScroll, { passive: true });
+  applyScroll();
 })();
