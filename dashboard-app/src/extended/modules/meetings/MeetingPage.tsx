@@ -13,7 +13,7 @@ import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { MultiPicker, useContacts, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
-import { Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { Empty, ErrorText, SaveIndicator, Loading } from "../../components/ui.tsx";
 import { DateInput } from "../../../components/ui/DateInput";
 
 const SECTIONS: [keyof Meeting, string, string][] = [
@@ -26,7 +26,7 @@ const SECTIONS: [keyof Meeting, string, string][] = [
 export function MeetingPage({ id }: { id: string }) {
   const { data: meeting, error, loading } = useLoad(() => getOne<Meeting>("meetings", id), [id]);
   if (error) return <ErrorText error={error} />;
-  if (loading && !meeting) return null;
+  if (loading && !meeting) return <Loading rows={6} />;
   if (!meeting) return <Empty>This meeting doesn’t exist (it may have been deleted). <a href={href("meetings")}>Back to meetings</a></Empty>;
   return <MeetingEditor key={id} initial={meeting} />;
 }

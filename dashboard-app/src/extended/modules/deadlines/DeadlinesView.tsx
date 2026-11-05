@@ -34,7 +34,7 @@ export function DeadlinesView({ route }: { route: Route }) {
   };
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <PageHeader
         section="deadlines"
         title="Deadlines & milestones"

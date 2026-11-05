@@ -11,12 +11,12 @@ import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { ProjectSelect, projectName, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
-import { Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { Empty, ErrorText, SaveIndicator, Loading } from "../../components/ui.tsx";
 
 export function NotePage({ id }: { id: string }) {
   const { data: note, error, loading } = useLoad(() => getOne<Note>("notes", id), [id]);
   if (error) return <ErrorText error={error} />;
-  if (loading && !note) return null;
+  if (loading && !note) return <Loading rows={6} />;
   if (!note) return <Empty>This note doesn’t exist (it may have been deleted). <a href={href("notes")}>Back to notes</a></Empty>;
   return <NoteEditor key={id} initial={note} />;
 }

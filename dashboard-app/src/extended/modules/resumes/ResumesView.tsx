@@ -22,7 +22,7 @@ export function ResumesView() {
   const del = async (r: Row) => { if ((await ask(`Move “${r.title}” to Trash? You can restore it from Trash.`))) await trash("resumes", r.id); };
   const close = (e: React.MouseEvent) => (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <PageHeader section="resumes" title="My Resumes" subtitle="Editable resumes and CVs. Keep as many versions as you like and download any of them as a PDF whenever you need it." />
       <ErrorText error={error} />
       <div className="rb-gallery">

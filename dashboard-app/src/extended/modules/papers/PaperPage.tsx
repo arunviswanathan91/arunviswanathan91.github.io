@@ -10,7 +10,7 @@ import { Attachments } from "../../components/Attachments.tsx";
 import { Modal } from "../../components/Modal.tsx";
 import { MultiPicker, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
-import { Empty, ErrorText, SaveIndicator, Stars } from "../../components/ui.tsx";
+import { Empty, ErrorText, SaveIndicator, Stars, Loading } from "../../components/ui.tsx";
 import { NoteRows } from "../notes/NoteRows.tsx";
 import { PaperForm } from "./PaperForm.tsx";
 import { ReadingTimer } from "./ReadingTimer.tsx";
@@ -48,7 +48,7 @@ export function PaperPage({ id }: { id: string }) {
   }, [id]);
 
   if (error) return <ErrorText error={error} />;
-  if (!data) return null;
+  if (!data) return <Loading rows={6} />;
   if (!data.paper) return <Empty>This paper doesn’t exist (it may have been deleted). <a href={href("papers")}>Back to papers</a></Empty>;
   return <PaperDetail key={id} paper={data.paper} links={data.links} notes={data.notes} />;
 }

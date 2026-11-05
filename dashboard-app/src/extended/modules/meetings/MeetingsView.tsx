@@ -49,7 +49,7 @@ export function MeetingsView({ route }: { route: Route }) {
   const chosen = shown.filter((m) => selected.has(m.id)).map((m) => m.id);
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <PageHeader
         section="meetings"
         title="Meetings"

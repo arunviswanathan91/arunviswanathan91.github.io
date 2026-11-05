@@ -143,7 +143,7 @@ export function BudgetView({ route }: { route: Route }) {
   }
 
   return (
-    <section>
+    <section className={!data && !loadError ? "is-loading" : undefined} aria-busy={!data && !loadError || undefined}>
       <PageHeader
         section="budget"
         title="Budget"

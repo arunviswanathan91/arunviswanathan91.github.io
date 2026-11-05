@@ -63,7 +63,7 @@ export function AgendaView() {
   }
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={(!data && !error) || undefined}>
       <PageHeader
         section="agenda"
         title="Agenda"

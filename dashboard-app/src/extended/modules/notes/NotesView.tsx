@@ -33,7 +33,7 @@ export function NotesView({ route }: { route: Route }) {
     .sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <PageHeader
         section="notes"
         title="Notes"

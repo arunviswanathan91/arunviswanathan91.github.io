@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase.ts";
-import { CHANGED } from "../../lib/db.ts";
+import { CHANGED, onLoadCacheClear } from "../../lib/db.ts";
 import { chargedByLoan, type Charge, type Contact, type Loan, type Payment } from "./balance.ts";
 
 export interface LoansData {
@@ -14,12 +14,17 @@ export interface LoansData {
   reload: () => Promise<void>;
 }
 
+// Last loaded data, shared by every page that shows loans (Loans, Home, Budget),
+// so opening one of them again draws the figures at once and then refreshes.
+let cached: { contacts: Contact[]; loans: Loan[]; payments: Payment[]; charges: Charge[] } | null = null;
+onLoadCacheClear(() => { cached = null; });
+
 export function useLoans(): LoansData {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loans, setLoans] = useState<Loan[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [charges, setCharges] = useState<Charge[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [contacts, setContacts] = useState<Contact[]>(() => cached?.contacts ?? []);
+  const [loans, setLoans] = useState<Loan[]>(() => cached?.loans ?? []);
+  const [payments, setPayments] = useState<Payment[]>(() => cached?.payments ?? []);
+  const [charges, setCharges] = useState<Charge[]>(() => cached?.charges ?? []);
+  const [loading, setLoading] = useState(() => !cached);
   const [error, setError] = useState("");
 
   const reload = useCallback(async () => {
@@ -33,12 +38,13 @@ export function useLoans(): LoansData {
     const err = c.error ?? l.error ?? p.error ?? t.error;
     setError(err ? err.message : "");
     if (!err) {
-      setContacts(c.data as Contact[]);
+      const nextContacts = c.data as Contact[];
+      setContacts(nextContacts);
       const num = (v: unknown) => (v == null ? null : Number(v));
       const cardCharges = (t.data as Charge[]).map((x) => ({ ...x, amount: Number(x.amount) }));
       const charged = chargedByLoan(cardCharges);
       setCharges(cardCharges);
-      setLoans((l.data as Loan[]).map((x) => ({
+      const nextLoans = (l.data as Loan[]).map((x) => ({
         ...x,
         amount: Number(x.amount),
         credit_limit: num(x.credit_limit),
@@ -49,8 +55,11 @@ export function useLoans(): LoansData {
         interest_rate: num(x.interest_rate),
         statement_amount: num(x.statement_amount),
         charged: charged[x.id] ?? 0,
-      })));
-      setPayments((p.data as Payment[]).map((x) => ({ ...x, amount: Number(x.amount) })));
+      }));
+      const nextPayments = (p.data as Payment[]).map((x) => ({ ...x, amount: Number(x.amount) }));
+      setLoans(nextLoans);
+      setPayments(nextPayments);
+      cached = { contacts: nextContacts, loans: nextLoans, payments: nextPayments, charges: cardCharges };
     }
     setLoading(false);
   }, []);

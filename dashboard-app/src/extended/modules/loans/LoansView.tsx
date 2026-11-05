@@ -125,10 +125,8 @@ export function LoansView() {
     return out.filter((q, i) => q.amount > 0 && out.findIndex((o) => o.amount === q.amount && o.label === q.label) === i);
   }
 
-  if (loading) return <p className="muted">Loading…</p>;
-
   return (
-    <section>
+    <section className={loading ? "is-loading" : undefined} aria-busy={loading || undefined}>
       <PageHeader
         section="loans"
         title="Loans & credit cards"

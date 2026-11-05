@@ -94,29 +94,64 @@ export async function rpc<T>(fn: string, args: object = {}): Promise<T> {
 }
 
 /** Load data, reload when anything in the workspace changes. */
+// Last result of each loader, so returning to a page shows what it showed before
+// at once and refreshes it quietly, instead of blanking and popping back in.
+// The key is the loader's source plus its deps: two call sites with the same
+// text and deps run the same query. Bounded so long sessions don't grow it forever.
+const loadCache = new Map<string, unknown>();
+const CACHE_LIMIT = 150;
+const cacheKey = (load: () => unknown, deps: unknown[]) => {
+  try { return `${load.toString()}|${JSON.stringify(deps)}`; } catch { return ""; }
+};
+const remember = (key: string, value: unknown) => {
+  if (!key) return;
+  loadCache.delete(key);
+  loadCache.set(key, value);
+  if (loadCache.size > CACHE_LIMIT) loadCache.delete(loadCache.keys().next().value as string);
+};
+const cacheClearers = new Set<() => void>();
+/** Lets a hook with its own cache (such as useLoans) be cleared with the rest. */
+export function onLoadCacheClear(fn: () => void) { cacheClearers.add(fn); }
+/** Forget every cached page (on sign-out, so another account never sees it). */
+export function clearLoadCache() { loadCache.clear(); cacheClearers.forEach((fn) => fn()); }
+
 export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
-  const [data, setData] = useState<T | undefined>(undefined);
+  const key = cacheKey(load, deps);
+  const [data, setData] = useState<T | undefined>(() => loadCache.get(key) as T | undefined);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !loadCache.has(key));
   const loadRef = useRef(load);
   loadRef.current = load;
+  const keyRef = useRef(key);
+  keyRef.current = key;
+  const seq = useRef(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const reload = useCallback(async () => {
+    // Only the newest request may write: a slow earlier one (say, the previous
+    // id when switching quickly) must not overwrite what is now on screen.
+    const mine = ++seq.current;
+    const k = keyRef.current;
     try {
-      setData(await loadRef.current());
+      const value = await loadRef.current();
+      if (mine !== seq.current) return;
+      remember(k, value);
+      setData(value);
       setError("");
     } catch (e) {
+      if (mine !== seq.current) return;
       setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (mine === seq.current) setLoading(false);
     }
   }, deps);
   useEffect(() => {
-    setLoading(true);
+    // Switching to deps already seen shows their cached result straight away.
+    if (loadCache.has(keyRef.current)) { setData(loadCache.get(keyRef.current) as T); setLoading(false); }
+    else setLoading(true);
     void reload();
     const on = () => void reload();
     window.addEventListener(CHANGED, on);
-    return () => window.removeEventListener(CHANGED, on);
+    return () => { seq.current++; window.removeEventListener(CHANGED, on); };
   }, [reload]);
   return { data, error, loading, reload };
 }

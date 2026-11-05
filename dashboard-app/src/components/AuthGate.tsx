@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { clearLoadCache } from "../extended/lib/db";
 // The workspace is most of the app's code. Loading it on demand keeps the
 // sign-in screen small, and lets the browser fetch it while the session check runs.
 const loadWorkspace=()=>import("./Workspace");
@@ -9,7 +10,7 @@ const Loading=({label}:{label:string})=><div className="auth-screen" aria-busy="
 
 export function AuthGate(){
  const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(false),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[message,setMessage]=useState("");
- useEffect(()=>{if(!supabase){setReady(true);return}void loadWorkspace();void supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data}=supabase.auth.onAuthStateChange((_event,next)=>setSession(next));return()=>data.subscription.unsubscribe()},[]);
+ useEffect(()=>{if(!supabase){setReady(true);return}void loadWorkspace();void supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)});const {data}=supabase.auth.onAuthStateChange((_event,next)=>{if(!next)clearLoadCache();setSession(next)});return()=>data.subscription.unsubscribe()},[]);
  const signIn=async(e:React.FormEvent)=>{e.preventDefault();if(!supabase)return;setMessage("Signing in…");const {error}=await supabase.auth.signInWithPassword({email,password});setMessage(error?error.message:"")};
  if(!ready)return <Loading label="Checking access…"/>;
  if(!supabase)return <div className="auth-screen"><div className="auth-card"><span className="auth-mark">AV</span><p className="kicker">Private workspace</p><h1>Workspace locked</h1><p>Supabase authentication has not been configured. No dashboard content is available.</p><a href="../">Return to the public website</a></div></div>;

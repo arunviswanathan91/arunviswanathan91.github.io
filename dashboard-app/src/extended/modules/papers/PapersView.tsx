@@ -48,7 +48,7 @@ export function PapersView({ route }: { route: Route }) {
   );
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <PageHeader
         section="papers"
         title="Papers"
