@@ -42,6 +42,15 @@ test('savings accounts: balances, transfers, currency rules, base amounts, backu
  await assert.rejects(db.exec(`insert into ws_transactions(kind,description,amount,account_id,to_account_id,to_amount) values('transfer','Loop',1,'${inr}','${inr}',1)`),/account_rules/);
  await assert.rejects(db.exec(`insert into ws_transactions(kind,description,amount,to_account_id) values('expense','Bad',1,'${inr}')`),/account_rules/);
 
+ // a card bill / EMI paid from an account lowers its balance without becoming an expense
+ const before=await bal(inr);
+ const spentBefore=Number((await one(`select coalesce(sum(amount),0) s from ws_transactions where kind='expense' and account_id='${inr}'`)).s);
+ const emi=(await one(`insert into ws_loans(contact_id,direction,amount,account_type,account_name) values('${(await one(`insert into ws_contacts(name) values('Lender') returning id`)).id}','borrowed',50000,'bank','Car loan') returning id`)).id;
+ await db.exec(`insert into ws_loan_payments(loan_id,amount,paid_on,account_id) values('${emi}',2000,'2026-03-01','${inr}'),('${emi}',500,'2026-03-02',null)`);
+ assert.equal(await bal(inr),before-2000);
+ assert.equal(Number((await one(`select coalesce(sum(amount),0) s from ws_transactions where kind='expense' and account_id='${inr}'`)).s),spentBefore); // spent unchanged
+ await assert.rejects(db.exec(`insert into ws_loan_payments(loan_id,amount,account_id) values('${emi}',1,'${sek}')`),/can only pay/);
+
  // base amount rules; card and account are exclusive
  await assert.rejects(db.exec(`insert into ws_transactions(kind,description,amount,base_amount) values('expense','x',1,5)`),/account_rules/);
  const contact=(await one(`insert into ws_contacts(name) values('Bank') returning id`)).id;
@@ -68,6 +77,6 @@ test('savings accounts: balances, transfers, currency rules, base amounts, backu
  assert.equal(backup.ws_savings_accounts.length,3);
  const restored=(await one(`select ws_restore_data('${uid}', ws_backup_data()) as r`)).r;
  assert.equal(restored.ws_savings_accounts,3);
- assert.equal(await bal(inr),45000-8300);
+ assert.equal(await bal(inr),45000-8300-2000);
  }finally{await db.close()}
 });

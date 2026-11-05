@@ -65,20 +65,43 @@ drop trigger if exists ws_check_tx_accounts on public.ws_transactions;
 create trigger ws_check_tx_accounts before insert or update on public.ws_transactions
   for each row execute function ws_private.check_tx_accounts();
 
--- Balance of every account of the signed-in user: opening balance + income − spending − transfers out + transfers in,
--- counting transactions dated on or after the opening date.
+-- A loan EMI / repayment / card bill can be paid from a savings account. It lowers that account's balance but it is
+-- not a budget expense (no transaction row), so it never counts as "spent". The check runs at commit so a backup
+-- restore can load payments before accounts.
+alter table public.ws_loan_payments add column if not exists account_id uuid references public.ws_savings_accounts(id) on delete restrict;
+create index if not exists loan_payments_account_idx on public.ws_loan_payments (account_id) where account_id is not null;
+create or replace function ws_private.check_payment_account() returns trigger
+language plpgsql set search_path = '' as $$
+declare a record; l record;
+begin
+ if new.account_id is not null then
+  select s.user_id, s.currency into a from public.ws_savings_accounts s where s.id = new.account_id;
+  select x.currency into l from public.ws_loans x where x.id = new.loan_id;
+  if not found or a.user_id is distinct from new.user_id then raise exception 'Linked record must belong to this account'; end if;
+  if a.currency <> l.currency then raise exception 'This account is in %, so it can only pay a % loan or card', a.currency, a.currency; end if;
+ end if;
+ return null;
+end $$;
+revoke all on function ws_private.check_payment_account() from public, anon, authenticated;
+drop trigger if exists ws_check_payment_account on public.ws_loan_payments;
+create constraint trigger ws_check_payment_account after insert or update on public.ws_loan_payments
+  deferrable initially deferred for each row execute function ws_private.check_payment_account();
+
+-- Balance of every account of the signed-in user: opening balance + income − spending − transfers out + transfers in
+-- − loan/card payments made from it, counting entries dated on or after the opening date.
 create or replace function public.ws_account_balances()
 returns table (account_id uuid, balance numeric)
 language sql stable security invoker set search_path = '' as $$
  select a.id,
-        a.opening_balance + coalesce(sum(
-          case when t.account_id = a.id then (case t.kind when 'income' then t.amount else -t.amount end)
-               else coalesce(t.to_amount, t.amount) end), 0)
+        a.opening_balance
+        + coalesce((select sum(case when t.account_id = a.id then (case t.kind when 'income' then t.amount else -t.amount end)
+                                    else coalesce(t.to_amount, t.amount) end)
+                      from public.ws_transactions t
+                     where (t.account_id = a.id or t.to_account_id = a.id) and t.occurred_on >= a.opening_on), 0)
+        - coalesce((select sum(p.amount) from public.ws_loan_payments p
+                     where p.account_id = a.id and p.paid_on >= a.opening_on), 0)
    from public.ws_savings_accounts a
-   left join public.ws_transactions t
-     on (t.account_id = a.id or t.to_account_id = a.id) and t.occurred_on >= a.opening_on
   where a.user_id = auth.uid()
-  group by a.id, a.opening_balance
 $$;
 revoke all on function public.ws_account_balances() from public, anon;
 grant execute on function public.ws_account_balances() to authenticated;
