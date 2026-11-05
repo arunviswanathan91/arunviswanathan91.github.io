@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { ask } from "../../../lib/dialogs.tsx";
 import { Archive, ArchiveRestore, BellRing, ChevronLeft, ChevronRight, Download, Flame, Pause, Pencil, Plus, Trash2 } from "lucide-react";
 import { insert, list, remove, update, upsert, useLoad } from "../../lib/db.ts";
 import { addDays, fmtDate, startOfWeek, today } from "../../lib/dates.ts";
@@ -6,7 +7,7 @@ import { downloadCsv } from "../../lib/download.ts";
 import { saveSettings, useSettings } from "../../lib/settings.ts";
 import { WEEKDAYS, type Habit, type HabitCheckin, type HabitPause } from "../../lib/types.ts";
 import { Modal } from "../../components/Modal.tsx";
-import { confirmDanger, Empty, ErrorText, Field, PageHeader } from "../../components/ui.tsx";
+import { Empty, ErrorText, Field, PageHeader } from "../../components/ui.tsx";
 import { describeSchedule, formatAmount, isDue, isPaused, pausesFor, planFor, summarise, type DayPlan, type DayState } from "./logic.ts";
 import { DateInput } from "../../../components/ui/DateInput";
 
@@ -306,7 +307,7 @@ export function HabitsView() {
                         <span>{h.name} <span className="muted small">· {checkins.filter((c) => c.habit_id === h.id).length} check-ins kept</span></span>
                         <span className="row">
                           <button className="icon" aria-label={`Restore ${h.name}`} onClick={() => void update("habits", h.id, { archived_at: null })}><ArchiveRestore size={13} /></button>
-                          <button className="icon danger" aria-label={`Delete ${h.name}`} onClick={() => confirmDanger(`Permanently delete “${h.name}” and all its history?`) && void remove("habits", { id: h.id })}><Trash2 size={13} /></button>
+                          <button className="icon danger" aria-label={`Delete ${h.name}`} onClick={async () => { if (await ask(`Permanently delete “${h.name}” and all its history?`)) void remove("habits", { id: h.id }); }}><Trash2 size={13} /></button>
                         </span>
                       </div>
                     </li>

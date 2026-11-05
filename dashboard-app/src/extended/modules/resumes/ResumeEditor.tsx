@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { ask } from "../../../lib/dialogs.tsx";
 import { ArrowLeft, Search, ChevronDown, ChevronRight, ChevronUp, Download, Eye, EyeOff, Minus, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
 import { getOne, update, useLoad } from "../../lib/db.ts";
 import { go } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
 import { Modal } from "../../components/Modal.tsx";
-import { confirmDanger, ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { ErrorText, SaveIndicator } from "../../components/ui.tsx";
 import {
   ACCENTS, ACCENT_TARGETS, DEFAULT_STYLE, FONTS, HEADING_STYLES, LAYOUT_TYPES, SECTION_ORDER, layoutFor, SECTION_TYPES, moveBy, newItem, newSection, normalizeResume, pdfFilename,
   type DisplayMode, type FontKey, type HeadingStyle, type SectionLayout, type ItemField, type ResumeData, type ResumeStyle, type ResumeItem, type ResumeSection, type SectionType,
@@ -95,7 +96,7 @@ function Editor({ row }: { row: Row }) {
                 <SectionCard key={s.id} s={s} first={n === 0} last={n === data.sections.length - 1}
                   onChange={(f) => setSection(s.id, f)}
                   onMove={(d) => edit({ ...data, sections: moveBy(data.sections, n, d) })}
-                  onDelete={() => { if (confirmDanger(`Delete the “${s.title}” section and its ${s.items.length} entries?`)) edit({ ...data, sections: data.sections.filter((x) => x.id !== s.id) }); }} />
+                  onDelete={async () => { if ((await ask(`Delete the “${s.title}” section and its ${s.items.length} entries?`))) edit({ ...data, sections: data.sections.filter((x) => x.id !== s.id) }); }} />
               ))}
               <button className="rb-add" onClick={() => setAdding(true)}><Plus size={16} /> Add content</button>
             </>
@@ -188,7 +189,7 @@ function SectionCard({ s, first, last, onChange, onMove, onDelete }: {
                   <button className="icon" aria-label="Move up" disabled={n === 0} onClick={() => onChange((x) => ({ ...x, items: moveBy(x.items, n, -1) }))}><ChevronUp size={14} /></button>
                   <button className="icon" aria-label="Move down" disabled={n === s.items.length - 1} onClick={() => onChange((x) => ({ ...x, items: moveBy(x.items, n, 1) }))}><ChevronDown size={14} /></button>
                   <button className="icon" aria-label={it.hidden ? "Show entry" : "Hide entry"} onClick={() => setItem(it.id, { hidden: !it.hidden })}>{it.hidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
-                  <button className="icon" aria-label="Delete entry" onClick={() => { if (confirmDanger("Delete this entry?")) onChange((x) => ({ ...x, items: x.items.filter((i) => i.id !== it.id) })); }}><Trash2 size={14} /></button>
+                  <button className="icon" aria-label="Delete entry" onClick={async () => { if ((await ask("Delete this entry?"))) onChange((x) => ({ ...x, items: x.items.filter((i) => i.id !== it.id) })); }}><Trash2 size={14} /></button>
                 </span>
               </div>
               {openItem === it.id && <ItemForm type={s.type} item={it} onChange={(p) => setItem(it.id, p)} />}

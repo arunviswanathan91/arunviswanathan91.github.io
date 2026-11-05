@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ask } from "../../../lib/dialogs.tsx";
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { getOne, insert, list, remove, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDate, today } from "../../lib/dates.ts";
@@ -9,7 +10,7 @@ import { Attachments } from "../../components/Attachments.tsx";
 import { Modal } from "../../components/Modal.tsx";
 import { MultiPicker, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
-import { confirmDanger, Empty, ErrorText, SaveIndicator, Stars } from "../../components/ui.tsx";
+import { Empty, ErrorText, SaveIndicator, Stars } from "../../components/ui.tsx";
 import { NoteRows } from "../notes/NoteRows.tsx";
 import { PaperForm } from "./PaperForm.tsx";
 import { ReadingTimer } from "./ReadingTimer.tsx";
@@ -83,7 +84,7 @@ function PaperDetail({ paper, links, notes }: { paper: Paper; links: ProjectPape
   }
 
   async function del() {
-    if (!confirmDanger(`Move “${paper.title}” and its reading notes to Trash? Linked notes are kept. You can restore it from Trash.`)) return;
+    if (!(await ask(`Move “${paper.title}” and its reading notes to Trash? Linked notes are kept. You can restore it from Trash.`))) return;
     await trash("papers", paper.id);
     go("papers");
   }

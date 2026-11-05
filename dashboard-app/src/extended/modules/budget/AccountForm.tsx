@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
+import { ask } from "../../../lib/dialogs.tsx";
 import { insert, trash, update } from "../../lib/db.ts";
 import { today } from "../../lib/dates.ts";
 import { CURRENCIES, type SavingsAccount } from "../../lib/types.ts";
-import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
+import { ErrorText, Field } from "../../components/ui.tsx";
 import { DateInput } from "../../../components/ui/DateInput";
 import { deleteAccountError } from "./accounts.ts";
 
@@ -43,7 +44,7 @@ export function AccountForm({ account, currency, banks, onDone }: { account?: Sa
   }
 
   async function del() {
-    if (!account || !confirmDanger(`Move “${account.name}” to Trash? Only possible while it has no transactions — archive it otherwise. You can restore it from Trash.`)) return;
+    if (!account || !(await ask(`Move “${account.name}” to Trash? Only possible while it has no transactions — archive it otherwise. You can restore it from Trash.`))) return;
     try {
       await trash("savings_accounts", account.id);
       onDone();

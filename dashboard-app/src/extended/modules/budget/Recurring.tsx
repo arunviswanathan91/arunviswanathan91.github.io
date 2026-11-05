@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
+import { ask } from "../../../lib/dialogs.tsx";
 import { Pause, Pencil, Play, Plus, Repeat, Trash2 } from "lucide-react";
 import { insert, list, remove, update, useLoad } from "../../lib/db.ts";
 import { fmtDate, today } from "../../lib/dates.ts";
 import { CURRENCIES, type BudgetCategory } from "../../lib/types.ts";
 import { Modal } from "../../components/Modal.tsx";
-import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
+import { ErrorText, Field } from "../../components/ui.tsx";
 import { formatMoney } from "../loans/balance.ts";
 import { firstOn } from "./recurring.ts";
 import { DateInput } from "../../../components/ui/DateInput";
@@ -51,7 +52,7 @@ export function RecurringCard({ categories, currency }: { categories: BudgetCate
               <span className="row">
                 <button className="icon" aria-label={r.paused ? `Resume ${r.description}` : `Pause ${r.description}`} onClick={() => void update("recurring", r.id, { paused: !r.paused, next_on: r.paused && r.next_on < today() ? firstOn(today(), r.day_of_month) : r.next_on })}>{r.paused ? <Play size={13} /> : <Pause size={13} />}</button>
                 <button className="icon" aria-label={`Edit ${r.description}`} onClick={() => setEditing(r)}><Pencil size={13} /></button>
-                <button className="icon danger" aria-label={`Delete ${r.description}`} onClick={() => confirmDanger(`Stop “${r.description}”? Transactions already posted are kept.`) && void remove("recurring", { id: r.id })}><Trash2 size={13} /></button>
+                <button className="icon danger" aria-label={`Delete ${r.description}`} onClick={async () => { if (await ask(`Stop “${r.description}”? Transactions already posted are kept.`)) void remove("recurring", { id: r.id }); }}><Trash2 size={13} /></button>
               </span>
             </li>
           ))}

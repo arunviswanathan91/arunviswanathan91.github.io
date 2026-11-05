@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {ask} from "../../lib/dialogs";
 import { Download, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -75,7 +76,7 @@ function NoteDialog({note,publicationId,canEdit,canDelete,onClose,onSaved,onDele
  const [preview,setPreview]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
  const newPath=useRef(`${publicationId}/${crypto.randomUUID()}.md`);
  const dirty=editing&&(title!==(saved?.title??"")||body!==(saved?.body??""));
- const close=()=>{if(!busy&&(!dirty||window.confirm("Discard unsaved changes to this note?")))onClose()};
+ const close=async()=>{if(!busy&&(!dirty||await ask("Discard unsaved changes to this note?")))onClose()};
  useEffect(()=>{ref.current?.showModal()},[]);
  useEffect(()=>{
   if(!dirty)return;
@@ -102,7 +103,7 @@ function NoteDialog({note,publicationId,canEdit,canDelete,onClose,onSaved,onDele
   }catch(e){setError(message(e))}finally{setBusy(false)}
  };
  const remove=async()=>{
-  if(!canDelete||!saved||busy||!window.confirm(`Permanently delete “${saved.title}”? Download the Markdown first if you need a copy.`))return;
+  if(!canDelete||!saved||busy||!(await ask(`Permanently delete “${saved.title}”? Download the Markdown first if you need a copy.`)))return;
   setBusy(true);setError("");
   try{if(!supabase)throw new Error("Sign in to delete this note.");const {error}=await supabase.storage.from(PAPER_NOTES_BUCKET).remove([saved.path]);if(error)throw error;onDeleted(saved.path)}
   catch(e){setError(message(e))}finally{setBusy(false)}
@@ -125,8 +126,8 @@ function NoteDialog({note,publicationId,canEdit,canDelete,onClose,onSaved,onDele
     </>:<Markdown text={saved?.body??""}/>}
    </div>
    <footer className="modal-actions">
-    {editing?<><span className="muted-note">{dirty?"Unsaved changes":""}</span><button type="button" className="secondary" disabled={busy} onClick={()=>{
-     if(dirty&&!window.confirm("Discard unsaved changes?"))return;
+    {editing?<><span className="muted-note">{dirty?"Unsaved changes":""}</span><button type="button" className="secondary" disabled={busy} onClick={async()=>{
+     if(dirty&&!(await ask("Discard unsaved changes?")))return;
      if(!saved){onClose();return}setTitle(saved.title);setBody(saved.body);setEditing(false);setPreview(false);setError("");
     }}>Cancel</button><button type="button" className="primary" disabled={busy||!title.trim()||!body.trim()} onClick={()=>void save()}>{busy?"Saving…":"Save note"}</button></>
     :<>{canDelete&&<button type="button" className="danger-button" disabled={busy} onClick={()=>void remove()}><Trash2/>Delete note</button>}<button type="button" className="secondary" disabled={busy} onClick={close}>Close</button></>}

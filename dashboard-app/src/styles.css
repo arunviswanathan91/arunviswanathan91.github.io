@@ -1307,3 +1307,8 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .doi-fetch-row{display:flex;gap:8px;align-items:center}
 .doi-fetch-row .input{flex:1;min-width:0}
 .doi-fetch-msg{margin:0;font-size:.85rem;opacity:.8;overflow-wrap:anywhere}
+
+/* In-page notices, questions and text prompts (lib/dialogs.tsx) */
+.dialog-small{width:min(420px,calc(100vw - 2*var(--s-4)))}
+.dialog-message{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.dialog-actions{justify-content:flex-end;gap:var(--s-2)}

@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
+import { ask } from "../../lib/dialogs.tsx";
 import { FileText, Paperclip, Trash2 } from "lucide-react";
 import { deleteFile, fileUrl, list, uploadFile, useLoad } from "../lib/db.ts";
 import { fmtBytes, fmtDate } from "../lib/dates.ts";
 import type { Attachment } from "../lib/types.ts";
-import { confirmDanger, ErrorText } from "./ui.tsx";
+import { ErrorText } from "./ui.tsx";
 
 type Owner = { project_id: string } | { paper_id: string } | { note_id: string } | { meeting_id: string } | { deadline_id: string };
 
@@ -45,7 +46,7 @@ export function Attachments({ owner, accept, title = "Files" }: { owner: Owner; 
   }
 
   async function del(f: Attachment) {
-    if (!confirmDanger(`Delete “${f.file_name}”? This cannot be undone.`)) return;
+    if (!(await ask(`Delete “${f.file_name}”? This cannot be undone.`))) return;
     try {
       await deleteFile(f.id, f.storage_path);
     } catch (e) {

@@ -1,4 +1,5 @@
 import { insert, list, useLoad } from "../../lib/db.ts";
+import { askText } from "../../../lib/dialogs.tsx";
 
 export interface Person { id: string; name: string }
 
@@ -27,7 +28,7 @@ export function usePeople(): Person[] {
 export function ForSelect({ value, people, onChange, label = "For" }: { value: string | null | undefined; people: Person[]; onChange: (id: string | null) => void; label?: string }) {
   async function pick(v: string) {
     if (v !== NEW) return onChange(v || null);
-    const name = prompt("Who was this for? (e.g. Justin)")?.trim();
+    const name = (await askText("Who was this for? (e.g. Justin)"))?.trim();
     if (!name) return;
     const existing = people.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
     onChange(existing ? existing.id : (await insert<Person>("contacts", { name })).id);
