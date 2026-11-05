@@ -319,7 +319,7 @@ export interface Settings {
 }
 
 export interface SearchHit {
-  kind: "project" | "task" | "paper" | "note" | "experiment" | "meeting" | "deadline" | "publication" | "document" | "job" | "read" | "reminder" | "clipping";
+  kind: "project" | "task" | "paper" | "note" | "experiment" | "trip" | "goal" | "meeting" | "deadline" | "publication" | "document" | "job" | "read" | "reminder" | "clipping";
   id: string;
   title: string;
   snippet: string;
@@ -358,3 +358,47 @@ export const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]; // IS
 
 export const CURRENCIES = ["SEK", "EUR", "INR", "USD", "GBP"];
 
+
+// ── Thesis, goals, trips (supabase/planning.sql) ───────────────────────────
+export interface Thesis { id: string; title: string; submission_on: string | null; target_words: number | null; notes: string; updated_at: string }
+export type ChapterStatus = "not_started" | "outlining" | "drafting" | "revising" | "with_supervisor" | "final";
+export const CHAPTER_STATUS: Record<ChapterStatus, string> = {
+  not_started: "Not started", outlining: "Outlining", drafting: "Drafting", revising: "Revising", with_supervisor: "With supervisor", final: "Final",
+};
+export interface ThesisChapter {
+  id: string; position: number; title: string; status: ChapterStatus; words: number; target_words: number | null;
+  due_on: string | null; publication_id: string | null; notes: string; created_at: string; updated_at: string;
+}
+export type FeedbackSource = "supervisor" | "dac" | "examiner" | "peer" | "other";
+export const FEEDBACK_SOURCE: Record<FeedbackSource, string> = { supervisor: "Supervisor", dac: "DAC", examiner: "Examiner", peer: "Peer", other: "Other" };
+export interface ThesisFeedback { id: string; chapter_id: string | null; source: FeedbackSource; given_on: string; body: string; addressed_at: string | null; created_at: string }
+
+export type GoalArea = "research" | "career" | "learning" | "health" | "money" | "personal";
+export const GOAL_AREA: Record<GoalArea, string> = { research: "Research", career: "Career", learning: "Learning", health: "Health", money: "Money", personal: "Personal" };
+export type GoalMeasure = "manual" | "milestones" | "project" | "habit" | "savings";
+export const GOAL_MEASURE: Record<GoalMeasure, string> = {
+  manual: "A number I update", milestones: "A checklist", project: "A project’s tasks", habit: "Days a habit was done", savings: "A savings account’s balance",
+};
+export interface Milestone { label: string; done: boolean }
+export interface Goal {
+  id: string; year: number; title: string; area: GoalArea; measure: GoalMeasure; target: number | null; current: number; unit: string;
+  milestones: Milestone[]; project_id: string | null; habit_id: string | null; account_id: string | null; due_on: string | null;
+  status: "active" | "achieved" | "dropped"; notes: string; position: number; created_at: string; updated_at: string;
+}
+
+export type TripStatus = "considering" | "abstract_submitted" | "accepted" | "registered" | "booked" | "attended" | "cancelled";
+export const TRIP_STATUS: Record<TripStatus, string> = {
+  considering: "Considering", abstract_submitted: "Abstract submitted", accepted: "Accepted", registered: "Registered", booked: "Travel booked", attended: "Attended", cancelled: "Cancelled",
+};
+export type TripKind = "conference" | "workshop" | "course" | "lab_visit" | "other";
+export const TRIP_KIND: Record<TripKind, string> = { conference: "Conference", workshop: "Workshop", course: "Course", lab_visit: "Lab visit", other: "Other" };
+export type Presentation = "none" | "poster" | "oral" | "invited" | "attending";
+export const PRESENTATION: Record<Presentation, string> = { none: "Not decided", poster: "Poster", oral: "Oral talk", invited: "Invited talk", attending: "Attending only" };
+export interface TripCost { label: string; amount: number; paid: boolean; transaction_id?: string | null }
+export interface TripFunding { source: string; amount: number; status: "applied" | "awarded" | "declined"; due_on?: string | null }
+export interface Trip {
+  id: string; title: string; kind: TripKind; status: TripStatus; location: string; url: string | null; starts_on: string | null; ends_on: string | null;
+  abstract_due: string | null; registration_due: string | null; presentation: Presentation; abstract_title: string; abstract: string;
+  project_id: string | null; publication_id: string | null; currency: string; costs: TripCost[]; funding: TripFunding[]; checklist: Milestone[];
+  notes: string; created_at: string; updated_at: string;
+}
