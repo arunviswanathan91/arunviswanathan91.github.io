@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react";
+import { useEffect, type CSSProperties } from "react";
+import { loadResumeFonts } from "./fonts.ts";
 import {
   PAGES, bullets, dateRange, fontStack, groupRuns, layoutFor, roundRobin, visibleSections, withSubinfo,
   type ResumeData, type ResumeItem, type ResumeSection, type ResumeStyle,
@@ -108,6 +109,7 @@ function Group({ s, st }: { s: ResumeSection; st: ResumeStyle }) {
 
 /** The resume page itself. The same markup is the on-screen preview and what is printed to PDF. */
 export function ResumePreview({ data }: { data: ResumeData }) {
+  useEffect(loadResumeFonts, []);
   const { profile: p, style: st } = data;
   const page = PAGES[st.pageFormat];
   const vars = {

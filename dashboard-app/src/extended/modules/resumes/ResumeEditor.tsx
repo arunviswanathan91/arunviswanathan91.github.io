@@ -11,12 +11,14 @@ import {
   type DisplayMode, type FontKey, type HeadingStyle, type SectionLayout, type ItemField, type ResumeData, type ResumeStyle, type ResumeItem, type ResumeSection, type SectionType,
 } from "./model.ts";
 import { ResumePreview } from "./ResumePreview.tsx";
+import { loadResumeFonts } from "./fonts.ts";
 import { itemFromMeta } from "./doi.ts";
 import { lookupPaper } from "../papers/lookup.ts";
 
 interface Row { id: string; title: string; data: unknown }
 
 export function ResumeEditor({ id }: { id: string }) {
+  useEffect(loadResumeFonts, []); // the font picker shows each typeface by name
   const { data: row, error, loading } = useLoad(() => getOne<Row>("resumes", id), [id]);
   if (error) return <ErrorText error={error} />;
   if (loading && !row) return <p className="muted">Loading…</p>;
