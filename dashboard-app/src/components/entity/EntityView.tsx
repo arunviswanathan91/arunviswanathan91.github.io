@@ -69,7 +69,10 @@ export function EntityView({def,embedded=false}:{def:EntityDef;embedded?:boolean
   else void table.update(row.id,{[field.key]:value});
  };
 
- const runQuickAction=(row:Row,action:QuickAction)=>void table.update(row.id,action.patch(row));
+ const runQuickAction=(row:Row,action:QuickAction)=>void (async()=>{
+  try{await action.run?.(row);await table.update(row.id,action.patch(row))}
+  catch(e){window.alert((e as Error).message)}
+ })();
 
  const startNew=(preset:Record<string,unknown>={})=>
   setComposer({...def.newDefaults({userId,projectId:scopeProjectId}),...preset});

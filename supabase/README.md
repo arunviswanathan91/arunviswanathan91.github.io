@@ -23,6 +23,9 @@ always goes at the end of this list, and the commit that adds it says so.
 | 15 | `agenda-recurring-followups.sql` | Agenda, calendar feed, recurring money, publication follow-ups |
 | 16 | `emi-schedule.sql` | EMIs entered one by one (different first or last EMI) |
 | 17 | `friend-spending.sql` | Spends paid for a friend, kept out of your own budget |
+| 18 | `resumes.sql` | Resume builder |
+| 19 | `trash-workspace.sql` | Trash for workspace items (papers, notes, accounts and more) |
+| 20 | `savings-accounts.sql` | Savings accounts, balances, and loan/card payments paid from an account |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set
