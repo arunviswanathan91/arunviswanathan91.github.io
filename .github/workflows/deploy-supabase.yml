@@ -35,3 +35,4 @@ jobs:
           supabase functions deploy telegram-webhook --no-verify-jwt --yes --project-ref "${{ vars.SUPABASE_PROJECT_ID }}"
           supabase functions deploy telegram-reminder-sweep --no-verify-jwt --yes --project-ref "${{ vars.SUPABASE_PROJECT_ID }}"
           supabase functions deploy calendar-feed --no-verify-jwt --yes --project-ref "${{ vars.SUPABASE_PROJECT_ID }}"
+          supabase functions deploy research-alerts --yes --project-ref "${{ vars.SUPABASE_PROJECT_ID }}"

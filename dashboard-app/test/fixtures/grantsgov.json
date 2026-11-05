@@ -1,0 +1,50 @@
+{
+ "errorcode": 0,
+ "data": {
+  "hitCount": 39,
+  "oppHits": [
+   {
+    "id": "360223",
+    "number": "FOR-FD-26-004",
+    "title": "Novel approaches to support therapeutic development in ultra-rare cancers",
+    "agencyCode": "HHS-FDA",
+    "agency": "Food and Drug Administration",
+    "openDate": "08/04/2025",
+    "closeDate": "",
+    "oppStatus": "forecasted",
+    "docType": "forecast",
+    "cfdaList": [
+     "93.103"
+    ]
+   },
+   {
+    "id": "362957",
+    "number": "RFA-AI-28-006",
+    "title": "Clinical Data, Safety and Statistical Centers (CDSSC)",
+    "agencyCode": "HHS-NIH11",
+    "agency": "National Institutes of Health",
+    "openDate": "06/24/2026",
+    "closeDate": "",
+    "oppStatus": "forecasted",
+    "docType": "forecast",
+    "cfdaList": [
+     "93.855"
+    ]
+   },
+   {
+    "id": "361399",
+    "number": "PAR-26-152",
+    "title": "Precision Approaches in Radiation Synthetic Combinations (PAIRS, RP1 Clinical Trial Optional)",
+    "agencyCode": "HHS-NIH11",
+    "agency": "National Institutes of Health",
+    "openDate": "03/03/2026",
+    "closeDate": "",
+    "oppStatus": "forecasted",
+    "docType": "forecast",
+    "cfdaList": [
+     "93.395"
+    ]
+   }
+  ]
+ }
+}

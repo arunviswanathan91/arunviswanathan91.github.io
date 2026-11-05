@@ -1,5 +1,6 @@
 import { secretMatches } from "../_shared/secret.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { runAlertsFor } from "../_shared/alerts.ts";
 
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 
@@ -17,6 +18,11 @@ Deno.serve(async(req)=>{
  await db.rpc("purge_expired_trash");
  // Queues loan and habit reminders (card-spending-habit-periods-reminders.sql); a no-op until that migration runs.
  await db.rpc("ws_daily_nudges");
+
+ // Once a day per user, from 06:00 their time: new papers and funding calls (alerts.sql). Then the
+ // morning briefing, so it can mention them. Both are no-ops until alerts.sql has been run.
+ const alertReport=await dailyAlerts(db);
+ await db.rpc("ws_morning_briefing");
 
  // opportunity_id only exists once opportunity-deadline-reminders.sql has been
  // run; this Edge Function redeploys and starts polling on every push
@@ -50,6 +56,8 @@ Deno.serve(async(req)=>{
   const base=Deno.env.get("DASHBOARD_URL")??"https://arunviswanathan91.github.io/dashboard/";
   const root=base.replace(/#.*$/,"").replace(/\/$/,"");
   const url=reminder.project_id?`${root}/#/project/${reminder.project_id}`
+   :/^Good morning/.test(reminder.title)?`${root}/#/tools/home`
+   :/^New papers for you/.test(reminder.title)?`${root}/#/tools/papers?status=alerts`
    :/^(EMI|Card payment)/.test(reminder.title)?`${root}/#/tools/loans`
    :/^Habits still open/.test(reminder.title)?`${root}/#/tools/habits`
    :reminder.opportunity_id?`${root}/#/opportunities`
@@ -60,5 +68,30 @@ Deno.serve(async(req)=>{
   // Only mark notified on a confirmed send — a transient failure retries on the next sweep.
   if(r.ok){await db.from("reminders").update({notified_at:new Date().toISOString()}).eq("id",reminder.id);sent++}
  }
- return json({ok:true,checked:(due??[]).length,sent});
+ return json({ok:true,checked:(due??[]).length,sent,alerts:alertReport});
 });
+
+// deno-lint-ignore no-explicit-any
+async function dailyAlerts(db:any){
+ const {data:rows,error}=await db.from("ws_settings").select("user_id,timezone,briefing_time,paper_alert_topics,funding_topics,funding_feeds,paper_alerts_checked_on");
+ if(error)return {skipped:error.message};
+ let ran=0;
+ for(const s of rows??[]){
+  const wants=(s.paper_alert_topics??[]).length||(s.funding_topics??[]).length||(s.funding_feeds??[]).length;
+  if(!wants)continue;
+  const {data:profile}=await db.from("profiles").select("timezone").eq("id",s.user_id).maybeSingle();
+  const tz=profile?.timezone??s.timezone??"Asia/Kolkata";
+  const parts=Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hourCycle:"h23"}).formatToParts(new Date()).map((p)=>[p.type,p.value]));
+  const today=`${parts.year}-${parts.month}-${parts.day}`;
+  if(s.paper_alerts_checked_on===today||Number(parts.hour)<6)continue;
+  if(ran>=3)break; // a few users per minute keeps each sweep short
+  ran++;
+  const report=await runAlertsFor(db,s.user_id,s);
+  // Without a morning briefing, say it directly when there is something new.
+  if(!s.briefing_time&&report.papers>0){
+   const {data:top}=await db.from("ws_paper_alerts").select("title").eq("user_id",s.user_id).eq("status","new").order("score",{ascending:false}).limit(3);
+   await db.from("reminders").insert({user_id:s.user_id,title:`New papers for you (${report.papers})`,body:(top??[]).map((t:{title:string})=>`• ${t.title}`).join("\n"),remind_at:new Date().toISOString(),done:false,nudge_key:`papers:${today}`});
+  }
+ }
+ return {ran};
+}

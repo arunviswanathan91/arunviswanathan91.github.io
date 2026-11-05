@@ -7,6 +7,7 @@ import { TAG_COLORS } from "../lib/tags";
 import { SelectMenu } from "./ui/SelectMenu";
 import { useConfirmDialog } from "./ui/ConfirmDialog";
 import { saveSettings } from "../extended/lib/settings";
+import { BriefingSetting } from "../extended/modules/alerts/BriefingSetting";
 import { BackupPanel, PreferencesPanel } from "./settings/WorkspacePanels";
 
 const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -108,6 +109,7 @@ export function SettingsView(){
     {code&&<div className="bot-command"><Send/><div><code>/link {code}</code>
      <small>Send this to your bot before {expiresAt&&new Date(expiresAt).toLocaleTimeString()}.</small></div></div>}
     {notice&&<p className="data-notice" role="alert">{notice}</p>}
+    <BriefingSetting linked={!!chatId}/>
    </section>
 
    <PreferencesPanel/>

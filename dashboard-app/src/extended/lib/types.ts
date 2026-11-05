@@ -316,6 +316,30 @@ export interface Settings {
   calendar_token?: string | null;
   /** Remind to chase a paper under review after this many days; null = off. */
   publication_followup_days?: number | null;
+  /** "HH:MM" local time for the Telegram morning briefing; null = off (alerts.sql). */
+  briefing_time?: string | null;
+  /** Topic lines searched daily for new papers (Europe PMC query syntax: AND, OR, quotes). */
+  paper_alert_topics?: string[];
+  paper_alerts_checked_on?: string | null;
+  funding_topics?: string[];
+  /** RSS or Atom feed URLs of funders and research offices. */
+  funding_feeds?: string[];
+  funding_checked_on?: string | null;
+}
+
+export interface PaperAlert {
+  id: string; source: "pubmed" | "preprint"; external_id: string; pmid: string | null; doi: string | null; title: string; authors: string[];
+  journal: string | null; published_on: string | null; abstract: string | null; url: string | null; topics: string[]; score: number;
+  status: "new" | "saved" | "dismissed"; paper_id: string | null; created_at: string;
+}
+export type FundingStatus = "new" | "interested" | "applying" | "submitted" | "awarded" | "rejected" | "dismissed";
+export const FUNDING_STATUS: Record<FundingStatus, string> = { new: "New", interested: "Interested", applying: "Applying", submitted: "Submitted", awarded: "Awarded", rejected: "Not funded", dismissed: "Dismissed" };
+export type FundingKind = "grant" | "fellowship" | "travel" | "award" | "other";
+export const FUNDING_KIND: Record<FundingKind, string> = { grant: "Grant", fellowship: "Fellowship", travel: "Travel award", award: "Award", other: "Other" };
+export interface FundingCall {
+  id: string; source: "grants_gov" | "feed" | "manual"; external_id: string | null; title: string; funder: string; kind: FundingKind; url: string | null;
+  amount: string; opens_on: string | null; closes_on: string | null; summary: string; topics: string[]; status: FundingStatus; deadline_id: string | null;
+  notes: string; created_at: string; updated_at: string;
 }
 
 export interface SearchHit {
