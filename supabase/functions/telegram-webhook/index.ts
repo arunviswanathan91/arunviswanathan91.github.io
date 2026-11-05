@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { secretMatches } from "../_shared/secret.ts";
 import { BY_COMMAND, ENTITIES, ENTITY_LIST } from "./entities.ts";
 import type { BotEntity, EntityKey } from "./entities.ts";
 import { isAffirmative, isDone, parseDate, parseMessage, splitPair } from "./parse.ts";
@@ -55,7 +56,7 @@ const HELP=[
 
 Deno.serve(async(req)=>{
  if(req.method!=="POST")return json({ok:false},405);
- if(req.headers.get("x-telegram-bot-api-secret-token")!==Deno.env.get("TELEGRAM_WEBHOOK_SECRET"))return json({ok:false},401);
+ if(!await secretMatches(req.headers.get("x-telegram-bot-api-secret-token"),Deno.env.get("TELEGRAM_WEBHOOK_SECRET")))return json({ok:false},401);
  const update=await req.json();
  // A tapped button arrives as a callback_query on the bot's own message; a typed message as `message`.
  const tap=update.callback_query;

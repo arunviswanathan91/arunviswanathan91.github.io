@@ -1,3 +1,4 @@
+import { secretMatches } from "../_shared/secret.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
@@ -7,7 +8,7 @@ const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,
 // endpoint is never called by Telegram itself.
 Deno.serve(async(req)=>{
  if(req.method!=="POST")return json({ok:false},405);
- if(req.headers.get("x-cron-secret")!==Deno.env.get("CRON_SWEEP_SECRET"))return json({ok:false},401);
+ if(!await secretMatches(req.headers.get("x-cron-secret"),Deno.env.get("CRON_SWEEP_SECRET")))return json({ok:false},401);
  const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
  const token=Deno.env.get("TELEGRAM_BOT_TOKEN");
 
