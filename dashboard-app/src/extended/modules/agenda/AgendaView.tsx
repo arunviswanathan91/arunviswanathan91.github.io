@@ -106,6 +106,9 @@ export function AgendaView() {
   );
 }
 
+/** Where a row opens: applications open that opportunity itself, not the opportunities list. */
+export const agendaHref = (r: AgendaRow) => (r.kind === "opportunity" ? `#/opportunities?open=${encodeURIComponent(r.ref_id)}` : `#/${r.path}`);
+
 export function AgendaList({ rows, now }: { rows: AgendaRow[]; now: string }) {
   return (
     <ul className="agenda-list">
@@ -114,7 +117,7 @@ export function AgendaList({ rows, now }: { rows: AgendaRow[]; now: string }) {
         return (
           <li key={`${r.kind}-${r.ref_id}-${r.day}`} className={r.urgent || isOverdue(r, now) ? "urgent" : ""}>
             <span className="agenda-icon" aria-hidden><Icon size={14} /></span>
-            <a href={`#/${r.path}`} className="agenda-title">{r.title}</a>
+            <a href={agendaHref(r)} className="agenda-title">{r.title}</a>
             <span className="muted small agenda-meta">
               {r.at ? fmtTime(r.at) : r.day < now ? relDay(r.day, now) : ""}{r.detail ? `${r.at || r.day < now ? " · " : ""}${r.detail}` : ""}
             </span>
