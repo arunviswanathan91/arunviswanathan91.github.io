@@ -18,15 +18,17 @@ export function MarkdownView({ text, className = "" }: { text: string; className
 }
 
 /** Plain textarea with a Write / Preview toggle. */
-export function MarkdownEditor({ value, onChange, onBlur, placeholder, rows = 8, label }: {
+export function MarkdownEditor({ value, onChange, onBlur, placeholder, rows = 8, label, editIfEmpty = false }: {
   value: string;
   onChange: (v: string) => void;
   onBlur?: () => void;
   placeholder?: string;
   rows?: number;
   label?: string;
+  /** Open in Write mode when there is nothing to preview yet (a fresh form). */
+  editIfEmpty?: boolean;
 }) {
-  const [preview, setPreview] = useState(true);
+  const [preview, setPreview] = useState(() => !(editIfEmpty && !value.trim()));
   return (
     <div className="md-editor">
       <div className="md-toolbar">

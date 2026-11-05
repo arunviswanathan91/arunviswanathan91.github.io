@@ -104,6 +104,38 @@ export interface Note {
   updated_at: string;
 }
 
+export type ExperimentStatus = "planned" | "running" | "analysing" | "done" | "abandoned";
+export const EXPERIMENT_STATUS: Record<ExperimentStatus, string> = { planned: "Planned", running: "Running", analysing: "Analysing", done: "Done", abandoned: "Abandoned" };
+export type ExperimentOutcome = "worked" | "partial" | "failed" | "inconclusive";
+export const EXPERIMENT_OUTCOME: Record<ExperimentOutcome, string> = { worked: "Worked", partial: "Partly worked", failed: "Failed", inconclusive: "Inconclusive" };
+/** One sample, mouse, well or condition in an experiment. */
+export interface ExperimentSample { label: string; group: string; notes: string }
+export interface Experiment {
+  id: string;
+  title: string;
+  status: ExperimentStatus;
+  outcome: ExperimentOutcome | null;
+  technique: string;
+  started_on: string | null;
+  ended_on: string | null;
+  project_id: string | null;
+  /** The manuscript (Publications pipeline) this experiment feeds. */
+  publication_id: string | null;
+  /** The earlier run this one repeats. */
+  repeat_of: string | null;
+  aim: string;
+  protocol: string;
+  samples: ExperimentSample[];
+  results: string;
+  conclusion: string;
+  next_steps: string;
+  tags: string[];
+  pinned: boolean;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type MeetingType = "supervisor" | "lab" | "research_discussion" | "collaboration" | "administration" | "other";
 export interface Meeting {
   id: string;
@@ -287,7 +319,7 @@ export interface Settings {
 }
 
 export interface SearchHit {
-  kind: "project" | "task" | "paper" | "note" | "meeting" | "deadline" | "publication" | "document" | "job" | "read" | "reminder" | "clipping";
+  kind: "project" | "task" | "paper" | "note" | "experiment" | "meeting" | "deadline" | "publication" | "document" | "job" | "read" | "reminder" | "clipping";
   id: string;
   title: string;
   snippet: string;
