@@ -96,7 +96,7 @@ export function put(key: string, value: unknown) {
 // ── Saved copy in the browser ──────────────────────────────────────────────
 
 const STORE = "ws.pages.v1";
-const MAX_BYTES = 2_500_000;
+const MAX_BYTES = 3_500_000; // localStorage holds ~5 MB per site; leave room for the sign-in token
 let user = "";
 let build = "";
 let timer: ReturnType<typeof setTimeout> | undefined;
