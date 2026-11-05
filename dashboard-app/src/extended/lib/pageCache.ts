@@ -14,9 +14,9 @@
 
 /** Tables that change together, directly or through triggers. A table may sit in several. */
 export const GROUPS: Record<string, readonly string[]> = {
-  money: ["transactions", "budget_categories", "monthly_budgets", "savings_accounts", "recurring", "loans", "loan_payments", "contacts"],
+  money: ["goals", "trips", "transactions", "budget_categories", "monthly_budgets", "savings_accounts", "recurring", "loans", "loan_payments", "contacts"],
   work: [
-    "tasks", "projects", "papers", "project_papers", "deadlines", "notes", "experiments", "meetings", "meeting_projects",
+    "tasks", "projects", "papers", "project_papers", "deadlines", "notes", "experiments", "thesis", "thesis_chapters", "thesis_feedback", "goals", "trips", "meetings", "meeting_projects",
     "meeting_action_items", "meeting_participants", "attachments", "publications", "publication_stage_events", "contacts",
   ],
   habits: ["habits", "habit_checkins"],

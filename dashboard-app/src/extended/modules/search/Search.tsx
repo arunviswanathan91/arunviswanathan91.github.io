@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, CheckSquare, FileText, FlaskConical, Folder, NotebookPen, Search as SearchIcon, Users } from "lucide-react";
+import { CalendarClock, CheckSquare, FileText, FlaskConical, Folder, NotebookPen, Plane, Search as SearchIcon, Target, Users } from "lucide-react";
 import { rpc } from "../../lib/db.ts";
 import { fmtDate } from "../../lib/dates.ts";
 import { go, href, setQuery, type Route } from "../../lib/route.ts";
@@ -18,6 +18,8 @@ export const KIND = {
   paper: { label: "Paper", icon: FileText, path: (h: SearchHit) => `papers/${h.id}` },
   note: { label: "Note", icon: NotebookPen, path: (h: SearchHit) => `notes/${h.id}` },
   experiment: { label: "Experiment", icon: FlaskConical, path: (h: SearchHit) => `experiments/${h.id}` },
+  trip: { label: "Trip", icon: Plane, path: (h: SearchHit) => `trips/${h.id}` },
+  goal: { label: "Goal", icon: Target, path: () => "goals" },
   meeting: { label: "Meeting", icon: Users, path: (h: SearchHit) => `meetings/${h.id}` },
   deadline: { label: "Deadline", icon: CalendarClock, path: (h: SearchHit) => `deadlines/${h.id}` },
 };

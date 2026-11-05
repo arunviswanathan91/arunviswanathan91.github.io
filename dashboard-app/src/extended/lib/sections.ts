@@ -1,11 +1,11 @@
 // Each section's name, icon and colour, used by the menu, page headers, badges, cards and search.
 // Colours are CSS variables (see styles.css: --sec-<id>, --sec-<id>-soft, --sec-<id>-ink).
 import {
-  CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, FileText, FileUser, FlaskConical, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, TrendingUp, Users, Wallet, type LucideIcon,
+  CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, FileText, FileUser, FlaskConical, GraduationCap, Plane, Target, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, TrendingUp, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 
 export type SectionId =
-  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "experiments" | "meetings" | "deadlines" | "budget" | "loans" | "networth" | "habits" | "resumes" | "search" | "settings";
+  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "experiments" | "thesis" | "trips" | "goals" | "meetings" | "deadlines" | "budget" | "loans" | "networth" | "habits" | "resumes" | "search" | "settings";
 
 export interface Section {
   id: SectionId;
@@ -24,6 +24,9 @@ export const SECTIONS: Record<SectionId, Section> = {
   papers: { id: "papers", label: "Papers", icon: FileText, tone: "papers" },
   notes: { id: "notes", label: "Notes", icon: NotebookPen, tone: "notes" },
   experiments: { id: "experiments", label: "Experiments", icon: FlaskConical, tone: "lab" },
+  thesis: { id: "thesis", label: "Thesis", icon: GraduationCap, tone: "projects" },
+  trips: { id: "trips", label: "Conferences & trips", icon: Plane, tone: "deadlines" },
+  goals: { id: "goals", label: "Goals", icon: Target, tone: "home" },
   meetings: { id: "meetings", label: "Meetings", icon: Users, tone: "meetings" },
   deadlines: { id: "deadlines", label: "Deadlines", icon: CalendarClock, tone: "deadlines" },
   budget: { id: "budget", label: "Budget", icon: Wallet, tone: "money" },

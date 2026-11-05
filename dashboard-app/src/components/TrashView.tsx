@@ -9,7 +9,7 @@ const TYPE_LABELS:Record<string,string>={
  tag:"Tag",person:"Person",project_person:"Project person",project_stage:"Project stage",project_link:"Project link",
  project_field:"Custom field",publication_node:"Publication step",
  publication_stage_event:"Publication stage change",
- paper:"Paper",note:"Note",experiment:"Experiment",meeting:"Meeting",action_item:"Action item",deadline:"Deadline",loan:"Loan / card",repayment:"Repayment",
+ paper:"Paper",note:"Note",experiment:"Experiment",thesis_chapter:"Thesis chapter",goal:"Goal",trip:"Trip",meeting:"Meeting",action_item:"Action item",deadline:"Deadline",loan:"Loan / card",repayment:"Repayment",
  transaction:"Transaction",budget_category:"Budget category",recurring_transaction:"Recurring transaction",contact:"Person / bank",
  resume:"Resume",habit:"Habit",savings_account:"Savings account",
 };
