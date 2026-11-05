@@ -43,6 +43,9 @@ export function TasksView({ route }: { route: Route }) {
   const tags = useAllTags();
   const { data: tasks = [], error } = useLoad(() => list<Task>("tasks", { order: [["due_date"], ["created_at"]] }), []);
   const now = today();
+  // Deep link (?open=<id>), e.g. from the agenda: show that task's form.
+  const openId = route.query.get("open");
+  const openTask = openId ? tasks.find((t) => t.id === openId) : undefined;
 
   const filtered = tasks.filter(
     (t) =>
@@ -72,6 +75,11 @@ export function TasksView({ route }: { route: Route }) {
             empty={{ today: "Nothing due today.", inbox: "Inbox zero — tasks without a project or date land here.", upcoming: "Nothing scheduled.", overdue: "Nothing overdue.", all: "No open tasks.", completed: "No completed tasks yet.", by_project: "" }[view]}
           />
         </div>
+      )}
+      {openTask && (
+        <Modal title="Edit task" onClose={() => setQuery("open", undefined)}>
+          <TaskForm task={openTask} onDone={() => setQuery("open", undefined)} />
+        </Modal>
       )}
       {adding && (
         <Modal title="New task" onClose={() => setAdding(false)}>

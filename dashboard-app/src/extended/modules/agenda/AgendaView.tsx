@@ -106,8 +106,11 @@ export function AgendaView() {
   );
 }
 
-/** Where a row opens: applications open that opportunity itself, not the opportunities list. */
-export const agendaHref = (r: AgendaRow) => (r.kind === "opportunity" ? `#/opportunities?open=${encodeURIComponent(r.ref_id)}` : `#/${r.path}`);
+/** Where a row opens: applications and tasks open that item itself, not a list. */
+export const agendaHref = (r: AgendaRow) =>
+  r.kind === "opportunity" ? `#/opportunities?open=${encodeURIComponent(r.ref_id)}`
+  : r.kind === "task" ? `#/tools/tasks?view=all&open=${encodeURIComponent(r.ref_id)}`
+  : `#/${r.path}`;
 
 export function AgendaList({ rows, now }: { rows: AgendaRow[]; now: string }) {
   return (
