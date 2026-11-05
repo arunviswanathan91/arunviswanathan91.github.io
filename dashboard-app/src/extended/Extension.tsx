@@ -25,6 +25,7 @@ const loadThesisView = () => import("./modules/planning/ThesisView.tsx");
 const loadGoalsView = () => import("./modules/planning/GoalsView.tsx");
 const loadTripsView = () => import("./modules/planning/TripsView.tsx");
 const loadTripPage = () => import("./modules/planning/TripPage.tsx");
+const loadFundingView = () => import("./modules/alerts/FundingView.tsx");
 const loadExperimentPage = () => import("./modules/experiments/ExperimentPage.tsx");
 const loadMeetingsView = () => import("./modules/meetings/MeetingsView.tsx");
 const loadNotePage = () => import("./modules/notes/NotePage.tsx");
@@ -45,6 +46,7 @@ const LoansView = lazy(() => loadLoansView().then((m) => ({ default: m.LoansView
 const ThesisView = lazy(() => loadThesisView().then((m) => ({ default: m.ThesisView })));
 const GoalsView = lazy(() => loadGoalsView().then((m) => ({ default: m.GoalsView })));
 const TripsView = lazy(() => loadTripsView().then((m) => ({ default: m.TripsView })));
+const FundingView = lazy(() => loadFundingView().then((m) => ({ default: m.FundingView })));
 const TripPage = lazy(() => loadTripPage().then((m) => ({ default: m.TripPage })));
 const ExperimentsView = lazy(() => loadExperimentsView().then((m) => ({ default: m.ExperimentsView })));
 const ExperimentPage = lazy(() => loadExperimentPage().then((m) => ({ default: m.ExperimentPage })));
@@ -59,7 +61,7 @@ const ReviewView = lazy(() => loadReviewView().then((m) => ({ default: m.ReviewV
 const ProjectsView = lazy(() => loadProjectsView().then((m) => ({ default: m.ProjectsView })));
 const ResumeEditor = lazy(() => loadResumeEditor().then((m) => ({ default: m.ResumeEditor })));
 const ResumesView = lazy(() => loadResumesView().then((m) => ({ default: m.ResumesView })));
-const PAGE_LOADERS = [loadAgendaView, loadBudgetView, loadDeadlinePage, loadDeadlinesView, loadHomeView, loadLoansView, loadNetWorthView, loadMeetingPage, loadExperimentsView, loadThesisView, loadGoalsView, loadTripsView, loadTripPage, loadExperimentPage, loadMeetingsView, loadNotePage, loadPaperPage, loadPapersView, loadPrintViews, loadReviewView, loadProjectsView, loadResumeEditor, loadResumesView];
+const PAGE_LOADERS = [loadAgendaView, loadBudgetView, loadDeadlinePage, loadDeadlinesView, loadHomeView, loadLoansView, loadNetWorthView, loadMeetingPage, loadExperimentsView, loadThesisView, loadGoalsView, loadTripsView, loadTripPage, loadFundingView, loadExperimentPage, loadMeetingsView, loadNotePage, loadPaperPage, loadPapersView, loadPrintViews, loadReviewView, loadProjectsView, loadResumeEditor, loadResumesView];
 let prefetched = false;
 function prefetchPages() {
   if (prefetched) return;
@@ -83,6 +85,7 @@ function Page({ route }: { route: Route }) {
     case "notes": return id ? <NotePage id={id} /> : <NotesView route={route} />;
     case "thesis": return <ThesisView />;
     case "goals": return <GoalsView route={route} />;
+    case "funding": return <FundingView route={route} />;
     case "trips": return id ? <TripPage id={id} /> : <TripsView route={route} />;
     case "experiments": return id ? <ExperimentPage id={id} /> : <ExperimentsView route={route} />;
     case "meetings": return id ? <MeetingPage id={id} /> : <MeetingsView route={route} />;

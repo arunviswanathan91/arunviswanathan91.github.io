@@ -10,8 +10,9 @@ import { ErrorText, PageHeader, SearchBox, Select, Tabs } from "../../components
 import { PaperForm } from "./PaperForm.tsx";
 import { PaperRows } from "./PaperRows.tsx";
 import { CitationExport } from "./CitationExport.tsx";
+import { PaperAlerts } from "../alerts/PaperAlerts.tsx";
 
-type StatusTab = PaperStatus | "active" | "all";
+type StatusTab = PaperStatus | "active" | "all" | "alerts";
 type Sort = "added" | "year" | "title" | "rating";
 
 export function PapersView({ route }: { route: Route }) {
@@ -58,10 +59,11 @@ export function PapersView({ route }: { route: Route }) {
       />
       <Tabs
         value={status}
-        options={[["active", "Library"], ["to_read", "To read"], ["reading", "Reading"], ["read", "Read"], ["to_cite", "To cite"], ["archived", "Archived"]]}
+        options={[["active", "Library"], ["to_read", "To read"], ["reading", "Reading"], ["read", "Read"], ["to_cite", "To cite"], ["archived", "Archived"], ["alerts", "Alerts"]]}
         counts={counts}
         onChange={(v) => setQuery("status", v)}
       />
+      {status === "alerts" ? <PaperAlerts /> : <>
       <div className="filters">
         <SearchBox value={search} onChange={(v) => setQuery("q", v)} placeholder="Search title, authors, notes" />
         <Select label="Project" allLabel="Any project" value={project} options={projects.map((p) => [p.id, p.title] as [string, string])} onChange={(v) => setQuery("project", v)} />
@@ -74,6 +76,7 @@ export function PapersView({ route }: { route: Route }) {
       <div className="card list-card">
         {data && <PaperRows papers={shown} empty={papers.length ? "No papers match these filters." : "Your library is empty. Add a paper by DOI, arXiv or PubMed id."} />}
       </div>
+      </>}
       {adding && (
         <Modal title="Add paper" wide onClose={() => setAdding(false)}>
           <PaperForm presetProjectId={project || undefined} onDone={() => setAdding(false)} />

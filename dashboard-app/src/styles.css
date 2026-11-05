@@ -1319,3 +1319,8 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .dialog-small{width:min(420px,calc(100vw - 2*var(--s-4)))}
 .dialog-message{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .dialog-actions{justify-content:flex-end;gap:var(--s-2)}
+.briefing-setting{margin-top:var(--s-4);padding-top:var(--s-4);border-top:1px solid var(--border);display:grid;gap:var(--s-2)}
+.briefing-setting h3{font-size:var(--f-md);margin:0}
+.briefing-setting .row{display:flex;gap:var(--s-3);align-items:center;flex-wrap:wrap}
+.briefing-toggle{display:inline-flex;gap:6px;align-items:center;font-size:var(--f-sm)}
+.briefing-setting input[type=time]{width:auto}

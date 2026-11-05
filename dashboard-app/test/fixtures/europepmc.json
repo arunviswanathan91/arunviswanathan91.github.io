@@ -1,0 +1,196 @@
+{
+ "hitCount": 544,
+ "resultList": {
+  "result": [
+   {
+    "id": "PPR1332929",
+    "source": "PPR",
+    "doi": "10.64898/2026.10.01.756025",
+    "title": "KRAS inhibition drives adaptive surfaceome remodeling and reveals ALPP/ALPPL2 as a targetable vulnerability in pancreatic cancer",
+    "authorString": "DeLiberty JM, Kong FY, Yu Q, Sindoni N, Lin J, Kang K, Kim EY, Chen S, Padhye A, Coker O, Choe JH, Paulo JA, Shin M, Hendrianto L, Takahashi K, Varga-Wiles J, Parent BD, Li Z, Shubitidze S, Oni TE, Peng DH, Heffernan TP, Liu S, Yeung BKS, Zou B, Stalnecker CA, Aguirre AJ, Mancias JD.",
+    "authorList": {
+     "author": [
+      {
+       "fullName": "DeLiberty JM",
+       "lastName": "DeLiberty",
+       "initials": "JM"
+      },
+      {
+       "fullName": "Kong FY",
+       "lastName": "Kong",
+       "initials": "FY"
+      },
+      {
+       "fullName": "Yu Q",
+       "lastName": "Yu",
+       "initials": "Q"
+      },
+      {
+       "fullName": "Sindoni N",
+       "lastName": "Sindoni",
+       "initials": "N"
+      }
+     ]
+    },
+    "abstractText": "<h4>ABSTRACT</h4>  KRAS is mutated in over 90% of pancreatic ductal adenocarcinoma (PDAC) and is required for tumor initiation and maintenance. While clinical trials testing mutant-selective and pan-RAS inhibitors (KRASi) have demonstrated significant clinical benefit, genetic and non-genetic mechan",
+    "bookOrReportDetails": {
+     "publisher": "bioRxiv",
+     "yearOfPublication": 2026
+    },
+    "firstPublicationDate": "2026-10-02"
+   },
+   {
+    "id": "42950923",
+    "source": "MED",
+    "pmid": "42950923",
+    "doi": "10.1016/j.ijbiomac.2026.155048",
+    "title": "RNA binding motif protein 15 (RBM15) inhibits macrophage phagocytosis via m6A-dependent colony stimulating factor 2 (CSF2)/STAT3 pathway in pancreatic cancer.",
+    "authorString": "Liu Z, He Y, Fang T, Zhang Y, Mou Z, Ma P, Yu K, Wang W.",
+    "authorList": {
+     "author": [
+      {
+       "fullName": "Liu Z",
+       "lastName": "Liu",
+       "initials": "Z"
+      },
+      {
+       "fullName": "He Y",
+       "lastName": "He",
+       "initials": "Y"
+      },
+      {
+       "fullName": "Fang T",
+       "lastName": "Fang",
+       "initials": "T"
+      },
+      {
+       "fullName": "Zhang Y",
+       "lastName": "Zhang",
+       "initials": "Y"
+      }
+     ]
+    },
+    "journalInfo": {
+     "volume": "385",
+     "journalIssueId": 4299837,
+     "dateOfPublication": "2026 Oct",
+     "monthOfPublication": 10,
+     "yearOfPublication": 2026,
+     "journal": {
+      "medlineAbbreviation": "Int J Biol Macromol",
+      "title": "International journal of biological macromolecules",
+      "essn": "1879-0003",
+      "issn": "0141-8130",
+      "nlmid": "7909578",
+      "isoabbreviation": "Int J Biol Macromol"
+     },
+     "printPublicationDate": "2026-10-01"
+    },
+    "abstractText": "Pancreatic ductal adenocarcinoma (PDAC) remains a major public health challenge worldwide, marked by difficulties in early diagnosis and a dismal prognosis. The overtly immunosuppressive nature of its tumor microenvironment (TME) renders PDAC largely refractory to existing immunotherapies. Tumor-ass",
+    "firstPublicationDate": "2026-10-28"
+   },
+   {
+    "id": "42934719",
+    "source": "MED",
+    "pmid": "42934719",
+    "doi": "10.1186/s12929-026-01295-2",
+    "title": "Stromal CCL2/CXCL10/SPARC axes drive pro-tumor CHI3L1 expression for microenvironmental modulation in pancreatic cancer progression and therapeutic innovation.",
+    "authorString": "Su PC, Shan YS, Hou YC, Huang PH, Liao PC, Wang YC.",
+    "authorList": {
+     "author": [
+      {
+       "fullName": "Su PC",
+       "lastName": "Su",
+       "initials": "PC"
+      },
+      {
+       "fullName": "Shan YS",
+       "lastName": "Shan",
+       "initials": "YS"
+      },
+      {
+       "fullName": "Hou YC",
+       "lastName": "Hou",
+       "initials": "YC"
+      },
+      {
+       "fullName": "Huang PH",
+       "lastName": "Huang",
+       "initials": "PH"
+      }
+     ]
+    },
+    "journalInfo": {
+     "issue": "1",
+     "volume": "33",
+     "journalIssueId": 4286453,
+     "dateOfPublication": "2026 Oct",
+     "monthOfPublication": 10,
+     "yearOfPublication": 2026,
+     "journal": {
+      "medlineAbbreviation": "J Biomed Sci",
+      "title": "Journal of biomedical science",
+      "essn": "1423-0127",
+      "issn": "1021-7770",
+      "nlmid": "9421567",
+      "isoabbreviation": "J Biomed Sci"
+     },
+     "printPublicationDate": "2026-10-01"
+    },
+    "abstractText": "<h4>Background</h4>Chitinase-3-like-protein 1 (CHI3L1), a low-abundance protein in normal tissues, is markedly upregulated in the pancreatic tumor microenvironment (TME), where it promotes fibrosis and immune evasion. Spatial transcriptomics revealed enrichment of CHI3L1 at tumor-stroma interfaces, ",
+    "firstPublicationDate": "2026-10-26"
+   },
+   {
+    "id": "42885304",
+    "source": "MED",
+    "pmid": "42885304",
+    "doi": "10.3892/ijo.2026.5948",
+    "title": "[Corrigendum] Acquired resistance of pancreatic cancer cells to treatment with gemcitabine and HER\u2011inhibitors is accompanied by increased sensitivity to STAT3 inhibition.",
+    "authorString": "Ioannou N, Seddon AM, Dalgleish A, Mackintosh D, Solca F, Modjtahedi H.",
+    "authorList": {
+     "author": [
+      {
+       "fullName": "Ioannou N",
+       "lastName": "Ioannou",
+       "initials": "N"
+      },
+      {
+       "fullName": "Seddon AM",
+       "lastName": "Seddon",
+       "initials": "AM"
+      },
+      {
+       "fullName": "Dalgleish A",
+       "lastName": "Dalgleish",
+       "initials": "A"
+      },
+      {
+       "fullName": "Mackintosh D",
+       "lastName": "Mackintosh",
+       "initials": "D"
+      }
+     ]
+    },
+    "journalInfo": {
+     "issue": "6",
+     "volume": "69",
+     "journalIssueId": 4293295,
+     "dateOfPublication": "2026 Dec",
+     "monthOfPublication": 12,
+     "yearOfPublication": 2026,
+     "journal": {
+      "medlineAbbreviation": "Int J Oncol",
+      "title": "International journal of oncology",
+      "essn": "1791-2423",
+      "issn": "1019-6439",
+      "nlmid": "9306042",
+      "isoabbreviation": "Int J Oncol"
+     },
+     "printPublicationDate": "2026-12-01"
+    },
+    "abstractText": "Following the publication of the above article, an interested reader drew the authors' attention to the fact that, for the western blots shown in Fig. 5 on p. 914, the \u03b2\u2011actin blots shown in the rightmost lanes for the 'BcPc3 OSIR' blots (the 'Crixotinib' and 'Af+Cr' lanes of the gel) were strikingl",
+    "firstPublicationDate": "2026-10-16"
+   }
+  ]
+ }
+}
