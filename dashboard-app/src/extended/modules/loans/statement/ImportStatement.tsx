@@ -152,7 +152,7 @@ function Preview({ loan, parsed, charges, payments, categories, onBack, onDone }
         }).eq("id", loan.id);
         if (e) throw new Error(e.message);
       }
-      emitChange();
+      emitChange("transactions"); // and the card in loans: both are in the money group
       onDone();
     } catch (err) {
       setError((err as Error).message);

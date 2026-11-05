@@ -219,7 +219,7 @@ function ActionItems({ meeting, projectIds }: { meeting: Meeting; projectIds: st
   async function convert(item: ActionItem) {
     try {
       await rpc("convert_action_item", { item_id: item.id, due: due || null, project: projectIds.length === 1 ? projectIds[0] : null });
-      emitChange();
+      emitChange("tasks"); // the action item becomes a task: both are in the work group
       setConverting(null);
       setDue("");
     } catch (e) {
