@@ -51,6 +51,15 @@ export function EntityView({def,embedded=false}:{def:EntityDef;embedded?:boolean
  const scopeLabel=ui.scope===null?"Inbox — unassigned items":
   typeof ui.scope==="string"?projects.byId.get(ui.scope)?.name??"Selected project":null;
 
+ // Deep link (#/opportunities?open=<id>): show that item itself, not whatever is on top of the swipe deck.
+ useEffect(()=>{
+  const open=new URLSearchParams(location.hash.split("?")[1]??"").get("open");
+  if(!open||!table.byId.has(open))return;
+  if(query.layout==="swipe")ui.setQuery(def.key,{layout:"table"});
+  ui.openDrawer(def.key,open);
+  history.replaceState(null,"",location.hash.replace(/[?&]open=[^&]*/,"").replace(/\?$/,""));
+ },[def.key,table.byId,table.rows.length]);// eslint-disable-line react-hooks/exhaustive-deps
+
  const openRow=(id:string)=>def.key==="publications"?ui.openPublication(id):ui.openDrawer(def.key,id);
  const toggle=(id:string)=>ui.toggleSelect(def.key,id);
  const toggleAll=()=>ui.setSelection(def.key,selection.length===rows.length?[]:rows.map(r=>r.id));

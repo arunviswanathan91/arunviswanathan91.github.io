@@ -107,7 +107,7 @@ export function applyTheme(theme:Theme){
 }
 
 const initialRoute=():{view:ViewKey;scope:Scope;publicationId:string|null}=>{
- const hash=location.hash.replace(/^#\/?/,"");
+ const hash=location.hash.replace(/^#\/?/,"").replace(/\?.*$/,"");
  if(hash.startsWith("tools/"))return {view:"extended",scope:"all",publicationId:null};
  const project=hash.match(/^project\/([0-9a-f-]+)(?:\?.*)?$/i);
  if(project)return {view:"project",scope:project[1],publicationId:null};
