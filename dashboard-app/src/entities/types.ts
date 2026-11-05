@@ -68,6 +68,8 @@ export interface QuickAction{
  /** Omit to always show; used to keep actions relevant to the row's current state. */
  show?:(row:Row)=>boolean;
  patch:(row:Row)=>Record<string,unknown>;
+ /** Side effect to run before the patch is applied (e.g. copying the row elsewhere). Throwing cancels the patch. */
+ run?:(row:Row)=>Promise<void>;
 }
 
 export interface EntityDef{
