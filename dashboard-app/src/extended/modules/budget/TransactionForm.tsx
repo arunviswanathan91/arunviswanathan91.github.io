@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { ask } from "../../../lib/dialogs.tsx";
 import { insert, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDate, today } from "../../lib/dates.ts";
 import { CURRENCIES, type BudgetCategory, type SavingsAccount, type Transaction } from "../../lib/types.ts";
 import { useRateOn } from "../../lib/fx.ts";
 import { formatMoney } from "../loans/balance.ts";
 import { accountLabel, selectableAccounts } from "./accounts.ts";
-import { confirmDanger, ErrorText, Field } from "../../components/ui.tsx";
+import { ErrorText, Field } from "../../components/ui.tsx";
 import { ForSelect, usePeople } from "./ForSelect.tsx";
 import { DateInput } from "../../../components/ui/DateInput";
 import { CategorySelect } from "./CategorySelect.tsx";
@@ -115,7 +116,7 @@ export function TransactionForm({ tx, categories, currency, presetKind = "expens
   }
 
   async function del() {
-    if (!tx || !confirmDanger(`Move “${tx.description}” to Trash? You can restore it from Trash.`)) return;
+    if (!tx || !(await ask(`Move “${tx.description}” to Trash? You can restore it from Trash.`))) return;
     await trash("transactions", tx.id);
     onDone();
   }

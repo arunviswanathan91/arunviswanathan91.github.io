@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ask } from "../../../lib/dialogs.tsx";
 import { Archive, ArchiveRestore, ArrowLeft, Download, Pin, Trash2 } from "lucide-react";
 import { getOne, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDateTime } from "../../lib/dates.ts";
@@ -10,7 +11,7 @@ import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { ProjectSelect, projectName, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
-import { confirmDanger, Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
 
 export function NotePage({ id }: { id: string }) {
   const { data: note, error, loading } = useLoad(() => getOne<Note>("notes", id), [id]);
@@ -35,7 +36,7 @@ function NoteEditor({ initial }: { initial: Note }) {
   }
 
   async function del() {
-    if (!confirmDanger(`Move “${note.title}” to Trash? You can restore it from Trash.`)) return;
+    if (!(await ask(`Move “${note.title}” to Trash? You can restore it from Trash.`))) return;
     await trash("notes", note.id);
     go("notes");
   }

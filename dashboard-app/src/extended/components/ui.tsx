@@ -115,11 +115,6 @@ export function Stars({ value, onChange }: { value: number | null; onChange?: (v
   );
 }
 
-/** Ask before anything destructive. */
-export function confirmDanger(message: string): boolean {
-  return window.confirm(message);
-}
-
 export function priorityTone(p: string) {
   return p === "urgent" ? "danger" : p === "high" ? "warn" : p === "low" ? "quiet" : "";
 }

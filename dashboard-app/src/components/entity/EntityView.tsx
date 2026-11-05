@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { notify } from "../../lib/dialogs";
 import { FolderKanban, Inbox, Radar } from "lucide-react";
 import { useData, useEntityTable, useUi } from "../../lib/store";
 import { applyQuery } from "../../lib/query";
@@ -71,7 +72,7 @@ export function EntityView({def,embedded=false}:{def:EntityDef;embedded?:boolean
 
  const runQuickAction=(row:Row,action:QuickAction)=>void (async()=>{
   try{await action.run?.(row);await table.update(row.id,action.patch(row))}
-  catch(e){window.alert((e as Error).message)}
+  catch(e){notify((e as Error).message)}
  })();
 
  const startNew=(preset:Record<string,unknown>={})=>

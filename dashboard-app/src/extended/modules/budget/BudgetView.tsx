@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { notify } from "../../../lib/dialogs.tsx";
+import { ask } from "../../../lib/dialogs.tsx";
 import { ChevronLeft, ChevronRight, Copy, Landmark, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
 import { insert, list, remove, rpc, trash, update, upsert, useLoad } from "../../lib/db.ts";
 import { addMonths, fmtDate, startOfMonth, today } from "../../lib/dates.ts";
@@ -9,7 +11,7 @@ import { setQuery, type Route } from "../../lib/route.ts";
 import { useSettings } from "../../lib/settings.ts";
 import type { BudgetCategory, MonthlyBudget, SavingsAccount, Transaction } from "../../lib/types.ts";
 import { Modal } from "../../components/Modal.tsx";
-import { Badge, confirmDanger, Empty, ErrorText, PageHeader, Select } from "../../components/ui.tsx";
+import { Badge, Empty, ErrorText, PageHeader, Select } from "../../components/ui.tsx";
 import { formatMoney } from "../loans/balance.ts";
 import { TransactionForm } from "./TransactionForm.tsx";
 import { RecurringCard } from "./Recurring.tsx";
@@ -120,7 +122,7 @@ export function BudgetView({ route }: { route: Route }) {
       setCopied(id);
       setTimeout(() => setCopied(""), 2000);
     } catch {
-      prompt("Copy this note:", text);
+      notify(`Copy this note:\n\n${text}`);
     }
   }
   const catName = (id: string | null) => categories.find((c) => c.id === id)?.name ?? "Uncategorised";
@@ -377,7 +379,7 @@ function CategoryManager({ categories }: { categories: BudgetCategory[] }) {
                 <button
                   className="icon danger"
                   aria-label={`Delete ${c.name}`}
-                  onClick={() => confirmDanger(`Move “${c.name}” to Trash? Only possible if no transactions use it — archive it otherwise. You can restore it from Trash.`) && void run(trash("budget_categories", c.id))}
+                  onClick={async () => { if (await ask(`Move “${c.name}” to Trash? Only possible if no transactions use it — archive it otherwise. You can restore it from Trash.`)) void run(trash("budget_categories", c.id)); }}
                 >
                   <Trash2 size={14} />
                 </button>

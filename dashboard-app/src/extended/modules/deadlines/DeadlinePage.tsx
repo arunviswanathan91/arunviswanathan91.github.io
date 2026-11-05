@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ask } from "../../../lib/dialogs.tsx";
 import { ArrowLeft, Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { getOne, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDate, relDay } from "../../lib/dates.ts";
@@ -11,7 +12,7 @@ import { MarkdownEditor, MarkdownView } from "../../components/Markdown.tsx";
 import { Modal } from "../../components/Modal.tsx";
 import { projectName, useProjects } from "../../components/pickers.tsx";
 import { TagList } from "../../components/TagInput.tsx";
-import { Badge, confirmDanger, Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { Badge, Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
 import { sortTasks } from "../tasks/logic.ts";
 import { TaskForm } from "../tasks/TaskForm.tsx";
 import { TaskList } from "../tasks/TaskList.tsx";
@@ -38,7 +39,7 @@ function DeadlineDetail({ d, tasks }: { d: Deadline; tasks: Task[] }) {
   const open = isOpenDeadline(d);
 
   async function del() {
-    if (!confirmDanger(`Move “${d.title}” to Trash? Preparation tasks are kept. You can restore it from Trash.`)) return;
+    if (!(await ask(`Move “${d.title}” to Trash? Preparation tasks are kept. You can restore it from Trash.`))) return;
     await trash("deadlines", d.id);
     go("deadlines");
   }

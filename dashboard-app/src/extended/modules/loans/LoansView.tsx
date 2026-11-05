@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, type FormEvent } from "react";
+import { ask, notify } from "../../../lib/dialogs.tsx";
 import { Download } from "lucide-react";
 import { supabase } from "../../lib/supabase.ts";
 import { Modal } from "../../components/Modal.tsx";
@@ -76,36 +77,36 @@ export function LoansView() {
   }
 
   async function remove(table: "loans" | "loan_payments", id: string, what: string) {
-    if (!supabase || !confirm(`Move this ${what} to Trash? You can restore it from Trash.`)) return;
-    try { await trash(table, id); } catch (e) { alert((e as Error).message); }
+    if (!supabase || !(await ask(`Move this ${what} to Trash? You can restore it from Trash.`))) return;
+    try { await trash(table, id); } catch (e) { notify((e as Error).message); }
     await reload();
   }
 
   // The loan (with its repayments) goes to Trash. Its person/bank is kept, so Restore can put the loan back;
   // "Clean up names" removes names nothing uses any more.
   async function removeLoan(loan: Loan) {
-    if (!supabase || !confirm("Move this loan and its repayments to Trash? You can restore it from Trash.")) return;
-    try { await trash("loans", loan.id); } catch (e) { return alert((e as Error).message); }
+    if (!supabase || !(await ask("Move this loan and its repayments to Trash? You can restore it from Trash."))) return;
+    try { await trash("loans", loan.id); } catch (e) { return notify((e as Error).message); }
     await reload();
   }
 
   async function cleanUpNames() {
     try {
       const unused = await unusedContacts(contacts, loans);
-      if (!unused.length) return alert("Every name here is used by a loan or a meeting.");
-      if (!confirm(`Move ${unused.length} unused name${unused.length > 1 ? "s" : ""} (${unused.map((c) => c.name).join(", ")}) to Trash? They have no loans, meetings or shared spending.`)) return;
+      if (!unused.length) return notify("Every name here is used by a loan or a meeting.");
+      if (!(await ask(`Move ${unused.length} unused name${unused.length > 1 ? "s" : ""} (${unused.map((c) => c.name).join(", ")}) to Trash? They have no loans, meetings or shared spending.`))) return;
       await deleteContacts(unused.map((c) => c.id));
       await reload();
     } catch (e) {
-      alert((e as Error).message);
+      notify((e as Error).message);
     }
   }
 
   async function removePerson(id: string) {
     if (!supabase) return;
-    if (loans.some((l) => l.contact_id === id)) return alert("Delete this person’s loans first.");
-    if (!confirm("Move this person to Trash? You can restore it from Trash.")) return;
-    try { await trash("contacts", id); } catch (e) { return alert((e as Error).message); }
+    if (loans.some((l) => l.contact_id === id)) return notify("Delete this person’s loans first.");
+    if (!(await ask("Move this person to Trash? You can restore it from Trash."))) return;
+    try { await trash("contacts", id); } catch (e) { return notify((e as Error).message); }
     setPerson(null);
     await reload();
   }
@@ -385,11 +386,11 @@ function ScheduleList({ loan, schedule, payments, today, onChange }: { loan: Loa
       .filter((r) => r.upto > paid)
       .map((r) => ({ loan_id: loan.id, amount: (r.upto - Math.max(paid, r.before)) / 100, paid_on: r.on, note: "EMI" }));
     const total = repay.reduce((sum, r) => sum + r.amount, 0);
-    if (!repay.length || !confirm(`Record ${formatMoney(total, loan.currency)} as paid${repay.length > 1 ? ` (${repay.length} EMIs up to ${fmtDate(rows[index].on)})` : ` on ${fmtDate(rows[index].on)}`}?`)) return;
+    if (!repay.length || !(await ask(`Record ${formatMoney(total, loan.currency)} as paid${repay.length > 1 ? ` (${repay.length} EMIs up to ${fmtDate(rows[index].on)})` : ` on ${fmtDate(rows[index].on)}`}?`))) return;
     setBusy(true);
     const { error } = await supabase.from("loan_payments").insert(repay);
     setBusy(false);
-    if (error) return alert(error.message);
+    if (error) return notify(error.message);
     await onChange();
   }
   return (
@@ -453,7 +454,7 @@ function CardSpending({ charges, currency, categories, onChange }: { charges: Ch
       await update("transactions", c.id, patch);
       await onChange();
     } catch (e) {
-      alert((e as Error).message);
+      notify((e as Error).message);
     }
   };
   const shown = all ? charges : charges.slice(0, 8);

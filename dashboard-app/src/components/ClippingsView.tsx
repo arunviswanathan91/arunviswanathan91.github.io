@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useState} from 'react';
+import {ask} from '../lib/dialogs';
 import {supabase} from '../lib/supabase';
 type Clip={id:string;title:string;original_url:string;anchor:{exact:string;authors?:string[]};notes:string;tags:string[];created_at:string;doi:string|null;pmid:string|null;pmcid:string|null;zotero:{url?:string;status?:string;authors?:string[]}|null};
 function safeLink(value:string){try{const u=new URL(value);return ['http:','https:','zotero:'].includes(u.protocol)?u.href:'#';}catch{return '#';}}
@@ -8,7 +9,7 @@ function Card({clip,onSaved}:{clip:Clip;onSaved():void}){
  const [editing,setEditing]=useState(false);
  const [notes,setNotes]=useState(clip.notes),[tags,setTags]=useState(clip.tags.join(', ')),[status,setStatus]=useState(''),[busy,setBusy]=useState(false),[expanded,setExpanded]=useState(false);
  const save=async()=>{setBusy(true);try{const {error}=await supabase!.from('clippings').update({notes,tags:tags.split(',').map(s=>s.trim()).filter(Boolean)}).eq('id',clip.id);setStatus(error?error.message:'Saved');if(!error){setEditing(false);onSaved();}}catch(e){setStatus(e instanceof Error?e.message:'Could not save');}finally{setBusy(false);}};
- const remove=async()=>{if(!window.confirm('Delete this clipping and its browser highlight? Existing Obsidian notes and Zotero references will be kept.'))return;setBusy(true);setStatus('');try{const {error}=await supabase!.from('clippings').delete().eq('id',clip.id);if(error)throw error;onSaved();}catch(e){setStatus(e instanceof Error?e.message:typeof e==='object'&&e&&'message' in e?String(e.message):'Could not delete clipping');}finally{setBusy(false);}};
+ const remove=async()=>{if(!(await ask('Delete this clipping and its browser highlight? Existing Obsidian notes and Zotero references will be kept.')))return;setBusy(true);setStatus('');try{const {error}=await supabase!.from('clippings').delete().eq('id',clip.id);if(error)throw error;onSaved();}catch(e){setStatus(e instanceof Error?e.message:typeof e==='object'&&e&&'message' in e?String(e.message):'Could not delete clipping');}finally{setBusy(false);}};
  return <article className="clipping-card">
  <h2 title={clip.title}>{authorLabel(clip)}</h2>
  <blockquote className={expanded?'expanded':''}>{clip.anchor.exact}</blockquote>

@@ -188,10 +188,10 @@ export const reminders:EntityDef={
 const moveToPapers=async(r:Row)=>{
  if(!supabase)throw new Error("Sign in to move this to Papers.");
  const url=String(r.url);
- const found=await supabase.from("papers").select("id").eq("url",url).limit(1);
+ const found=await supabase.from("ws_papers").select("id").eq("url",url).limit(1);
  if(found.error)throw new Error(found.error.message);
  if(found.data?.length)return;
- const {error}=await supabase.from("papers").insert({title:String(r.title||url),url,status:"to_read",summary:r.notes||null});
+ const {error}=await supabase.from("ws_papers").insert({title:String(r.title||url),url,status:"to_read",summary:r.notes||null});
  if(error)throw new Error(error.message);
 };
 const readQuickActions:QuickAction[]=[

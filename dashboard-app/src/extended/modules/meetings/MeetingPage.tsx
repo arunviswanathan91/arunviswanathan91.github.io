@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { askText, notify } from "../../../lib/dialogs.tsx";
+import { ask } from "../../../lib/dialogs.tsx";
 import { Archive, ArchiveRestore, ArrowLeft, CheckSquare, FileDown, ListPlus, Plus, Trash2, UserPlus } from "lucide-react";
 import { supabase as original } from "../../../lib/supabase";
 import { emitChange, getOne, insert, list, remove, rpc, trash, update, useLoad } from "../../lib/db.ts";
@@ -11,7 +13,7 @@ import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { MultiPicker, useContacts, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
-import { confirmDanger, Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
 import { DateInput } from "../../../components/ui/DateInput";
 
 const SECTIONS: [keyof Meeting, string, string][] = [
@@ -51,14 +53,14 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
   const run = (p: Promise<unknown>) => p.catch((e: Error) => setError(e.message));
 
   async function addPerson() {
-    const name = window.prompt("Name of the new person");
+    const name = await askText("Name of the new person");
     if (!name?.trim()) return;
     const c = await insert<ContactRow>("contacts", { name: name.trim() });
     await insert("meeting_participants", { meeting_id: m.id, contact_id: c.id });
   }
 
   async function del() {
-    if (!confirmDanger(`Move “${m.title}” with its notes and action items to Trash? Tasks created from it are kept. You can restore it from Trash.`)) return;
+    if (!(await ask(`Move “${m.title}” with its notes and action items to Trash? Tasks created from it are kept. You can restore it from Trash.`))) return;
     await trash("meetings", m.id);
     go("meetings");
   }
@@ -266,7 +268,7 @@ function ActionItems({ meeting, projectIds }: { meeting: Meeting; projectIds: st
                 type="button"
                 className="icon danger"
                 aria-label={`Delete ${it.text}`}
-                onClick={() => confirmDanger("Move this action item to Trash? A task created from it is kept.") && void trash("meeting_action_items", it.id).catch((e: Error) => alert(e.message))}
+                onClick={async () => { if (await ask("Move this action item to Trash? A task created from it is kept.")) void trash("meeting_action_items", it.id).catch((e: Error) => notify(e.message)); }}
               >
                 <Trash2 size={14} />
               </button>

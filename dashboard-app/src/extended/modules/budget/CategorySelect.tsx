@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { askText, notify } from "../../../lib/dialogs.tsx";
 import { insert, update } from "../../lib/db.ts";
 import type { BudgetCategory } from "../../lib/types.ts";
 
@@ -23,7 +24,7 @@ export function CategorySelect({ value, categories, kind = "expense", onChange, 
 
   async function pick(v: string) {
     if (v !== NEW) return onChange(v || null);
-    const name = prompt(`New ${kind === "income" ? "income" : "spending"} category name`)?.trim();
+    const name = (await askText(`New ${kind === "income" ? "income" : "spending"} category name`))?.trim();
     if (!name) return;
     try {
       const existing = categories.find((c) => c.kind === kind && c.name.trim().toLowerCase() === name.toLowerCase());
@@ -35,7 +36,7 @@ export function CategorySelect({ value, categories, kind = "expense", onChange, 
       setCreated({ id: row.id, name: row.name });
       onChange(row.id);
     } catch (e) {
-      alert((e as Error).message);
+      notify((e as Error).message);
     }
   }
 
