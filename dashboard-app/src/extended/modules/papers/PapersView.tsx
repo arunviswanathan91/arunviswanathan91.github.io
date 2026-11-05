@@ -9,6 +9,7 @@ import { useAllTags } from "../../components/TagInput.tsx";
 import { ErrorText, PageHeader, SearchBox, Select, Tabs } from "../../components/ui.tsx";
 import { PaperForm } from "./PaperForm.tsx";
 import { PaperRows } from "./PaperRows.tsx";
+import { CitationExport } from "./CitationExport.tsx";
 
 type StatusTab = PaperStatus | "active" | "all";
 type Sort = "added" | "year" | "title" | "rating";
@@ -53,7 +54,7 @@ export function PapersView({ route }: { route: Route }) {
         section="papers"
         title="Papers"
         subtitle="Your reading library. Each paper is stored once and can be linked to any number of projects."
-        actions={<button className="primary" onClick={() => setAdding(true)}><Plus size={16} /> Paper</button>}
+        actions={<><CitationExport papers={shown} name={`papers-${status}`} /><button className="primary" onClick={() => setAdding(true)}><Plus size={16} /> Paper</button></>}
       />
       <Tabs
         value={status}

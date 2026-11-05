@@ -14,6 +14,7 @@ import { createNote } from "../notes/NotesView.tsx";
 import { NoteRows } from "../notes/NoteRows.tsx";
 import { PaperForm } from "../papers/PaperForm.tsx";
 import { PaperRows } from "../papers/PaperRows.tsx";
+import { CitationExport } from "../papers/CitationExport.tsx";
 import { ExperimentRows } from "../experiments/ExperimentRows.tsx";
 import { createExperiment } from "../experiments/create.ts";
 import { sortExperiments } from "../experiments/logic.ts";
@@ -48,6 +49,7 @@ export function ProjectSection({ id, tab }: { id: string; tab: ProjectSectionTab
           <div className="section-head pad-x">
             <h2 className="section-title">Papers</h2>
             <span className="row">
+              <CitationExport papers={data.papers} name="project-papers" />
               <button onClick={() => setModal("link-paper")}><Link2 size={14} /> Link existing</button>
               <button className="primary" onClick={() => setModal("paper")}><Plus size={14} /> New paper</button>
             </span>

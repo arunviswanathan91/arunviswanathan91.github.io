@@ -1,11 +1,11 @@
 // Each section's name, icon and colour, used by the menu, page headers, badges, cards and search.
 // Colours are CSS variables (see styles.css: --sec-<id>, --sec-<id>-soft, --sec-<id>-ink).
 import {
-  CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, FileText, FileUser, FlaskConical, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, Users, Wallet, type LucideIcon,
+  CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, FileText, FileUser, FlaskConical, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, TrendingUp, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 
 export type SectionId =
-  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "experiments" | "meetings" | "deadlines" | "budget" | "loans" | "habits" | "resumes" | "search" | "settings";
+  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "experiments" | "meetings" | "deadlines" | "budget" | "loans" | "networth" | "habits" | "resumes" | "search" | "settings";
 
 export interface Section {
   id: SectionId;
@@ -28,6 +28,7 @@ export const SECTIONS: Record<SectionId, Section> = {
   deadlines: { id: "deadlines", label: "Deadlines", icon: CalendarClock, tone: "deadlines" },
   budget: { id: "budget", label: "Budget", icon: Wallet, tone: "money" },
   loans: { id: "loans", label: "Loans & cards", icon: HandCoins, tone: "money" },
+  networth: { id: "networth", label: "Net worth", icon: TrendingUp, tone: "money" },
   habits: { id: "habits", label: "Habits", icon: Repeat, tone: "habits" },
   resumes: { id: "resumes", label: "Resumes", icon: FileUser, tone: "papers" },
   search: { id: "search", label: "Search", icon: Search, tone: "home" },
