@@ -12,6 +12,7 @@ import { MultiPicker, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { Empty, ErrorText, SaveIndicator, Stars, Loading } from "../../components/ui.tsx";
 import { NoteRows } from "../notes/NoteRows.tsx";
+import { CitationExport } from "./CitationExport.tsx";
 import { PaperForm } from "./PaperForm.tsx";
 import { ReadingTimer } from "./ReadingTimer.tsx";
 
@@ -117,6 +118,7 @@ function PaperDetail({ paper, links, notes }: { paper: Paper; links: ProjectPape
         </div>
         <div className="page-actions">
           <SaveIndicator status={autosave.status} error={autosave.error} />
+          <CitationExport papers={[paper]} name={paper.title.slice(0, 40)} />
           <button onClick={() => setEditing(true)}><Pencil size={14} /> Edit details</button>
           <button className="icon danger" aria-label="Delete paper" onClick={() => void del()}><Trash2 size={16} /></button>
         </div>
