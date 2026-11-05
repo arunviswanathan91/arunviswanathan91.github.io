@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import { peek, put } from "../extended/lib/pageCache";
 import type { Row, SortSpec } from "../entities/types";
 
 const REFETCH_THROTTLE=15000;
@@ -42,7 +43,12 @@ interface TableOptions{
 }
 
 export function useTable<T extends Row=Row>(table:string,select:string,sort:SortSpec,options:TableOptions={}):TableStore<T>{
- const [rows,setRows]=useState<T[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
+ // Rows from the last visit (saved with the workspace pages, see pageCache.ts) draw the
+ // first screen at once; the fetch below then replaces them with fresh ones.
+ const cacheKey=`table:${table}:${select}:${sort.key}:${sort.dir}`;
+ const [rows,setRows]=useState<T[]>(()=>(peek(cacheKey) as T[]|undefined)??[]);
+ const [loading,setLoading]=useState(()=>peek(cacheKey)===undefined),[error,setError]=useState("");
+ const loadedRef=useRef(false);
  const rowsRef=useRef<T[]>([]);rowsRef.current=rows;
  const fetchedAt=useRef(0),alive=useRef(true);
  const {key:sortKey,dir:sortDir}=sort;
@@ -61,9 +67,13 @@ export function useTable<T extends Row=Row>(table:string,select:string,sort:Sort
    result=await supabase.from(table).select(select).order(sortKey,{ascending:sortDir==="asc"});
   const {data,error}=result;
   if(!alive.current)return;
-  if(error)setError(error.message); else setRows((data??[]) as unknown as T[]);
+  if(error)setError(error.message); else{loadedRef.current=true;setRows((data??[]) as unknown as T[])}
   setLoading(false);
  },[table,select,sortKey,sortDir,softDelete]);
+
+ // Keep the saved copy in step with what is on screen, including local edits,
+ // but only once real rows have arrived (never re-save the stale copy as fresh).
+ useEffect(()=>{if(loadedRef.current)put(cacheKey,rows)},[cacheKey,rows]);
 
  useEffect(()=>{
   alive.current=true;

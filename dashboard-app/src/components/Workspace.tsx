@@ -7,7 +7,7 @@ import { useHotkeys } from "../lib/keys";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
 import { Extension } from "../extended/Extension";
 import { CHANGED, changedGroups, hydrateLoadCache } from "../extended/lib/db";
-import { affects } from "../extended/lib/pageCache";
+import { affects, peek, put } from "../extended/lib/pageCache";
 const WORK=new Set(["work"]);
 import { TasksHeader } from "../extended/modules/tasks/TasksView";
 import { SECTIONS, toneStyle } from "../extended/lib/sections";
@@ -36,7 +36,10 @@ function Shell(){
  const [navOpen,setNavOpen]=useState(false);
  const [sidebarCollapsed,setSidebarCollapsed]=useState(()=>loadRaw("sidebar-collapsed",false));
  const [projectComposer,setProjectComposer]=useState(false);
- const [membership,setMembership]=useState<ProjectMembership|null|undefined>(undefined);
+ // Remembered with the saved pages, so a returning visit draws the shell without
+ // waiting for this check; it is still re-run below and corrects itself if it changed.
+ // (What a collaborator may see is enforced by the database, not by this.)
+ const [membership,setMembership]=useState<ProjectMembership|null|undefined>(()=>peek(`hook:membership:${userId}`) as ProjectMembership|null|undefined);
 
  useEffect(()=>save("sidebar-collapsed",sidebarCollapsed),[sidebarCollapsed]);
 
@@ -45,11 +48,19 @@ function Shell(){
   if(!supabase){setMembership(null);return}
   void supabase.from("project_members").select("project_id,role")
    .eq("user_id",userId).order("created_at",{ascending:true}).limit(1).maybeSingle()
-   .then(({data})=>{if(active)setMembership((data as ProjectMembership|null)??null)});
+   .then(({data,error})=>{
+    if(!active)return;
+    const next=(data as ProjectMembership|null)??null;
+    setMembership(next);
+    if(!error)put(`hook:membership:${userId}`,next);
+   });
   return()=>{active=false};
  },[userId]);
 
  const projectOnly=membership!==undefined&&membership!==null;
+ // Tool pages fetch their own data, so they need not wait for the store's tables;
+ // only once the membership check confirms this is the owner, not a collaborator.
+ const toolPage=ui.view==="extended"&&membership===null;
  const sharedProject=membership?projects.byId.get(membership.project_id)??null:null;
 
  const hotkeys=useMemo(()=>({
@@ -112,7 +123,7 @@ function Shell(){
      <button className="icon-button" onClick={n.dismiss} aria-label="Dismiss"><X/></button>
     </p>)}
 
-    <div className="page-transition" key={pageKey}>{loading
+    <div className="page-transition" key={pageKey}>{loading&&!toolPage
      ?<div className="skeleton-stack">{Array.from({length:5}).map((_,i)=><div className="skeleton" key={i}/>)}</div>
      :projectOnly&&sharedProject&&sharedPublication?<PublicationView publicationId={sharedPublication.id}
        returnProjectId={sharedProject.id} accessRole={membership?.role}/>

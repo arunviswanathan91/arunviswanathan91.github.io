@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import { peek, put } from "../extended/lib/pageCache";
+
+const TAGS_KEY="table:tags+item_tags";
 import type { TagEntity } from "../entities/types";
 
 export interface Tag{id:string;name:string;color:string|null}
@@ -30,8 +33,11 @@ export interface TagStore{
 }
 
 export function useTags(userId:string):TagStore{
- const [tags,setTags]=useState<Tag[]>([]),[links,setLinks]=useState<LinkRow[]>([]);
- const [loading,setLoading]=useState(true),[error,setError]=useState("");
+ // Saved with the workspace pages (pageCache.ts) so tags show on the first screen at once.
+ const saved=peek(TAGS_KEY) as {tags:Tag[];links:LinkRow[]}|undefined;
+ const [tags,setTags]=useState<Tag[]>(()=>saved?.tags??[]),[links,setLinks]=useState<LinkRow[]>(()=>saved?.links??[]);
+ const [loading,setLoading]=useState(()=>!saved),[error,setError]=useState("");
+ const loadedRef=useRef(false);
  const linksRef=useRef<LinkRow[]>([]);linksRef.current=links;
  const alive=useRef(true);
 
@@ -47,6 +53,7 @@ export function useTags(userId:string):TagStore{
   if(!alive.current)return;
   if(t.error)setError(t.error.message); else setTags((t.data??[]) as unknown as Tag[]);
   if(l.error)setError(l.error.message); else setLinks((l.data??[]) as unknown as LinkRow[]);
+  if(!t.error&&!l.error)loadedRef.current=true;
   setLoading(false);
  },[]);
 
@@ -54,6 +61,7 @@ export function useTags(userId:string):TagStore{
   alive.current=true;void refetch();
   return()=>{alive.current=false};
  },[refetch]);
+ useEffect(()=>{if(loadedRef.current)put(TAGS_KEY,{tags,links})},[tags,links]);
 
  // Index once per link change: O(1) lookups instead of a filter per item per render,
  // and a stable identity so consumers' useMemo actually holds.
