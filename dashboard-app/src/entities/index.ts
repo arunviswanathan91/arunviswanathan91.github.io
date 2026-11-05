@@ -1,10 +1,11 @@
 import {
- BookMarked, Bell, BriefcaseBusiness, Check, FileText, FlaskConical, LayoutDashboard,
+ BookMarked, BookPlus, Bell, BriefcaseBusiness, Check, FileText, FlaskConical, LayoutDashboard,
  MailX, PartyPopper, PenLine, Star, Telescope, ThumbsDown, ThumbsUp, Timer,
 } from "lucide-react";
 import { isColumn } from "./types";
 import type { EntityDef, EntityKey, QuickAction, Row, Tone } from "./types";
 import { dayDelta } from "../lib/format";
+import { supabase } from "../lib/supabase";
 
 export const TASK_STATUS=["Backlog","In progress","Review","Done"] as const;
 export const PRIORITY=["Low","Medium","High","Urgent"] as const;
@@ -183,8 +184,22 @@ export const reminders:EntityDef={
  ],
 };
 
+/** Copies a saved link into the Papers library (once per URL) and marks the read as read. */
+const moveToPapers=async(r:Row)=>{
+ if(!supabase)throw new Error("Sign in to move this to Papers.");
+ const url=String(r.url);
+ const found=await supabase.from("papers").select("id").eq("url",url).limit(1);
+ if(found.error)throw new Error(found.error.message);
+ if(found.data?.length)return;
+ const {error}=await supabase.from("papers").insert({title:String(r.title||url),url,status:"to_read",summary:r.notes||null});
+ if(error)throw new Error(error.message);
+};
+const readQuickActions:QuickAction[]=[
+ {key:"to-papers",label:"Move to Papers",icon:BookPlus,tone:"blue",show:r=>!r.read_at,run:moveToPapers,patch:()=>({read_at:new Date().toISOString()})},
+];
+
 export const reads:EntityDef={
- key:"reads",table:"reads",tagEntity:"read",
+ key:"reads",table:"reads",tagEntity:"read",quickActions:readQuickActions,
  select:"id,user_id,url,title,notes,read_at,project_id,created_at,updated_at",
  singular:"read",plural:"Reads",kicker:"Personal",subtitle:"Links saved from Telegram and the web.",icon:BookMarked,
  titleField:"title",searchFields:["title","url","notes"],projectField:"project_id",groupBy:"state",
