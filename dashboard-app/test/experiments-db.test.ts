@@ -66,6 +66,11 @@ test('experiment log: links, files, search, Trash and backup',async()=>{
  // Backup includes experiments; restoring with the repeat listed before the original still works.
  const backup=(await one(`select ws_backup_data() as b`)).b;
  assert.equal(backup.ws_experiments.length,2);
+ // Earlier in-place patches survive: savings accounts are still backed up and restored.
+ assert.ok('ws_savings_accounts' in backup,'savings accounts still in the backup');
+ const restoreDef=(await one(`select pg_get_functiondef('public.ws_restore_data(uuid,jsonb)'::regprocedure) as d`)).d;
+ assert.match(restoreDef,/'ws_savings_accounts'/);
+ assert.equal((restoreDef.match(/'ws_experiments'/g)??[]).length,1,'patched once, even after running the file twice');
  backup.ws_experiments.sort((a:any)=>a.repeat_of?-1:1);
  await db.exec(`delete from ws_experiments`);
  const res=(await one(`select ws_restore_data($1,$2) as r`,[uid,backup])).r;
