@@ -6,6 +6,9 @@ import { loadRaw, save } from "../lib/persist";
 import { useHotkeys } from "../lib/keys";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
 import { Extension } from "../extended/Extension";
+import { CHANGED, changedGroups, hydrateLoadCache } from "../extended/lib/db";
+import { affects } from "../extended/lib/pageCache";
+const WORK=new Set(["work"]);
 import { TasksHeader } from "../extended/modules/tasks/TasksView";
 import { SECTIONS, toneStyle } from "../extended/lib/sections";
 import { useRoute } from "../extended/lib/route";
@@ -25,7 +28,9 @@ type ProjectMembership={project_id:string;role:"editor"|"viewer"};
 
 function Shell(){
  const {userId,projects,loading,notices,tables,refreshAll}=useData();
- useEffect(()=>{const refresh=()=>refreshAll();window.addEventListener("ws:changed",refresh);return()=>window.removeEventListener("ws:changed",refresh)},[refreshAll]);
+ // The main store holds tasks, projects, publications and their links, so it reloads
+ // after saves in the work group (or unknown saves), not after a habit, budget or résumé one.
+ useEffect(()=>{const refresh=(e:Event)=>{if(affects(WORK,changedGroups(e)))refreshAll()};window.addEventListener(CHANGED,refresh);return()=>window.removeEventListener(CHANGED,refresh)},[refreshAll]);
  const ui=useUi();
  const route=useRoute();
  const [navOpen,setNavOpen]=useState(false);
@@ -133,5 +138,7 @@ function Shell(){
 }
 
 export function Workspace({userId}:{userId:string}){
+ // Restore this account's saved pages before any page renders, so they draw at once.
+ useMemo(()=>hydrateLoadCache(userId),[userId]);
  return <StoreProvider userId={userId}><Shell/></StoreProvider>;
 }

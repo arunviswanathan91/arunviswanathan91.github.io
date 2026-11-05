@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase.ts";
-import { CHANGED, onLoadCacheClear } from "../../lib/db.ts";
+import { CHANGED, changedGroups } from "../../lib/db.ts";
+import { affects, peek, put } from "../../lib/pageCache.ts";
 import { chargedByLoan, type Charge, type Contact, type Loan, type Payment } from "./balance.ts";
 
 export interface LoansData {
@@ -14,12 +15,14 @@ export interface LoansData {
   reload: () => Promise<void>;
 }
 
-// Last loaded data, shared by every page that shows loans (Loans, Home, Budget),
-// so opening one of them again draws the figures at once and then refreshes.
-let cached: { contacts: Contact[]; loans: Loan[]; payments: Payment[]; charges: Charge[] } | null = null;
-onLoadCacheClear(() => { cached = null; });
+// Last loaded data, shared by every page that shows loans (Loans, Home, Budget)
+// and saved with the other pages (pageCache.ts), so the figures draw at once.
+type Snapshot = { contacts: Contact[]; loans: Loan[]; payments: Payment[]; charges: Charge[] };
+const KEY = "hook:useLoans";
+const MONEY = new Set(["money"]);
 
 export function useLoans(): LoansData {
+  const cached = peek(KEY) as Snapshot | undefined;
   const [contacts, setContacts] = useState<Contact[]>(() => cached?.contacts ?? []);
   const [loans, setLoans] = useState<Loan[]>(() => cached?.loans ?? []);
   const [payments, setPayments] = useState<Payment[]>(() => cached?.payments ?? []);
@@ -59,15 +62,15 @@ export function useLoans(): LoansData {
       const nextPayments = (p.data as Payment[]).map((x) => ({ ...x, amount: Number(x.amount) }));
       setLoans(nextLoans);
       setPayments(nextPayments);
-      cached = { contacts: nextContacts, loans: nextLoans, payments: nextPayments, charges: cardCharges };
+      put(KEY, { contacts: nextContacts, loans: nextLoans, payments: nextPayments, charges: cardCharges } satisfies Snapshot);
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     void reload();
-    // Card spending is entered from the budget too; reload when any workspace record changes.
-    const on = () => void reload();
+    // Card spending is entered from the budget too; reload after any money-related save.
+    const on = (e: Event) => { if (affects(MONEY, changedGroups(e))) void reload(); };
     window.addEventListener(CHANGED, on);
     return () => window.removeEventListener(CHANGED, on);
   }, [reload]);

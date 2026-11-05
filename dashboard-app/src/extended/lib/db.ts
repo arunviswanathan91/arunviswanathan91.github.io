@@ -2,6 +2,8 @@
 // rely on try/catch, and every write announces a change so open views reload themselves.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./supabase.ts";
+import * as pages from "./pageCache.ts";
+import { affects, groupsOfTable, groupsRead, type Groups } from "./pageCache.ts";
 
 export function sb() {
   if (!supabase) throw new Error("Supabase is not configured");
@@ -9,9 +11,15 @@ export function sb() {
 }
 
 export const CHANGED = "ws:changed";
-export function emitChange() {
-  window.dispatchEvent(new Event(CHANGED));
+/** Announce a save. Name the table so only pages reading that part of the workspace
+ *  reload; with no table every open page reloads (use that when unsure). */
+let saves = 0; // counts saves, so a reload never reuses a request sent before one
+export function emitChange(table?: string) {
+  saves++;
+  window.dispatchEvent(new CustomEvent<Groups>(CHANGED, { detail: groupsOfTable(table) }));
 }
+/** Groups a CHANGED event touched (null: everything). */
+export const changedGroups = (e: Event): Groups => (e instanceof CustomEvent ? (e.detail as Groups) ?? null : null);
 
 function check<T>(res: { data: T; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
@@ -50,25 +58,25 @@ export async function getOne<T>(table: string, id: string): Promise<T | null> {
 
 export async function insert<T>(table: string, values: object): Promise<T> {
   const row = check(await sb().from(table).insert(values).select().single()) as T;
-  emitChange();
+  emitChange(table);
   return row;
 }
 
 export async function insertMany(table: string, values: object[]): Promise<void> {
   if (!values.length) return;
   check(await sb().from(table).insert(values));
-  emitChange();
+  emitChange(table);
 }
 
 /** Insert or replace rows that share the `onConflict` key columns. */
 export async function upsert(table: string, values: object | object[], onConflict: string, quiet = false): Promise<void> {
   check(await sb().from(table).upsert(values, { onConflict }));
-  if (!quiet) emitChange();
+  if (!quiet) emitChange(table);
 }
 
 export async function update<T>(table: string, id: string, values: object, quiet = false): Promise<T> {
   const row = check(await sb().from(table).update(values).eq("id", id).select().single()) as T;
-  if (!quiet) emitChange();
+  if (!quiet) emitChange(table);
   return row;
 }
 
@@ -80,50 +88,58 @@ export async function trash(table: string, id: string): Promise<void> {
     const msg = (e as Error).message;
     throw new Error(/ws_trash|schema cache/i.test(msg) ? "Trash for this module needs the latest database setup: run supabase/trash-workspace.sql in the Supabase SQL Editor." : msg);
   }
-  emitChange();
+  emitChange(table);
   window.dispatchEvent(new CustomEvent("dash:trash-changed")); // refresh the Trash list
 }
 
 export async function remove(table: string, match: Record<string, string>): Promise<void> {
   check(await sb().from(table).delete().match(match));
-  emitChange();
+  emitChange(table);
 }
 
 export async function rpc<T>(fn: string, args: object = {}): Promise<T> {
   return check(await sb().rpc(fn, args)) as T;
 }
 
-/** Load data, reload when anything in the workspace changes. */
-// Last result of each loader, so returning to a page shows what it showed before
-// at once and refreshes it quietly, instead of blanking and popping back in.
-// The key is the loader's source plus its deps: two call sites with the same
-// text and deps run the same query. Bounded so long sessions don't grow it forever.
-const loadCache = new Map<string, unknown>();
-const CACHE_LIMIT = 150;
-const cacheKey = (load: () => unknown, deps: unknown[]) => {
-  try { return `${load.toString()}|${JSON.stringify(deps)}`; } catch { return ""; }
-};
-const remember = (key: string, value: unknown) => {
-  if (!key) return;
-  loadCache.delete(key);
-  loadCache.set(key, value);
-  if (loadCache.size > CACHE_LIMIT) loadCache.delete(loadCache.keys().next().value as string);
-};
 const cacheClearers = new Set<() => void>();
-/** Lets a hook with its own cache (such as useLoans) be cleared with the rest. */
+/** Lets a hook with its own state (such as useLoans) be cleared with the rest. */
 export function onLoadCacheClear(fn: () => void) { cacheClearers.add(fn); }
-/** Forget every cached page (on sign-out, so another account never sees it). */
-export function clearLoadCache() { loadCache.clear(); cacheClearers.forEach((fn) => fn()); }
+/** Forget every cached page, in memory and in the browser (on sign-out). */
+export function clearLoadCache() { pages.clear(); cacheClearers.forEach((fn) => fn()); }
+/** Restore this user's saved pages; call before the workspace renders. */
+export const hydrateLoadCache = (userId: string) => pages.hydrate(userId, __BUILD_ID__);
 
+// Several open components often ask for the same thing at once (the project
+// picker, say); they share one request instead of each sending their own.
+// A request sent before the latest save is never reused: it may predate the change.
+const inFlight = new Map<string, { p: Promise<unknown>; saves: number }>();
+function shared<T>(key: string, load: () => Promise<T>): Promise<T> {
+  if (!key) return load();
+  const running = inFlight.get(key);
+  if (running && running.saves === saves) return running.p as Promise<T>;
+  const entry = { p: load(), saves };
+  inFlight.set(key, entry);
+  void entry.p.finally(() => { if (inFlight.get(key) === entry) inFlight.delete(key); }).catch(() => {});
+  return entry.p as Promise<T>;
+}
+
+/**
+ * Load data for a page. The last result is shown at once on later visits (and
+ * after a browser reload) while a fresh copy loads, and the page reloads after
+ * saves that touch the tables its loader reads (see pageCache.ts).
+ */
 export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
-  const key = cacheKey(load, deps);
-  const [data, setData] = useState<T | undefined>(() => loadCache.get(key) as T | undefined);
+  const source = load.toString();
+  const key = pages.cacheKey(source, deps);
+  const [data, setData] = useState<T | undefined>(() => pages.peek(key) as T | undefined);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(() => !loadCache.has(key));
+  const [loading, setLoading] = useState(() => !pages.has(key));
   const loadRef = useRef(load);
   loadRef.current = load;
   const keyRef = useRef(key);
   keyRef.current = key;
+  const readsRef = useRef<Groups>(null);
+  readsRef.current = groupsRead(source);
   const seq = useRef(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const reload = useCallback(async () => {
@@ -132,9 +148,9 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
     const mine = ++seq.current;
     const k = keyRef.current;
     try {
-      const value = await loadRef.current();
+      const value = await shared(k, () => loadRef.current());
       if (mine !== seq.current) return;
-      remember(k, value);
+      pages.put(k, value);
       setData(value);
       setError("");
     } catch (e) {
@@ -146,10 +162,10 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
   }, deps);
   useEffect(() => {
     // Switching to deps already seen shows their cached result straight away.
-    if (loadCache.has(keyRef.current)) { setData(loadCache.get(keyRef.current) as T); setLoading(false); }
+    if (pages.has(keyRef.current)) { setData(pages.peek(keyRef.current) as T); setLoading(false); }
     else setLoading(true);
     void reload();
-    const on = () => void reload();
+    const on = (e: Event) => { if (affects(readsRef.current, changedGroups(e))) void reload(); };
     window.addEventListener(CHANGED, on);
     return () => { seq.current++; window.removeEventListener(CHANGED, on); };
   }, [reload]);
