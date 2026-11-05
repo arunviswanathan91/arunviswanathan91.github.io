@@ -26,7 +26,9 @@ const SECTIONS: [keyof Meeting, string, string][] = [
 export function MeetingPage({ id }: { id: string }) {
   const { data: meeting, error, loading } = useLoad(() => getOne<Meeting>("meetings", id), [id]);
   if (error) return <ErrorText error={error} />;
-  if (loading && !meeting) return <Loading rows={6} />;
+  // Moving straight from one record to another, the previous one is still on hand while the
+  // next loads: never build the editor from it, or its text could be saved into the new record.
+  if ((loading && !meeting) || (meeting && meeting.id !== id)) return <Loading rows={6} />;
   if (!meeting) return <Empty>This meeting doesn’t exist (it may have been deleted). <a href={href("meetings")}>Back to meetings</a></Empty>;
   return <MeetingEditor key={id} initial={meeting} />;
 }

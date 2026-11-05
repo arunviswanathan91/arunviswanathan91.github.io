@@ -21,7 +21,9 @@ export function ResumeEditor({ id }: { id: string }) {
   useEffect(loadResumeFonts, []); // the font picker shows each typeface by name
   const { data: row, error, loading } = useLoad(() => getOne<Row>("resumes", id), [id]);
   if (error) return <ErrorText error={error} />;
-  if (loading && !row) return <Loading rows={8} />;
+  // Moving straight from one record to another, the previous one is still on hand while the
+  // next loads: never build the editor from it, or its text could be saved into the new record.
+  if ((loading && !row) || (row && row.id !== id)) return <Loading rows={8} />;
   if (!row) return <p className="muted">This resume doesn’t exist. <a href="#/tools/resumes">Back to resumes</a></p>;
   // Remount per resume; after this the editor owns the state (remote reloads must not clobber typing).
   return <Editor key={row.id} row={row} />;
