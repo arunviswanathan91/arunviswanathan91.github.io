@@ -33,6 +33,17 @@ export function Tabs<T extends string>({ value, options, onChange, counts }: { v
   );
 }
 
+/** Placeholder shown while a page loads for the first time, roughly the shape
+ *  of the rows it is waiting for, so nothing jumps when they arrive. */
+export function Loading({ rows = 4, card = true, label = "Loading" }: { rows?: number; card?: boolean; label?: string }) {
+  const bars = (
+    <div className="ws-skeleton" role="status" aria-label={label} aria-busy="true">
+      {Array.from({ length: rows }, (_, i) => <span key={i} className="ws-skeleton-row" style={{ animationDelay: `${i * 90}ms` }} />)}
+    </div>
+  );
+  return card ? <div className="card pad">{bars}</div> : bars;
+}
+
 /** Empty state: an icon in the section colour, one line, and an optional action. */
 export function Empty({ children, icon: Icon, action }: { children: ReactNode; icon?: LucideIcon; action?: ReactNode }) {
   return (

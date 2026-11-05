@@ -139,7 +139,7 @@ export function HomeView() {
   const loansNetAll = fx ? combine(Object.fromEntries(Object.entries(loanTotals).map(([c, t]) => [c, t.net])), fx) : null;
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <header className="home-hero">
         <div>
           <div className="kicker">{dateLabel}</div>

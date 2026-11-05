@@ -5,7 +5,7 @@ import { getOne, update, useLoad } from "../../lib/db.ts";
 import { go } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
 import { Modal } from "../../components/Modal.tsx";
-import { ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { ErrorText, SaveIndicator, Loading } from "../../components/ui.tsx";
 import {
   ACCENTS, ACCENT_TARGETS, DEFAULT_STYLE, FONTS, HEADING_STYLES, LAYOUT_TYPES, SECTION_ORDER, layoutFor, SECTION_TYPES, moveBy, newItem, newSection, normalizeResume, pdfFilename,
   type DisplayMode, type FontKey, type HeadingStyle, type SectionLayout, type ItemField, type ResumeData, type ResumeStyle, type ResumeItem, type ResumeSection, type SectionType,
@@ -21,7 +21,7 @@ export function ResumeEditor({ id }: { id: string }) {
   useEffect(loadResumeFonts, []); // the font picker shows each typeface by name
   const { data: row, error, loading } = useLoad(() => getOne<Row>("resumes", id), [id]);
   if (error) return <ErrorText error={error} />;
-  if (loading && !row) return <p className="muted">Loading…</p>;
+  if (loading && !row) return <Loading rows={8} />;
   if (!row) return <p className="muted">This resume doesn’t exist. <a href="#/tools/resumes">Back to resumes</a></p>;
   // Remount per resume; after this the editor owns the state (remote reloads must not clobber typing).
   return <Editor key={row.id} row={row} />;

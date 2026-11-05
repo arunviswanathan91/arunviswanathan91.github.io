@@ -46,7 +46,7 @@ export function ProjectsView({ route }: { route: Route }) {
   const now = today();
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <PageHeader
         section="projects"
         title="Projects"

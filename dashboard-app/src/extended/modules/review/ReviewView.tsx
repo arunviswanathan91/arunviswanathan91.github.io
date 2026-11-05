@@ -95,7 +95,7 @@ export function ReviewView() {
   }
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <PageHeader
         section="review"
         title="Weekly review"

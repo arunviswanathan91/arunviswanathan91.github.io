@@ -41,7 +41,7 @@ export function TasksView({ route }: { route: Route }) {
   const [adding, setAdding] = useState(false);
   const { projects } = useProjects();
   const tags = useAllTags();
-  const { data: tasks = [], error } = useLoad(() => list<Task>("tasks", { order: [["due_date"], ["created_at"]] }), []);
+  const { data: tasks = [], error, loading: tasksLoading } = useLoad(() => list<Task>("tasks", { order: [["due_date"], ["created_at"]] }), []);
   const now = today();
   // Deep link (?open=<id>), e.g. from the agenda: show that task's form.
   const openId = route.query.get("open");
@@ -57,7 +57,7 @@ export function TasksView({ route }: { route: Route }) {
   const shown = sortTasks(filtered.filter((t) => inView(t, view, now)), view);
 
   return (
-    <section>
+    <section className={tasksLoading && !error ? "is-loading" : undefined} aria-busy={tasksLoading && !error || undefined}>
       <TasksHeader view={view} counts={{ today: counts.today, inbox: counts.inbox, overdue: counts.overdue }} onAdd={() => setAdding(true)} />
       <div className="filters">
         <SearchBox value={search} onChange={(v) => setQuery("q", v)} placeholder="Search tasks" />

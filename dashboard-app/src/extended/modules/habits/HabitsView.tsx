@@ -181,7 +181,7 @@ export function HabitsView() {
   }
 
   return (
-    <section>
+    <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
       <PageHeader section="habits" title="Habits" subtitle="Small things, done regularly." actions={<>
         {habits.length > 0 && <button onClick={exportCsv} title="Download every logged day as a spreadsheet"><Download size={15} /> CSV</button>}
         <button onClick={() => setPausing(true)}><Pause size={15} /> Break</button>

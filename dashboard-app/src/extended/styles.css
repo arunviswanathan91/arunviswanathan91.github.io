@@ -835,3 +835,38 @@
 .extension-workspace .account-main .num { text-align: right; flex-shrink: 0; }
 .extension-workspace .fx-box { display: grid; gap: 4px; padding: 10px 12px; border: 1px dashed var(--border-strong, var(--border)); border-radius: 12px; }
 .extension-workspace .fx-box p { margin: 0; }
+
+/* ── Loading ──────────────────────────────────────────────────────────────────
+   First visit to a page: keep its header, hide the body (which would otherwise
+   flash zeros and "nothing here" messages) and show placeholder rows instead.
+   Later visits use cached data (useLoad), so this only shows once per page. */
+.extension-workspace section.is-loading > :not(header):not(.quick-actions):not(.filters):not(.tabs) { display: none; }
+.extension-workspace section.is-loading::after {
+  content: "";
+  display: block;
+  height: 236px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(var(--surface-2), var(--surface-2)),
+    linear-gradient(var(--surface-2), var(--surface-2)),
+    linear-gradient(var(--surface-2), var(--surface-2)),
+    linear-gradient(var(--surface-2), var(--surface-2));
+  background-repeat: no-repeat;
+  background-size: calc(100% - 36px) 38px, calc(88% - 36px) 38px, calc(95% - 36px) 38px, calc(70% - 36px) 38px;
+  background-position: 18px 18px, 18px 70px, 18px 122px, 18px 174px;
+  animation: ws-pulse 1.4s ease-in-out infinite;
+}
+.ws-skeleton { display: grid; gap: 14px; }
+.ws-skeleton-row { display: block; height: 38px; border-radius: var(--r-2); background: var(--surface-2); animation: ws-pulse 1.4s ease-in-out infinite both; }
+.ws-skeleton-row:nth-child(3n + 2) { width: 88%; }
+.ws-skeleton-row:nth-child(3n) { width: 72%; }
+@keyframes ws-pulse { 50% { opacity: 0.5; } }
+/* Content arriving after the placeholder fades in instead of snapping. */
+.extension-workspace section:not(.is-loading) > :not(header):not(dialog) { animation: ws-fade 0.18s ease-out both; }
+@keyframes ws-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .extension-workspace section.is-loading::after, .ws-skeleton-row { animation: none; }
+  .extension-workspace section:not(.is-loading) > :not(header):not(dialog) { animation: none; }
+}

@@ -12,7 +12,7 @@ import { MarkdownEditor, MarkdownView } from "../../components/Markdown.tsx";
 import { Modal } from "../../components/Modal.tsx";
 import { projectName, useProjects } from "../../components/pickers.tsx";
 import { TagList } from "../../components/TagInput.tsx";
-import { Badge, Empty, ErrorText, SaveIndicator } from "../../components/ui.tsx";
+import { Badge, Empty, ErrorText, SaveIndicator, Loading } from "../../components/ui.tsx";
 import { sortTasks } from "../tasks/logic.ts";
 import { TaskForm } from "../tasks/TaskForm.tsx";
 import { TaskList } from "../tasks/TaskList.tsx";
@@ -25,7 +25,7 @@ export function DeadlinePage({ id }: { id: string }) {
     return { deadline, tasks };
   }, [id]);
   if (error) return <ErrorText error={error} />;
-  if (!data) return null;
+  if (!data) return <Loading rows={6} />;
   if (!data.deadline) return <Empty>This deadline doesn’t exist (it may have been deleted). <a href={href("deadlines")}>Back</a></Empty>;
   return <DeadlineDetail key={id} d={data.deadline} tasks={data.tasks} />;
 }
