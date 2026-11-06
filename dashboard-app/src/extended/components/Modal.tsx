@@ -10,7 +10,8 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
     dialog?.querySelector<HTMLElement>("input:not([type=hidden]), textarea")?.focus();
   }, []);
   return (
-    <dialog ref={ref} className={`modal ${wide ? "wide" : ""}`} onClose={onClose} onMouseDown={(e) => e.target === ref.current && onClose()}>
+    // Clicking outside does not close it, so a stray click never throws away what was typed: use × or Esc.
+    <dialog ref={ref} className={`modal ${wide ? "wide" : ""}`} onClose={onClose}>
       <div className="modal-body">
         <header className="modal-head">
           <h2>{title}</h2>
