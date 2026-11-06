@@ -1010,3 +1010,27 @@
 .extension-workspace .funding-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; flex-wrap: wrap; }
 .extension-workspace .funding-head > strong { flex: 1; min-width: 200px; }
 .extension-workspace .funding-actions { gap: 6px; align-items: center; margin-top: 2px; }
+
+/* ── Thesis chapter outline ─────────────────────────────────────────────── */
+.extension-workspace .chapter-bar { display: grid; gap: 2px; }
+.extension-workspace .chapter-outline { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.extension-workspace .outline-summary { display: grid; gap: 6px; }
+.extension-workspace .outline-sections, .extension-workspace .outline-items { list-style: none; margin: 0; padding: 0; }
+.extension-workspace .outline-section { border-top: 1px solid var(--border); padding: 6px 0; }
+.extension-workspace .outline-section-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.extension-workspace .outline-section-head .outline-check { flex: 1; min-width: 180px; }
+.extension-workspace .outline-section-meta { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.extension-workspace .outline-items { padding-left: 30px; }
+.extension-workspace .outline-figures .outline-items { padding-left: 0; }
+.extension-workspace .outline-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 5px 0; border-top: 1px dashed var(--border); }
+.extension-workspace .outline-item:first-child { border-top: 0; }
+.extension-workspace .outline-check { display: flex; flex-direction: row; align-items: baseline; gap: 8px; cursor: pointer; font-size: var(--f-sm); color: var(--text); font-weight: 400; }
+.extension-workspace .outline-check input { flex: none; width: auto; margin: 0; transform: translateY(2px); }
+.extension-workspace .outline-num { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.2em; }
+.extension-workspace .outline-paras { font-size: var(--f-xs); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; align-self: start; padding-top: 2px; }
+.extension-workspace .outline-detail { grid-column: 1 / -1; display: grid; gap: 2px; padding-left: calc(3.2em + 26px); }
+.extension-workspace .outline-note { color: var(--tone-ink); margin: 0; }
+.extension-workspace .outline-section > .outline-note, .extension-workspace .outline-cover { padding-left: 30px; margin: 2px 0 4px; }
+.extension-workspace .outline-item.done .outline-title, .extension-workspace .outline-section.done > .outline-section-head .outline-title { text-decoration: line-through; color: var(--muted); }
+.extension-workspace .outline-figures h4 { margin: 8px 0 2px; }
+@media (max-width: 600px) { .extension-workspace .outline-items { padding-left: 8px; } .extension-workspace .outline-detail { padding-left: 26px; } }

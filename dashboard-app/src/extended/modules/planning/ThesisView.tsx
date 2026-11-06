@@ -13,6 +13,8 @@ import { SECTIONS } from "../../lib/sections.ts";
 import { todayISO } from "../loans/balance.ts";
 import { moveChapter, relativeDays, thesisProgress, wordsPerDay } from "./logic.ts";
 import { Progress } from "./Progress.tsx";
+import { ChapterOutline } from "./ChapterOutline.tsx";
+import { outlineProgress } from "./outline.ts";
 import { useOptimistic } from "./optimistic.ts";
 
 /** Deadline categories that are thesis milestones (they also show in the agenda and Telegram reminders). */
@@ -133,9 +135,14 @@ export function ThesisView() {
                           <span className="muted">/</span>
                           <input type="number" min={1} step={500} placeholder="target" aria-label={`Word target for ${c.title}`} defaultValue={c.target_words ?? ""} onBlur={(e) => { const v = e.target.value ? Number(e.target.value) : null; if (v !== c.target_words) void run(() => update("thesis_chapters", c.id, { target_words: v })); }} />
                         </label>
-                        <span className="chapter-bar"><Progress share={share} label={`${c.title}: words against target`} /></span>
+                        <span className="chapter-bar">
+                          {(c.outline?.length ?? 0) > 0 ? (() => { const op = outlineProgress(c.outline!); return <>
+                            <Progress share={op.share} label={`${c.title}: outline done`} />
+                            <span className="muted small">{op.done}/{op.total} sections</span>
+                          </>; })() : <Progress share={share} label={`${c.title}: words against target`} />}
+                        </span>
                         <button className={`chip-toggle ${pending ? "warn" : ""}`} aria-expanded={open === c.id} onClick={() => setOpen(open === c.id ? null : c.id)}>
-                          {fb.length ? `${pending ? `${pending} open` : "All addressed"} · ${fb.length} feedback` : "Feedback & notes"}
+                          {fb.length ? `${pending ? `${pending} open` : "All addressed"} · ${fb.length} feedback` : (c.outline?.length ? "Outline & notes" : "Outline, feedback & notes")}
                         </button>
                       </div>
                       {open === c.id && <ChapterDetail chapter={c} feedback={fb} patch={(p) => patchChapter(c.id, p)} patchFeedback={patchFeedback} onError={setErr} onChanged={() => void reload()} />}
@@ -164,6 +171,7 @@ function ChapterDetail({ chapter, feedback, patch, patchFeedback, onError, onCha
   const run = async (fn: () => Promise<unknown>) => { onError(""); try { await fn(); } catch (e) { onError((e as Error).message); } };
   return (
     <div className="chapter-detail">
+      <ChapterOutline chapter={chapter} patch={patch} onError={onError} />
       <div className="note-props">
         <label className="field"><span>Due</span><DateInput type="date" value={chapter.due_on ?? ""} onChange={(e) => patch({ due_on: e.target.value || null })} /></label>
         <label className="field"><span>Built on manuscript</span>
