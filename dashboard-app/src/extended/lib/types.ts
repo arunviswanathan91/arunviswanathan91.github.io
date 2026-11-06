@@ -392,6 +392,8 @@ export const CHAPTER_STATUS: Record<ChapterStatus, string> = {
 export interface ThesisChapter {
   id: string; position: number; title: string; status: ChapterStatus; words: number; target_words: number | null;
   due_on: string | null; publication_id: string | null; notes: string; created_at: string; updated_at: string;
+  /** Sections, subsections and figures with done toggles (thesis-outline.sql). */
+  outline?: import("../modules/planning/outline.ts").OutlineItem[];
 }
 export type FeedbackSource = "supervisor" | "dac" | "examiner" | "peer" | "other";
 export const FEEDBACK_SOURCE: Record<FeedbackSource, string> = { supervisor: "Supervisor", dac: "DAC", examiner: "Examiner", peer: "Peer", other: "Other" };

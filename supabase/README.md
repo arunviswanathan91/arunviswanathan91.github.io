@@ -29,6 +29,7 @@ always goes at the end of this list, and the commit that adds it says so.
 | 21 | `experiments.sql` | Experiment log (protocol, samples, results), linked to projects and manuscripts |
 | 22 | `planning.sql` | Thesis tracker, yearly goals, conference and trip planner |
 | 23 | `alerts.sql` | Morning briefing on Telegram, daily paper alerts, funding finder |
+| 24 | `thesis-outline.sql` | Thesis chapter outlines (sections, paragraph targets, done toggles, figures to prepare) |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set
