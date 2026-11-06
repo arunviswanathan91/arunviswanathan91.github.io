@@ -44,6 +44,10 @@ export interface Payment {
   amount: number;
   paid_on: string;
   note: string | null;
+  /** Savings account it was paid from. */
+  account_id?: string | null;
+  /** Friend who paid it for you; counts as them paying you back. */
+  for_contact_id?: string | null;
 }
 
 export type LoanStatus = "open" | "overdue" | "settled";

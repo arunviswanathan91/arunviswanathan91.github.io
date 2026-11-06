@@ -34,6 +34,7 @@ export function LoansView() {
   const [editing,setEditing]=useState<Loan|null>(null);
   const [adding, setAdding] = useState(false);
   const [paying, setPaying] = useState<Loan | null>(null);
+  const [editingPayment, setEditingPayment] = useState<{ loan: Loan; payment: Payment } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const today = todayISO();
 
@@ -229,8 +230,11 @@ export function LoansView() {
                                   <li key={p.id}>
                                     <span>{fmtDate(p.paid_on)}</span>
                                     <span>{formatMoney(p.amount, loan.currency)}</span>
-                                    <span className="muted">{p.note}</span>
-                                    <button className="link danger small" onClick={() => remove("loan_payments", p.id, "repayment")}>Delete</button>
+                                    <span className="muted">{[p.note, p.for_contact_id && `paid by ${nameOf(p.for_contact_id)}`].filter(Boolean).join(" · ")}</span>
+                                    <span className="row">
+                                      <button className="link small" onClick={() => setEditingPayment({ loan, payment: p })}>Edit</button>
+                                      <button className="link danger small" onClick={() => remove("loan_payments", p.id, "repayment")}>Delete</button>
+                                    </span>
                                   </li>
                                 ))}
                               </ul>
@@ -269,6 +273,11 @@ export function LoansView() {
       {rolling && (
         <Modal title={`New statement · ${rolling.account_name || nameOf(rolling.contact_id)}`} onClose={() => setRolling(null)}>
           <StatementForm loan={rolling} payments={payments} today={today} onDone={async () => { setRolling(null); await reload(); }} />
+        </Modal>
+      )}
+      {editingPayment && (
+        <Modal title="Edit repayment" onClose={() => setEditingPayment(null)}>
+          <PaymentForm loan={editingPayment.loan} left={remaining(editingPayment.loan, payments)} payment={editingPayment.payment} onDone={async () => { setEditingPayment(null); await reload(); }} />
         </Modal>
       )}
       {paying && (

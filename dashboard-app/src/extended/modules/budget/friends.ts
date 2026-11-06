@@ -4,6 +4,26 @@ import type { BudgetCategory, Transaction } from "../../lib/types.ts";
 
 const cents = (n: number) => Math.round(Number(n) * 100);
 
+/**
+ * Card bills or loan repayments a friend paid for you, as "paid back" entries (income for that friend),
+ * so they come off what the friend owes alongside money they sent you.
+ */
+export function friendPaidPayments(
+  payments: { id: string; loan_id: string; amount: number | string; paid_on: string; note: string | null; for_contact_id?: string | null }[],
+  loans: { id: string; currency: string; account_name?: string | null }[],
+): Transaction[] {
+  const out: Transaction[] = [];
+  for (const p of payments) {
+    const loan = loans.find((l) => l.id === p.loan_id);
+    if (!p.for_contact_id || !loan) continue;
+    out.push({
+      id: `payment:${p.id}`, kind: "income", description: `Paid ${loan.account_name || "card"} bill`, amount: Number(p.amount), currency: loan.currency,
+      category_id: null, occurred_on: p.paid_on, payment_method: null, notes: p.note, for_contact_id: p.for_contact_id,
+    });
+  }
+  return out;
+}
+
 /** What each friend owes you: spends paid for them minus what they paid back, per currency. */
 export function friendBalances(txs: Transaction[]): Map<string, Record<string, number>> {
   const out = new Map<string, Record<string, number>>();
@@ -30,7 +50,7 @@ export function friendSummary(name: string, monthLabel: string, monthTxs: Transa
     for (const t of list) lines.push(`  ${fmtDate(t.occurred_on)} · ${t.description} · ${formatMoney(Number(t.amount), t.currency)}`);
   }
   if (!spends.length) lines.push("", "No new spends this month.");
-  for (const t of paidBack) lines.push("", `Paid back ${fmtDate(t.occurred_on)}: ${formatMoney(Number(t.amount), t.currency)}`);
+  for (const t of paidBack) lines.push("", `Paid back ${fmtDate(t.occurred_on)}: ${formatMoney(Number(t.amount), t.currency)}${t.id.startsWith("payment:") ? ` (${t.description})` : ""}`);
   const total = Object.entries(owed).filter(([, v]) => Math.abs(v) >= 0.01);
   lines.push("", total.length ? `Total you owe: ${total.map(([c, v]) => formatMoney(v, c)).join(" + ")}` : "All settled. Thanks!");
   return lines.join("\n");
