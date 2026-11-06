@@ -58,11 +58,15 @@ function DialogView({ request, onClose }: { request: Request; onClose: () => voi
   return (
     <dialog ref={ref} className="modal dialog-small" role={request.kind === "notice" ? "alert" : "dialog"} aria-label={request.message}
       onCancel={(e) => { e.preventDefault(); finish(false); }}>
-      <form className="modal-body form" onSubmit={(e) => { e.preventDefault(); finish(true); }}>
-        <p className="dialog-message">{request.message}</p>
-        {request.kind === "text" && <input value={text} onChange={(e) => setText(e.target.value)} aria-label={request.message} />}
-        <div className="row dialog-actions">
-          {request.kind !== "notice" && <button type="button" onClick={() => finish(false)}>Cancel</button>}
+      {/* A card of its own: this host sits outside every page, so it cannot rely on a page's dialog styles. */}
+      <form className="modal-inner dialog-card" onSubmit={(e) => { e.preventDefault(); finish(true); }}>
+        <div className="dialog-content">
+          {request.kind === "text"
+            ? <label className="dialog-field"><span className="dialog-message">{request.message}</span><input className="input" value={text} onChange={(e) => setText(e.target.value)} /></label>
+            : <p className="dialog-message">{request.message}</p>}
+        </div>
+        <div className="modal-actions dialog-actions">
+          {request.kind !== "notice" && <button type="button" className="secondary" onClick={() => finish(false)}>Cancel</button>}
           <button type="submit" className={request.kind === "confirm" ? "danger-button" : "primary"}>{request.kind === "confirm" ? request.confirmLabel : "OK"}</button>
         </div>
       </form>
