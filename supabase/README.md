@@ -30,6 +30,8 @@ always goes at the end of this list, and the commit that adds it says so.
 | 22 | `planning.sql` | Thesis tracker, yearly goals, conference and trip planner |
 | 23 | `alerts.sql` | Morning briefing on Telegram, daily paper alerts, funding finder |
 | 24 | `thesis-outline.sql` | Thesis chapter outlines (sections, paragraph targets, done toggles, figures to prepare) |
+| 25 | `friend-card-payments.sql` | A friend paying your card bill or loan, counted as them paying you back |
+| 26 | `loan-amounts.sql` | Personal loans built up over time: each amount lent or borrowed, with its date |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set

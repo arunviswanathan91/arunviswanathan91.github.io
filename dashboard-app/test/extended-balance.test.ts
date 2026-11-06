@@ -236,7 +236,7 @@ test("EMIs entered one by one are covered in date order", () => {
 });
 
 // ── Spending for a friend ───────────────────────────────────────────────────
-import { friendBalances, friendSummary } from "../src/extended/modules/budget/friends.ts";
+import { friendBalances, friendPaidPayments, friendSummary } from "../src/extended/modules/budget/friends.ts";
 
 test("a friend owes their spends minus what they paid back, and the note lists them by category", () => {
   const tx = (id: string, kind: "expense" | "income", amount: number, on: string, category_id: string | null, description: string) =>
@@ -256,6 +256,26 @@ test("a friend owes their spends minus what they paid back, and the note lists t
   assert.match(note, /Travel:\n  09 Oct 2026 · Uber · ₹1,200\.50/);
   assert.match(note, /Paid back 20 Oct 2026: ₹700\.00/);
   assert.match(note, /Total you owe: ₹1,000\.50$/);
+});
+
+test("a card bill a friend paid counts as them paying back", () => {
+  const spend = { id: "1", kind: "expense" as const, amount: 40000, currency: "INR", category_id: null, occurred_on: "2026-10-03", payment_method: null, notes: null, description: "Flight", for_contact_id: "j" };
+  const paid = friendPaidPayments(
+    [{ id: "p1", loan_id: "card", amount: "33000", paid_on: "2026-10-29", note: null, for_contact_id: "j" }, { id: "p2", loan_id: "card", amount: 8000, paid_on: "2026-11-07", note: null, for_contact_id: null }],
+    [{ id: "card", currency: "INR", account_name: "Amazon Pay ICICI" }],
+  );
+  assert.equal(paid.length, 1);
+  assert.deepEqual(friendBalances([spend, ...paid]).get("j"), { INR: 7000 });
+  assert.match(friendSummary("Justin", "October 2026", [spend, ...paid], [], { INR: 7000 }), /Paid back 29 Oct 2026: ₹33,000\.00 \(Paid Amazon Pay ICICI bill\)/);
+});
+
+test("a card bill a friend paid is not your money out", () => {
+  const loan = { id: "card", contact_id: "b", direction: "borrowed", amount: 0, currency: "INR", issued_on: "2026-01-01", due_on: null, note: null, account_type: "credit_card", account_name: "Card" } as never;
+  const out = moneyOut("2026-10-01", "2026-11-01", "INR", [], [loan], [
+    { id: "a", loan_id: "card", amount: 1000, paid_on: "2026-10-05", note: null },
+    { id: "b", loan_id: "card", amount: 33000, paid_on: "2026-10-29", note: null, for_contact_id: "j" },
+  ], []);
+  assert.equal(out.total, 1000);
 });
 
 // ── Money out this month ────────────────────────────────────────────────────
@@ -280,4 +300,26 @@ test("money out counts direct spending, card bills and EMIs, not card purchases"
   assert.deepEqual(out.groups.map((g) => [g.title, g.total]), [["Spending paid directly", 18000], ["Card bill · Amazon Pay ICICI", 15000], ["EMI · KreditBee", 6162]]);
   assert.equal(out.total, 39162);
   assert.equal(out.onCards, 400);
+});
+
+// ── Personal loans built up over time ───────────────────────────────────────
+import { drawValues, loanDraws } from "../src/extended/modules/loans/balance.ts";
+import { loanRemainingOn } from "../src/extended/modules/networth/logic.ts";
+
+test("a loan given in parts totals its amounts from the first date, and counts each from its own date", () => {
+  const v = drawValues([
+    { on: "2026-10-05", amount: 20000, note: " October " },
+    { on: "2026-09-05", amount: 20000 },
+    { on: "2026-11-05", amount: 15000.5 },
+    { on: "", amount: 5 },
+  ]);
+  assert.equal(v.amount, 55000.5);
+  assert.equal(v.issued_on, "2026-09-05");
+  assert.deepEqual(v.draws.map((d) => d.on), ["2026-09-05", "2026-10-05", "2026-11-05"]);
+  assert.equal(v.draws[1].note, "October");
+  // A loan without a list is one amount on its date.
+  assert.deepEqual(loanDraws({ amount: 1000, issued_on: "2026-01-01", note: "x", draws: null }), [{ on: "2026-01-01", amount: 1000, note: null }]);
+  const loan = { id: "l", direction: "borrowed" as const, currency: "INR", ...v };
+  assert.equal(loanRemainingOn(loan, [], [], "2026-10-31"), 40000);
+  assert.equal(loanRemainingOn(loan, [], [{ loan_id: "l", amount: 1000, paid_on: "2026-10-10" }], "2026-11-30"), 54000.5);
 });

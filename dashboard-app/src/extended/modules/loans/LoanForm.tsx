@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { supabase } from "../../lib/supabase.ts";
-import { formatMoney, monthlySchedule, sortedSchedule, todayISO, type Contact, type Direction, type EmiInstalment, type Loan, type Payment } from "./balance.ts";
+import { drawValues, formatMoney, loanDraws, monthlySchedule, sortedSchedule, todayISO, type Contact, type Direction, type EmiInstalment, type Loan, type Payment } from "./balance.ts";
 
 import { useSettings } from "../../lib/settings.ts";
 import { CURRENCIES } from "../../lib/types.ts";
@@ -9,6 +9,7 @@ import { DateInput } from "../../../components/ui/DateInput";
 const NEW = "__new__";
 
 type EmiRow = { on: string; amount: string; paid: boolean };
+type DrawRow = { on: string; amount: string; note: string };
 const toCents = (n: number) => Math.round(n * 100);
 
 /** Which rows the repayments already cover, taking the EMIs in date order. */
@@ -56,6 +57,17 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
   // Ticking an EMI ticks every earlier one (payments cover EMIs in date order); unticking clears the later ones.
   const tick = (i: number, on: boolean) =>
     setRowsRaw(rows.map((r, j) => (locked[j] ? r : { ...r, paid: on ? r.paid || (r.on !== "" && r.on <= rows[i].on) : r.paid && r.on < rows[i].on })));
+  // A personal loan given or taken in parts (e.g. ₹20,000 every month, sometimes more or less) lists each amount.
+  const [amountMode,setAmountMode]=useState<"one"|"each">(loan?.draws?.length ? "each" : "one");
+  const [draws,setDraws]=useState<DrawRow[]>(() => loan?.draws?.length ? loanDraws(loan).map((d) => ({ on: d.on, amount: String(d.amount), note: d.note ?? "" })) : []);
+  const drawList = draws.map((d) => ({ on: d.on, amount: Number(d.amount), note: d.note }));
+  const useDraws = accountType === "personal" && amountMode === "each" && drawList.some((d) => d.on && d.amount > 0);
+  const drawTotal = useDraws ? drawValues(drawList).amount : 0;
+  function eachAmount() {
+    setAmountMode("each");
+    // Start the list from the amount already entered, which can then be split or changed.
+    if (!draws.length) setDraws([{ on: issuedOn, amount: amount, note: "" }]);
+  }
   const [stmtAmount,setStmtAmount]=useState(loan?.statement_amount == null ? "" : String(loan.statement_amount));
   const [stmtOn,setStmtOn]=useState(loan?.statement_on ?? "");
   const [stmtDue,setStmtDue]=useState(loan?.statement_due_on ?? "");
@@ -91,9 +103,11 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
     const values = {
       contact_id: cid,
       direction: accountType === "personal" ? direction : "borrowed",
-      amount: Number(amount),
+      amount: useDraws ? drawTotal : Number(amount),
       currency,
-      issued_on: issuedOn,
+      issued_on: useDraws ? drawValues(drawList).issued_on : issuedOn,
+      // Only sent when used, so saving still works before loan-amounts.sql has run.
+      ...(useDraws ? { draws: drawValues(drawList).draws } : loan?.draws?.length ? { draws: null } : {}),
       due_on: dueOn || null,
       note: note.trim() || null,
       account_type:accountType,account_name:accountName.trim() || null,
@@ -113,7 +127,7 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
     const saved = loan ? await supabase.from("loans").update(values).eq("id", loan.id).select("id").single() : await supabase.from("loans").insert(values).select("id").single();
     if (saved.error) {
       setBusy(false);
-      return setError(saved.error.message);
+      return setError(/draws/.test(saved.error.message) ? "Run supabase/loan-amounts.sql to list each amount separately." : saved.error.message);
     }
     // EMIs ticked as paid become repayments on their dates (only the part not repaid already).
     if (useSchedule) {
@@ -164,10 +178,18 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
           <input placeholder={accountType === "personal" ? "Enter the person’s name" : "e.g. ICICI Bank"} required autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} />
         </label>
       )}
+      {accountType === "personal" && (
+        <div className="segmented" role="radiogroup" aria-label="How the money was given">
+          <button type="button" role="radio" aria-checked={amountMode === "one"} className={amountMode === "one" ? "on" : ""} onClick={() => setAmountMode("one")}>One amount</button>
+          <button type="button" role="radio" aria-checked={amountMode === "each"} className={amountMode === "each" ? "on" : ""} onClick={eachAmount}>Add each amount</button>
+        </div>
+      )}
       <div className="row">
         <label className="grow">
-          {accountType === "credit_card" ? "Starting balance (0 if new)" : "Amount"}
-          <input required type="number" inputMode="decimal" min={accountType === "credit_card" ? "0" : "0.01"} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          {accountType === "credit_card" ? "Starting balance (0 if new)" : useDraws ? "Total (sum of the amounts below)" : "Amount"}
+          {useDraws
+            ? <input readOnly aria-readonly value={drawTotal} />
+            : <input required type="number" inputMode="decimal" min={accountType === "credit_card" ? "0" : "0.01"} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />}
         </label>
         <label>
           Currency
@@ -186,6 +208,31 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
         </div>
         <p className="muted small">Balance = starting balance + spending added with “Add spend” (or a Budget expense paid with this card) − bill payments. Enter 0 for a new card. Interest and fees can be added as spending. Only the last four digits are needed.</p>
       </>}
+      {accountType === "personal" && amountMode === "each" && (
+        <div className="form-group" role="group" aria-label="Each amount">
+          <strong className="form-group-title">{direction === "lent" ? "Each amount you gave" : "Each amount you received"}</strong>
+          {draws.length > 0 && (
+            <ol className="emi-rows draw-rows">
+              {draws.map((d, i) => (
+                <li key={i}>
+                  <span className="muted small">{i + 1}</span>
+                  <DateInput type="date" aria-label={`Amount ${i + 1} date`} required value={d.on} onChange={(e) => setDraws(draws.map((x, j) => (j === i ? { ...x, on: e.target.value } : x)))} />
+                  <input type="number" aria-label={`Amount ${i + 1}`} required min="0.01" step="0.01" value={d.amount} onChange={(e) => setDraws(draws.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
+                  <input aria-label={`Amount ${i + 1} note`} placeholder="Note" value={d.note} onChange={(e) => setDraws(draws.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)))} />
+                  <button type="button" className="icon" aria-label={`Remove amount ${i + 1}`} disabled={draws.length === 1} onClick={() => setDraws(draws.filter((_, j) => j !== i))}>×</button>
+                </li>
+              ))}
+            </ol>
+          )}
+          <div className="row wrap">
+            <button type="button" className="small" onClick={() => setDraws([...draws, { on: todayISO(), amount: draws[draws.length - 1]?.amount ?? "", note: "" }])}>+ Add amount</button>
+          </div>
+          <p className="muted small">
+            {draws.length} amount{draws.length === 1 ? "" : "s"}, {formatMoney(drawTotal, currency)} in total. Enter each one with the date {direction === "lent" ? "you gave it" : "you got it"}; the amounts can differ.
+            Later ones can also be added from the loan’s row with “Add amount”.
+          </p>
+        </div>
+      )}
       {hasEmi && <div className="form-group" role="group" aria-label="EMI"><strong className="form-group-title">EMI (optional)</strong>
         <div className="segmented" role="radiogroup" aria-label="EMI amounts">
           <button type="button" role="radio" aria-checked={emiMode === "same"} className={emiMode === "same" ? "on" : ""} onClick={() => setEmiMode("same")}>Same EMI every month</button>
@@ -225,10 +272,10 @@ export function LoanForm({ contacts, defaultContactId, loan, payments = [], onDo
         )}
       </div>}
       <div className="row">
-        <label className="grow">
+        {!useDraws && <label className="grow">
           Date
           <DateInput required type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} />
-        </label>
+        </label>}
         <label className="grow">
           Due (optional)
           <DateInput type="date" min={issuedOn} value={dueOn} onChange={(e) => setDueOn(e.target.value)} />

@@ -4,7 +4,7 @@ import { ask } from "../../../lib/dialogs.tsx";
 import { ChevronLeft, ChevronRight, Copy, Landmark, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
 import { insert, list, remove, rpc, trash, update, upsert, useLoad } from "../../lib/db.ts";
 import { addMonths, fmtDate, startOfMonth, today } from "../../lib/dates.ts";
-import { friendBalances, friendSummary } from "./friends.ts";
+import { friendBalances, friendPaidPayments, friendSummary } from "./friends.ts";
 import { MoneyOutCard } from "./MoneyOutCard.tsx";
 import type { Person } from "./ForSelect.tsx";
 import { setQuery, type Route } from "../../lib/route.ts";
@@ -12,7 +12,7 @@ import { useSettings } from "../../lib/settings.ts";
 import type { BudgetCategory, MonthlyBudget, SavingsAccount, Transaction } from "../../lib/types.ts";
 import { Modal } from "../../components/Modal.tsx";
 import { Badge, Empty, ErrorText, PageHeader, Select } from "../../components/ui.tsx";
-import { formatMoney } from "../loans/balance.ts";
+import { formatMoney, type Loan, type Payment } from "../loans/balance.ts";
 import { TransactionForm } from "./TransactionForm.tsx";
 import { RecurringCard } from "./Recurring.tsx";
 import { inBase, needsFx, useFx } from "../../lib/fx.ts";
@@ -46,7 +46,7 @@ export function BudgetView({ route }: { route: Route }) {
 
   const { data, error: loadError } = useLoad(async () => {
     await postRecurringOnce();
-    const [categories, txs, budgets, friendTxs, people, accounts, balances] = await Promise.all([
+    const [categories, txs, budgets, friendTxs, people, accounts, balances, friendPaid, loans] = await Promise.all([
       list<BudgetCategory>("budget_categories", { order: [["kind"], ["name"]] }),
       list<Transaction>("transactions", { gte: ["occurred_on", month], lt: ["occurred_on", addMonths(month, 1)], order: [["occurred_on", false], ["created_at", false]] }),
       list<MonthlyBudget>("monthly_budgets", { eq: { month } }),
@@ -54,9 +54,12 @@ export function BudgetView({ route }: { route: Route }) {
       list<Person>("contacts", { order: [["name"]] }),
       list<SavingsAccount>("savings_accounts", { order: [["bank_name"], ["name"]] }),
       rpc<{ account_id: string; balance: number | string }[]>("account_balances").catch(() => []), // until the migration has run
+      // Card bills a friend paid for you count as them paying you back (until friend-card-payments.sql has run: none).
+      list<Payment>("loan_payments", { notNull: ["for_contact_id"], order: [["paid_on"]] }).catch(() => []),
+      list<Loan>("loans"),
     ]);
     const num = (t: Transaction) => ({ ...t, amount: Number(t.amount), to_amount: t.to_amount == null ? null : Number(t.to_amount), base_amount: t.base_amount == null ? null : Number(t.base_amount) });
-    return { categories, txs: txs.map(num), budgets, friendTxs: friendTxs.map(num), people, accounts: accounts.map((a) => ({ ...a, opening_balance: Number(a.opening_balance) })), balances: balanceMap(balances) };
+    return { categories, txs: txs.map(num), budgets, friendTxs: [...friendTxs.map(num), ...friendPaidPayments(friendPaid, loans)], people, accounts: accounts.map((a) => ({ ...a, opening_balance: Number(a.opening_balance) })), balances: balanceMap(balances) };
   }, [month]);
 
   const categories = data?.categories ?? [];
@@ -116,7 +119,8 @@ export function BudgetView({ route }: { route: Route }) {
     }
   }
   async function copyNote(id: string) {
-    const text = friendSummary(personName(id), monthLabel, txs.filter((t) => t.for_contact_id === id), categories, owed.get(id) ?? {});
+    const paidThisMonth = (data?.friendTxs ?? []).filter((t) => t.id.startsWith("payment:") && t.occurred_on >= month && t.occurred_on < addMonths(month, 1));
+    const text = friendSummary(personName(id), monthLabel, [...txs, ...paidThisMonth].filter((t) => t.for_contact_id === id), categories, owed.get(id) ?? {});
     try {
       await navigator.clipboard.writeText(text);
       setCopied(id);

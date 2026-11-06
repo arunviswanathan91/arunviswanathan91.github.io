@@ -34,7 +34,8 @@ export function moneyOut(month: string, nextMonth: string, currency: string, txs
   }
   for (const p of payments) {
     const l = loans.find((x) => x.id === p.loan_id);
-    if (!l || l.direction !== "borrowed" || l.currency !== currency || !inMonth(p.paid_on)) continue;
+    // A bill a friend paid for you did not leave your accounts.
+    if (!l || l.direction !== "borrowed" || l.currency !== currency || !inMonth(p.paid_on) || p.for_contact_id) continue;
     const card = l.account_type === "credit_card";
     add(`${card ? "card" : "loan"}:${l.id}`, card ? `Card bill · ${name(l)}` : `${l.emi_amount || l.emi_schedule?.length ? "EMI" : "Repayment"} · ${name(l)}`, { date: p.paid_on, label: p.note || (card ? "Bill payment" : "Repayment"), amount: Number(p.amount) });
   }

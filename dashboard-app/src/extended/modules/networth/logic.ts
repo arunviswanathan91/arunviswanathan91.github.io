@@ -9,7 +9,7 @@ export interface NwTx {
   kind: "income" | "expense" | "transfer"; amount: number; occurred_on: string;
   account_id?: string | null; to_account_id?: string | null; to_amount?: number | null; loan_id?: string | null;
 }
-export interface NwLoan { id: string; direction: "lent" | "borrowed"; amount: number; currency: string; issued_on: string }
+export interface NwLoan { id: string; direction: "lent" | "borrowed"; amount: number; currency: string; issued_on: string; draws?: { on: string; amount: number }[] | null }
 export interface NwPayment { loan_id: string; amount: number; paid_on: string; account_id?: string | null }
 
 export interface NwPoint {
@@ -41,7 +41,8 @@ export function accountBalanceOn(a: NwAccount, txs: NwTx[], payments: NwPayment[
 /** What is still outstanding on a loan or card on `day` (never below zero), 0 before it started. */
 export function loanRemainingOn(l: NwLoan, txs: NwTx[], payments: NwPayment[], day: string): number {
   if (day < l.issued_on) return 0;
-  let cents = c(l.amount);
+  // A loan built up over time counts each amount from its own date.
+  let cents = l.draws?.length ? l.draws.filter((d) => d.on <= day).reduce((s, d) => s + c(d.amount), 0) : c(l.amount);
   for (const t of txs) if (t.loan_id === l.id && t.occurred_on <= day) cents += t.kind === "income" ? -c(t.amount) : t.kind === "expense" ? c(t.amount) : 0;
   for (const p of payments) if (p.loan_id === l.id && p.paid_on <= day) cents -= c(p.amount);
   return Math.max(0, cents) / 100;
