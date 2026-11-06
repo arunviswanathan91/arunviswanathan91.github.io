@@ -10,7 +10,7 @@ import type { BudgetCategory } from "../../lib/types.ts";
 import { TransactionForm } from "../budget/TransactionForm.tsx";
 import { combine, useFx } from "../../lib/fx.ts";
 import { useSettings } from "../../lib/settings.ts";
-import { sortedSchedule, type EmiInstalment, amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
+import { drawValues, loanDraws, type Draw, sortedSchedule, type EmiInstalment, amortisation, balancesByContact, cardUsage, emiPlan, formatMoney, loanStatus, nextStatementDefaults, paidCents, remaining, statementPlan, todayISO, totalOwed, totalsByCurrency, type Charge, type Loan, type LoanStatus, type Payment, type StatementState } from "./balance.ts";
 import { useLoans } from "./useLoans.ts";
 import { ImportStatement } from "./statement/ImportStatement.tsx";
 import { ForSelect, usePeople } from "../budget/ForSelect.tsx";
@@ -34,6 +34,8 @@ export function LoansView() {
   const [editing,setEditing]=useState<Loan|null>(null);
   const [adding, setAdding] = useState(false);
   const [paying, setPaying] = useState<Loan | null>(null);
+  // A new amount lent or borrowed on a personal loan (index null), or one being changed.
+  const [drawing, setDrawing] = useState<{ loan: Loan; index: number | null } | null>(null);
   const [editingPayment, setEditingPayment] = useState<{ loan: Loan; payment: Payment } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const today = todayISO();
@@ -88,6 +90,15 @@ export function LoansView() {
   async function removeLoan(loan: Loan) {
     if (!supabase || !(await ask("Move this loan and its repayments to Trash? You can restore it from Trash."))) return;
     try { await trash("loans", loan.id); } catch (e) { return notify((e as Error).message); }
+    await reload();
+  }
+
+  async function removeDraw(loan: Loan, index: number) {
+    const list = loanDraws(loan);
+    if (!supabase || list.length < 2) return;
+    if (!(await ask(`Remove ${formatMoney(list[index].amount, loan.currency)} on ${fmtDate(list[index].on)} from this loan?`))) return;
+    const { error } = await supabase.from("loans").update(drawValues(list.filter((_, i) => i !== index))).eq("id", loan.id);
+    if (error) notify(error.message);
     await reload();
   }
 
@@ -216,13 +227,33 @@ export function LoansView() {
                           <td className="actions" onClick={(e) => e.stopPropagation()}>
                             <button onClick={()=>setEditing(loan)}>Edit</button>
                             {loan.account_type === "credit_card" && <><button onClick={() => setSpending(loan)}>Add spend</button><button onClick={() => setImporting(loan)}>Import statement</button></>}
+                            {(loan.account_type ?? "personal") === "personal" && <button onClick={() => setDrawing({ loan, index: null })} title={loan.direction === "lent" ? "You gave them more money" : "They gave you more money"}>Add amount</button>}
                             {status !== "settled" && <button onClick={() => setPaying(loan)}>{loan.account_type === "credit_card" ? "Pay bill" : loan.direction === "lent" ? "Got paid" : "Paid back"}</button>}
                           </td>
                         </tr>
                         {expanded === loan.id && (
                           <tr className="detail">
                             <td colSpan={7}><div className="detail-inner">
-                              <p className="small muted">{loan.direction === "lent" ? "Lent" : "Borrowed"} on {fmtDate(loan.issued_on)}</p>
+                              {loan.draws?.length ? (
+                                <>
+                                  <p className="small"><strong>{loan.direction === "lent" ? "Amounts lent" : "Amounts borrowed"}</strong> · {loanDraws(loan).length} since {fmtDate(loan.issued_on)}, {formatMoney(loan.amount, loan.currency)} in total</p>
+                                  <ul className="draws">
+                                    {loanDraws(loan).map((d, i) => (
+                                      <li key={i}>
+                                        <span>{fmtDate(d.on)}</span>
+                                        <span>{formatMoney(d.amount, loan.currency)}</span>
+                                        <span className="muted">{d.note}</span>
+                                        <span className="row">
+                                          <button className="link small" onClick={() => setDrawing({ loan, index: i })}>Edit</button>
+                                          {loanDraws(loan).length > 1 && <button className="link danger small" onClick={() => void removeDraw(loan, i)}>Delete</button>}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </>
+                              ) : (
+                                <p className="small muted">{loan.direction === "lent" ? "Lent" : "Borrowed"} on {fmtDate(loan.issued_on)}</p>
+                              )}
                               <p className="small"><strong>Repayments</strong> · paid {formatMoney(paidCents(loan, payments) / 100, loan.currency)} of {formatMoney(totalOwed(loan), loan.currency)}</p>
                               {history.length === 0 && <p className="muted small">No repayments yet.</p>}
                               <ul className="history">
@@ -273,6 +304,11 @@ export function LoansView() {
       {rolling && (
         <Modal title={`New statement · ${rolling.account_name || nameOf(rolling.contact_id)}`} onClose={() => setRolling(null)}>
           <StatementForm loan={rolling} payments={payments} today={today} onDone={async () => { setRolling(null); await reload(); }} />
+        </Modal>
+      )}
+      {drawing && (
+        <Modal title={`${drawing.index === null ? "Add amount" : "Edit amount"} · ${drawing.loan.account_name || nameOf(drawing.loan.contact_id)}`} onClose={() => setDrawing(null)}>
+          <DrawForm loan={drawing.loan} index={drawing.index} onDone={async () => { setDrawing(null); await reload(); }} />
         </Modal>
       )}
       {editingPayment && (
@@ -515,6 +551,51 @@ function StatementForm({ loan, payments, today, onDone }: { loan: Loan; payments
       </div>
       {error && <p className="error">{error}</p>}
       <button className="primary" disabled={busy}>{busy ? "Saving…" : "Save statement"}</button>
+    </form>
+  );
+}
+
+/** Add one more amount lent or borrowed on a personal loan, or change one; the loan's total follows the list. */
+function DrawForm({ loan, index, onDone }: { loan: Loan; index: number | null; onDone: () => void }) {
+  const list = loanDraws(loan);
+  const current: Draw | undefined = index === null ? undefined : list[index];
+  // A friend's monthly amount is usually the same as last time, so start from it.
+  const last = list[list.length - 1];
+  const [amount, setAmount] = useState(String(current?.amount ?? last?.amount ?? ""));
+  const [on, setOn] = useState(current?.on ?? todayISO());
+  const [note, setNote] = useState(current?.note ?? "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!supabase) return;
+    const entry = { on, amount: Number(amount), note: note.trim() || null };
+    const next = index === null ? [...list, entry] : list.map((d, i) => (i === index ? entry : d));
+    setBusy(true);
+    const { error } = await supabase.from("loans").update(drawValues(next)).eq("id", loan.id);
+    setBusy(false);
+    if (error) setError(/draws/.test(error.message) ? "Run supabase/loan-amounts.sql to add amounts one by one." : error.message);
+    else onDone();
+  }
+  return (
+    <form className="form" onSubmit={submit}>
+      <p className="muted small">
+        {loan.direction === "lent" ? "Lent so far" : "Borrowed so far"}: <strong>{formatMoney(loan.amount, loan.currency)}</strong>
+        {!loan.draws?.length && index === null && <> on {fmtDate(loan.issued_on)}. That stays as the first amount and this one is added to it.</>}
+      </p>
+      <div className="row">
+        <label className="grow">
+          Amount ({loan.currency})
+          <input required autoFocus type="number" inputMode="decimal" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </label>
+        <label className="grow">
+          Date
+          <DateInput required type="date" value={on} onChange={(e) => setOn(e.target.value)} />
+        </label>
+      </div>
+      <label>Note (optional)<input value={note} placeholder="e.g. November" onChange={(e) => setNote(e.target.value)} /></label>
+      {error && <p className="error">{error}</p>}
+      <button className="primary" disabled={busy}>{busy ? "Saving…" : index === null ? "Add amount" : "Save changes"}</button>
     </form>
   );
 }

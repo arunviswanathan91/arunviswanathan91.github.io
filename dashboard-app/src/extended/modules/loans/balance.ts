@@ -21,6 +21,8 @@ export interface Loan {
   emi_first_on?: string | null;
   emi_tenure?: number | null;
   interest_rate?: number | null;
+  /** Personal loans built up over time: each amount lent or borrowed. `amount` is their total, `issued_on` the first date. */
+  draws?: Draw[] | null;
   /** EMIs entered one by one (date and amount), when they are not all the same. */
   emi_schedule?: EmiInstalment[] | null;
   statement_amount?: number | null;
@@ -51,6 +53,34 @@ export interface Payment {
 }
 
 export type LoanStatus = "open" | "overdue" | "settled";
+
+/** One amount lent or borrowed on a personal loan (e.g. a friend's monthly ₹20,000). */
+export interface Draw {
+  on: string;
+  amount: number;
+  note?: string | null;
+}
+
+/**
+ * The loan's amounts as a list: the stored list, or the single amount on its date for a loan without one.
+ * `amount` and `issued_on` to save follow from the list (total and earliest date).
+ */
+export function loanDraws(loan: Pick<Loan, "draws" | "amount" | "issued_on" | "note">): Draw[] {
+  return loan.draws?.length ? sortedDraws(loan.draws) : [{ on: loan.issued_on, amount: Number(loan.amount), note: null }];
+}
+
+export function sortedDraws(draws: Draw[]): Draw[] {
+  return draws
+    .filter((d) => d.on && Number(d.amount) > 0)
+    .map((d) => ({ on: d.on, amount: Math.round(Number(d.amount) * 100) / 100, note: d.note?.trim() || null }))
+    .sort((a, b) => a.on.localeCompare(b.on));
+}
+
+/** Values to save for a list of amounts: the list, its total and its first date. */
+export function drawValues(draws: Draw[]): { draws: Draw[]; amount: number; issued_on: string } {
+  const list = sortedDraws(draws);
+  return { draws: list, amount: list.reduce((s, d) => s + Math.round(d.amount * 100), 0) / 100, issued_on: list[0].on };
+}
 
 const cents = (n: number) => Math.round(Number(n) * 100);
 

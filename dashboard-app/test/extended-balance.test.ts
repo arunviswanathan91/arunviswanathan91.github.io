@@ -301,3 +301,25 @@ test("money out counts direct spending, card bills and EMIs, not card purchases"
   assert.equal(out.total, 39162);
   assert.equal(out.onCards, 400);
 });
+
+// ── Personal loans built up over time ───────────────────────────────────────
+import { drawValues, loanDraws } from "../src/extended/modules/loans/balance.ts";
+import { loanRemainingOn } from "../src/extended/modules/networth/logic.ts";
+
+test("a loan given in parts totals its amounts from the first date, and counts each from its own date", () => {
+  const v = drawValues([
+    { on: "2026-10-05", amount: 20000, note: " October " },
+    { on: "2026-09-05", amount: 20000 },
+    { on: "2026-11-05", amount: 15000.5 },
+    { on: "", amount: 5 },
+  ]);
+  assert.equal(v.amount, 55000.5);
+  assert.equal(v.issued_on, "2026-09-05");
+  assert.deepEqual(v.draws.map((d) => d.on), ["2026-09-05", "2026-10-05", "2026-11-05"]);
+  assert.equal(v.draws[1].note, "October");
+  // A loan without a list is one amount on its date.
+  assert.deepEqual(loanDraws({ amount: 1000, issued_on: "2026-01-01", note: "x", draws: null }), [{ on: "2026-01-01", amount: 1000, note: null }]);
+  const loan = { id: "l", direction: "borrowed" as const, currency: "INR", ...v };
+  assert.equal(loanRemainingOn(loan, [], [], "2026-10-31"), 40000);
+  assert.equal(loanRemainingOn(loan, [], [{ loan_id: "l", amount: 1000, paid_on: "2026-10-10" }], "2026-11-30"), 54000.5);
+});
