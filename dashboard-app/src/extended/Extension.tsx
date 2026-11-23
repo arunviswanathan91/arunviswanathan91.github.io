@@ -36,6 +36,8 @@ const loadReviewView = () => import("./modules/review/ReviewView.tsx");
 const loadProjectsView = () => import("./modules/projects/ProjectsView.tsx");
 const loadResumeEditor = () => import("./modules/resumes/ResumeEditor.tsx");
 const loadResumesView = () => import("./modules/resumes/ResumesView.tsx");
+const loadWebsiteView = () => import("./modules/website/WebsiteView.tsx");
+const WebsiteView = lazy(() => loadWebsiteView().then((m) => ({ default: m.WebsiteView })));
 const AgendaView = lazy(() => loadAgendaView().then((m) => ({ default: m.AgendaView })));
 const BudgetView = lazy(() => loadBudgetView().then((m) => ({ default: m.BudgetView })));
 const DeadlinePage = lazy(() => loadDeadlinePage().then((m) => ({ default: m.DeadlinePage })));
@@ -61,7 +63,7 @@ const ReviewView = lazy(() => loadReviewView().then((m) => ({ default: m.ReviewV
 const ProjectsView = lazy(() => loadProjectsView().then((m) => ({ default: m.ProjectsView })));
 const ResumeEditor = lazy(() => loadResumeEditor().then((m) => ({ default: m.ResumeEditor })));
 const ResumesView = lazy(() => loadResumesView().then((m) => ({ default: m.ResumesView })));
-const PAGE_LOADERS = [loadAgendaView, loadBudgetView, loadDeadlinePage, loadDeadlinesView, loadHomeView, loadLoansView, loadNetWorthView, loadMeetingPage, loadExperimentsView, loadThesisView, loadGoalsView, loadTripsView, loadTripPage, loadFundingView, loadExperimentPage, loadMeetingsView, loadNotePage, loadPaperPage, loadPapersView, loadPrintViews, loadReviewView, loadProjectsView, loadResumeEditor, loadResumesView];
+const PAGE_LOADERS = [loadAgendaView, loadBudgetView, loadDeadlinePage, loadDeadlinesView, loadHomeView, loadLoansView, loadNetWorthView, loadMeetingPage, loadExperimentsView, loadThesisView, loadGoalsView, loadTripsView, loadTripPage, loadFundingView, loadExperimentPage, loadMeetingsView, loadNotePage, loadPaperPage, loadPapersView, loadPrintViews, loadReviewView, loadProjectsView, loadResumeEditor, loadResumesView, loadWebsiteView];
 let prefetched = false;
 function prefetchPages() {
   if (prefetched) return;
@@ -95,6 +97,7 @@ function Page({ route }: { route: Route }) {
     case "networth": return <NetWorthView />;
     case "habits": return <HabitsView />;
     case "resumes": return id ? <ResumeEditor id={id} /> : <ResumesView />;
+    case "website": return <WebsiteView />;
     case "search": return <SearchView route={route} />;
     case "settings": location.replace("#/settings"); return null;
     default: return <HomeView />;

@@ -4,7 +4,7 @@ Academic profile site, plus a personal dashboard, at <https://arunviswanathan91.
 
 | Folder | What it is |
 |---|---|
-| `index.html`, `repos.html`, `css/`, `js/`, `assets/` | The public profile site (static). |
+| `index.html`, `repos.html`, `css/`, `js/`, `assets/` | The public profile site (static). Its text is edited in the dashboard under Website; `index.html` holds the fallback copy. |
 | `dashboard-app/` | The private dashboard (React + Vite), published under `/dashboard/`. Sign-in required. Covers opportunities, tasks, papers, notes, meetings, deadlines, budget, loans and cards, habits and resumes. |
 | `pipeline/` | Opportunity discovery worker (Node). Runs nightly from GitHub Actions and on demand from Cloud Run. |
 | `supabase/` | Database scripts (`*.sql`, run in order, see its README) and Edge Functions (Telegram bot, reminders, calendar feed, Gmail, discovery trigger). |

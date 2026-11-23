@@ -1,11 +1,11 @@
 // Each section's name, icon and colour, used by the menu, page headers, badges, cards and search.
 // Colours are CSS variables (see styles.css: --sec-<id>, --sec-<id>-soft, --sec-<id>-ink).
 import {
-  CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, FileText, FileUser, FlaskConical, GraduationCap, Landmark, Plane, Target, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, TrendingUp, Users, Wallet, type LucideIcon,
+  CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, FileText, FileUser, FlaskConical, Globe, GraduationCap, Landmark, Plane, Target, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, TrendingUp, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 
 export type SectionId =
-  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "experiments" | "thesis" | "trips" | "funding" | "goals" | "meetings" | "deadlines" | "budget" | "loans" | "networth" | "habits" | "resumes" | "search" | "settings";
+  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "experiments" | "thesis" | "trips" | "funding" | "goals" | "meetings" | "deadlines" | "budget" | "loans" | "networth" | "habits" | "resumes" | "website" | "search" | "settings";
 
 export interface Section {
   id: SectionId;
@@ -35,6 +35,7 @@ export const SECTIONS: Record<SectionId, Section> = {
   networth: { id: "networth", label: "Net worth", icon: TrendingUp, tone: "money" },
   habits: { id: "habits", label: "Habits", icon: Repeat, tone: "habits" },
   resumes: { id: "resumes", label: "Resumes", icon: FileUser, tone: "papers" },
+  website: { id: "website", label: "Website", icon: Globe, tone: "projects" },
   search: { id: "search", label: "Search", icon: Search, tone: "home" },
   settings: { id: "settings", label: "Settings", icon: Settings, tone: "home" },
 };
