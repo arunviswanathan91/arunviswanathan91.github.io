@@ -72,13 +72,9 @@ export const CRAWL_SEEDS: CrawlSeed[] = [
   allowPathRe: "^/job/job/index$",
   maxPages: 10,
  },
- {
-  key: "crawl:jobsacuk",
-  seedUrls: ["https://www.jobs.ac.uk/categories/postdoc-jobs/1"],
-  organization: "jobs.ac.uk",
-  allowPathRe: "^/job/[^/]+/",
-  maxPages: 12,
- },
+ // jobs.ac.uk is not crawled: it answers automated clients with a JavaScript bot check and
+ // never produced a listing. Its jobs reach us through Jooble. If it is added back, the
+ // seed was https://www.jobs.ac.uk/categories/postdoc-jobs/1 with allowPathRe "^/job/[^/]+/".
  {
   key: "crawl:sciencecareers",
   seedUrls: ["https://jobs.sciencecareers.org/jobs/europe/postdoc/"],

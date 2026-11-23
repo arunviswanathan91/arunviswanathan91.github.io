@@ -38,11 +38,18 @@ export function euraxessAdapter(sourceKey: string): SourceAdapter {
     if (requests >= w.maxRequests || Date.now() > w.deadlineAt) break;
     const res = await ctx.http.get(searchUrl);
     requests++;
-    if (!res.ok || !res.body) continue;
+    if (!res.ok || !res.body) {
+     if (page === 0) throw new Error(`euraxess: the search page could not be read (HTTP ${res.status})`);
+     continue;
+    }
     const before = detailUrls.size;
     for (const link of sameSiteLinks(res.body, searchUrl, DETAIL_PATH)) detailUrls.add(link);
     if (page > 0 && detailUrls.size === before) break;
    }
+
+   // A readable search page with no vacancy links means the page changed shape (or a
+   // bot check answered instead). Report it rather than a quiet "0 items".
+   if (!detailUrls.size) throw new Error("euraxess: no vacancy links found on the search pages (layout changed or access blocked)");
 
    const items: RawItem[] = [];
    for (const url of detailUrls) {

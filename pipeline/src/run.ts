@@ -85,6 +85,23 @@ const boundedBatchSize = (value: number | undefined, fallback: number) => {
  return Number.isFinite(parsed) ? Math.max(1, Math.min(100, Math.floor(parsed))) : fallback;
 };
 
+/** Errors worth a second try at startup: clock disagreement, network trouble, a busy server. */
+const TRANSIENT = /JWT issued at future|fetch failed|network|ECONNRESET|ETIMEDOUT|EAI_AGAIN|timed? ?out|\b50[234]\b|Bad Gateway|Service Unavailable/i;
+export async function retryTransient<T>(
+ step: () => Promise<T>, onRetry?: (error: Error, waitMs: number) => void, waitsMs: number[] = [15_000, 45_000],
+): Promise<T> {
+ for (let attempt = 0; ; attempt++) {
+  try { return await step(); }
+  catch (cause) {
+   const error = cause instanceof Error ? cause : new Error(String(cause));
+   const wait = waitsMs[attempt];
+   if (wait === undefined || !TRANSIENT.test(error.message)) throw error;
+   onRetry?.(error, wait);
+   await new Promise(resolve => setTimeout(resolve, wait));
+  }
+ }
+}
+
 /** The single orchestration path. cli.ts and server.ts only translate into this. */
 export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  const log = new RunLogger(opts.quiet);
@@ -101,11 +118,18 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   ...(trigger === "schedule" || backfill ? SCHEDULE_CAPS : INTERACTIVE_CAPS),
   ...opts.caps,
  };
+ // A sweep does nothing but write briefs, each a few model calls and page fetches.
+ if (backfill && !opts.caps?.maxRuntimeMs) caps.maxRuntimeMs = 25 * 60 * 1000;
  const startedAt = Date.now();
  const deadlineAt = startedAt + caps.maxRuntimeMs;
 
- const userId = await db.resolveUserId(opts.userId ?? env.userId ?? null);
- const profile = await db.loadProfile(userId);
+ // The first database calls of a run are reads and idempotent upserts. A brief hiccup
+ // on the database side (a nightly run once died here on "JWT issued at future", a
+ // clock disagreement that clears in seconds) should cost a short wait, not the night.
+ const atStartup = <T>(step: () => Promise<T>) => retryTransient(step, (error, wait) =>
+  log.warn("startup step failed, retrying", { error: error.message.slice(0, 300), waitMs: wait }));
+ const userId = await atStartup(() => db.resolveUserId(opts.userId ?? env.userId ?? null));
+ const profile = await atStartup(() => db.loadProfile(userId));
  const preferences = assessmentPreferences(profile.assessmentPreferences, profile.terms);
  // Read back this account's own shortlist/track/dismiss history and turn it
  // into a modest per-organization ranking nudge (see feedbackBiasFor). Never
@@ -119,7 +143,7 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  // Normal runs self-heal databases seeded by an older release. Existing rows
  // are never overwritten, so user-disabled sources and cursors are preserved.
  if (!opts.dryRun && !backfill) {
-  const registered = await ensureDefaultSources(db, userId);
+  const registered = await atStartup(() => ensureDefaultSources(db, userId));
   if (registered.length) log.info("registered new discovery sources", { sources: registered });
  }
 
@@ -212,7 +236,10 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
   });
  }
 
- if (backfill && !opts.dryRun && Date.now() < deadlineAt) {
+ // Metadata repair runs on OpenRouter. A run restricted to other providers
+ // (CONTEXT_PROVIDERS=deepseek) leaves it to the nightly discovery run.
+ const metadataAllowed = !env.contextProviderAllow || env.contextProviderAllow.includes("openrouter");
+ if (backfill && metadataAllowed && !opts.dryRun && Date.now() < deadlineAt) {
   const batch = boundedBatchSize(opts.contextBatchSize, 5);
   const candidates = await db.loadMetadataCandidates(userId, batch, !!opts.refreshContext);
   for (let offset = 0; offset < candidates.length; offset += 20) {
@@ -303,8 +330,12 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
  // stay inside free-provider rate limits and the Cloud Run execution window.
  const defaultContextLimit = backfill ? 5 : trigger === "schedule" ? 5 : 8;
  const requestedContext = boundedBatchSize(opts.contextBatchSize, defaultContextLimit);
- const llmCallLimit = Math.max(0, Math.min(caps.maxLlmCalls, profile.maxLlmCalls) - metadata.aiBatches);
- const contextLimit = Math.min(llmCallLimit, requestedContext);
+ // Briefs have their own call budget. It used to be what was left of --max-llm after
+ // metadata repair, so a night with many new listings wrote few briefs or none.
+ // A brief is two model calls (institution facts, then the personal part); the
+ // budget allows two more per card for fallbacks to another provider.
+ const contextLimit = Math.min(caps.maxLlmCalls, profile.maxLlmCalls) > 0 ? requestedContext : 0;
+ const llmCallLimit = contextLimit * 4;
  const enrichment = emptyEnrichment(contextLimit);
  const providers = contextProviders(env);
  if (!opts.dryRun && providers.length && Date.now() < deadlineAt) {
@@ -362,10 +393,12 @@ export async function runDiscovery(opts: RunOptions = {}): Promise<RunResult> {
     log.info("opportunity context saved", { id: candidate.id, provider: context.provider, model: context.model });
    } catch (error) {
     enrichment.failed++;
-    log.warn("opportunity context enrichment failed", {
-     id: candidate.id,
-     error: error instanceof Error ? error.message : String(error),
-    });
+    const message = error instanceof Error ? error.message : String(error);
+    log.warn("opportunity context enrichment failed", { id: candidate.id, error: message });
+    // Running out of budget or providers says nothing about this card; only a
+    // failure of the card itself moves it back in the queue.
+    if (!(error instanceof ContextProvidersUnavailable))
+     await db.saveContextFailure(candidate, message).catch(() => {});
     if (error instanceof ContextProvidersUnavailable) {
      enrichment.skipped = loaded.candidates.length - enrichment.attempted;
      degradations.push(error.message);
