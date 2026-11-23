@@ -45,6 +45,7 @@ test('website content: anyone reads, only the owner writes',async()=>{
  await anon();
  assert.deepEqual(await content(),[{bio:'second'}]);
  await assert.rejects(db.exec(`update ws_site set content='{}'`),/permission denied/);
+ await assert.rejects(db.exec(`select user_id from ws_site`),/permission denied/); // the owner's account id stays private
 
  // Uploaded files: only inside your own folder of the public bucket.
  await as(uid);

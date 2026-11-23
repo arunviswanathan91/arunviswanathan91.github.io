@@ -3,6 +3,9 @@
 -- Unlike every other table here, this one is readable WITHOUT signing in: the public
 -- profile page (index.html) fetches it on load. It holds only what is shown on that
 -- page. There is one row; whoever publishes first owns it and only they can change it.
+-- With more than one account on the project, give it to yours straight away:
+--   insert into public.ws_site (user_id) select id from auth.users where email = '<your email>'
+--   on conflict (id) do nothing;
 begin;
 
 create table if not exists public.ws_site (
@@ -14,7 +17,9 @@ create table if not exists public.ws_site (
 
 alter table public.ws_site enable row level security;
 revoke all on public.ws_site from anon, public, authenticated;
-grant select on public.ws_site to anon, authenticated;
+grant select on public.ws_site to authenticated;
+-- Visitors get the page content only, not which account owns it.
+grant select (id, content, updated_at) on public.ws_site to anon;
 grant insert, update on public.ws_site to authenticated;
 
 drop policy if exists site_read on public.ws_site;

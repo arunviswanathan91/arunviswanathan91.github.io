@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, ChevronUp, ExternalLink, Plus, Search, Trash2, Upload } from "lucide-react";
 import { ask } from "../../../lib/dialogs.tsx";
-import { currentUserId, list, sb, upsert, useLoad } from "../../lib/db.ts";
+import { currentUserId, list, onLoadCacheClear, sb, upsert, useLoad } from "../../lib/db.ts";
 import { fmtDate } from "../../lib/dates.ts";
 import { ErrorText, Loading, PageHeader } from "../../components/ui.tsx";
 import { lookupPaper } from "../papers/lookup.ts";
@@ -20,6 +20,7 @@ const setupError = (error: string) =>
 
 // Edits not yet published survive moving to another page of the workspace and back.
 let kept: SiteContent | null = null;
+onLoadCacheClear(() => { kept = null; }); // signing out: the next account must not inherit them
 
 export function WebsiteView() {
   const { data, error } = useLoad(async () => {
@@ -40,7 +41,8 @@ export function WebsiteView() {
 }
 
 function Editor({ row, uid }: { row: Row | null; uid: string }) {
-  const live = (r: Row | null) => (r ? { json: JSON.stringify(cleanSite(normalizeSite(r.content))), at: r.updated_at } : null);
+  // A row with nothing in it only reserves the website for its owner: nothing is published yet.
+  const live = (r: Row | null) => (r && r.content && Object.keys(r.content as object).length ? { json: JSON.stringify(cleanSite(normalizeSite(r.content))), at: r.updated_at } : null);
   const [published, setPublished] = useState(() => live(row));
   const [draft, setDraft] = useState<SiteContent>(() => kept ?? normalizeSite(row?.content));
   const [busy, setBusy] = useState(false);
