@@ -7,6 +7,7 @@ import { saveSettings, useSettings } from "../../extended/lib/settings";
 import { CURRENCIES, type Note, type Paper, type Project } from "../../extended/lib/types";
 import { SelectMenu } from "../ui/SelectMenu";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
+import { MENU_GROUPS, useMenuPrefs } from "../../lib/menuPrefs";
 
 const stamp=()=>new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
 
@@ -35,6 +36,30 @@ export function PreferencesPanel(){
     onChange={e=>setFollowup(e.target.value)}
     onBlur={()=>void save({publication_followup_days:followup===""?null:Math.max(1,Math.round(Number(followup)))})}/>
    <small className="muted-note">Telegram reminds you when a manuscript has been Under Review or Revision Requested this long. Empty turns it off. The evening habit reminder is set on the Habits page.</small>
+  </div>
+ </section>;
+}
+
+/** Choose which pages appear in the side menu. */
+export function MenuPanel(){
+ const menu=useMenuPrefs();
+ return <section className="panel panel-wide">
+  <header className="panel-head"><h2>Menu</h2>
+   {menu.hidden.length>0&&<button className="secondary" onClick={menu.showAll}>Show all</button>}</header>
+  <p className="muted-note">Untick the pages you don’t use to shorten the side menu on this device. A hidden page keeps its data and still opens from Search &amp; commands.</p>
+  <div className="menu-groups">
+   {MENU_GROUPS.map(g=>{
+    const shown=g.items.filter(i=>menu.isShown(i.key)).length;
+    return <div key={g.id} role="group" aria-label={g.label}>
+     <div className="menu-group-head"><strong>{g.label}</strong>
+      <button className="link-button" onClick={()=>menu.setGroupShown(g,shown===0)}>{shown===0?"Show all":"Hide all"}</button></div>
+     <div className="menu-items">
+      {g.items.map(i=><label key={i.key} className={"menu-item"+(menu.isShown(i.key)?"":" off")}>
+       <input type="checkbox" checked={menu.isShown(i.key)} onChange={()=>menu.toggleShown(i.key)}/>
+       <i.icon aria-hidden/><span>{i.label}</span></label>)}
+     </div>
+    </div>;
+   })}
   </div>
  </section>;
 }
