@@ -1039,3 +1039,21 @@
 .extension-workspace .outline-item.done .outline-title, .extension-workspace .outline-section.done > .outline-section-head .outline-title { text-decoration: line-through; color: var(--muted); }
 .extension-workspace .outline-figures h4 { margin: 8px 0 2px; }
 @media (max-width: 600px) { .extension-workspace .outline-items { padding-left: 8px; } .extension-workspace .outline-detail { padding-left: 26px; } }
+
+/* ── Website editor ─────────────────────────────────────────────────────── */
+.extension-workspace .site-editor { display: flex; flex-direction: column; gap: 14px; max-width: 860px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.extension-workspace .site-editor:disabled { opacity: 0.7; }
+.extension-workspace .site-card-head { padding: 14px 14px 8px; }
+.extension-workspace .site-card-head h2 { font-size: 1.02rem; margin: 0; }
+.extension-workspace .site-card-head p { margin: 2px 0 0; }
+.extension-workspace .site-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.extension-workspace .site-add { align-self: flex-start; }
+.extension-workspace .site-files { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.extension-workspace .site-file { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.extension-workspace .site-file img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--surface-2); }
+.extension-workspace .site-file p { margin: 2px 0 8px; }
+.extension-workspace .site-bar { position: sticky; bottom: 12px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; max-width: 860px; box-sizing: border-box; margin-top: 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.12); }
+.extension-workspace .site-bar-text { min-width: 0; flex: 1 1 220px; }
+.extension-workspace .site-bar-text .error { margin: 6px 0 0; }
+.extension-workspace .site-status { font-size: 0.9rem; color: var(--muted); }
+.extension-workspace .site-status.dirty { color: var(--tone-ink); font-weight: 600; }

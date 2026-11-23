@@ -32,7 +32,7 @@ export interface OpportunityContext {
 interface GroqResponse {
  model?: string;
  error?: { message?: string };
- choices?: { message?: { content?: string } }[];
+ choices?: { message?: { content?: string }; finish_reason?: string }[];
 }
 export const UNKNOWN = "Not enough reliable information collected.";
 const FIELDS = ["institution", "place", "population", "climate", "transport", "living", "inclusion"] as const;
@@ -45,7 +45,8 @@ export function contextProviders(env: Env): ContextProvider[] {
  // without DEEPSEEK_API_KEY nothing changes. OpenRouter's free router, Groq,
  // Gemini and Cerebras follow as fallbacks, used only if DeepSeek fails.
  return (["deepseek", "openrouter", "groq", "gemini", "cerebras"] as const).filter(provider =>
-  Boolean(env[`${provider}ApiKey`]?.trim()));
+  Boolean(env[`${provider}ApiKey`]?.trim())
+  && (!env.contextProviderAllow || env.contextProviderAllow.includes(provider)));
 }
 
 export function openrouterRequest(model: string, prompt: string, decisionBrief = false) {
@@ -341,6 +342,8 @@ export async function enrichOpportunityContext(
 
 async function requestJsonCompletion(
  env: Env, http: Http, provider: ContextProvider, prompt: string, schema: Record<string, unknown>, maxTokens: number,
+ /** Throws when the parsed reply is not usable; lets a provider that can retry do so. */
+ validate?: (payload: unknown) => void,
 ): Promise<{ payload: unknown; model: string }> {
  let model = provider === "gemini" ? env.geminiModel : provider === "groq" ? env.groqModel
   : provider === "cerebras" ? env.cerebrasModel : provider === "deepseek" ? env.deepseekModel : env.openrouterModel;
@@ -364,16 +367,29 @@ async function requestJsonCompletion(
  }
  if (provider === "deepseek") {
   if (!env.deepseekApiKey) throw new Error("DEEPSEEK_API_KEY missing");
-  const response = await http.postJson<GroqResponse>(
-   "https://api.deepseek.com/chat/completions",
-   { model: env.deepseekModel, messages: [{ role: "user", content: prompt }],
-    response_format: { type: "json_object" }, max_tokens: maxTokens },
-   { authorization: `Bearer ${env.deepseekApiKey}` },
-  );
-  if (response?.error) throw new Error("DeepSeek returned an API error");
-  const text = response?.choices?.[0]?.message?.content;
-  if (!text) throw new Error("DeepSeek returned an empty response");
-  return { payload: parseStructuredJson(text), model: response?.model ?? model };
+  // DeepSeek's JSON mode does not enforce a schema, and a reply cut off at the token
+  // limit is not valid JSON. Give it twice the room the schema-enforcing providers
+  // need, and ask once more when the reply is empty, cut off or unparseable: a second
+  // paid call is cheaper than losing the card to the free fallbacks.
+  let lastError: unknown;
+  for (let tries = 0; tries < 2; tries++) {
+   const response = await http.postJson<GroqResponse>(
+    "https://api.deepseek.com/chat/completions",
+    { model: env.deepseekModel, messages: [{ role: "user", content: prompt }],
+     response_format: { type: "json_object" }, max_tokens: Math.max(maxTokens * 2, 4_000) },
+    { authorization: `Bearer ${env.deepseekApiKey}` },
+   );
+   if (response?.error) throw new Error("DeepSeek returned an API error");
+   const text = response?.choices?.[0]?.message?.content;
+   try {
+    if (!text) throw new Error("DeepSeek returned an empty response");
+    if (response?.choices?.[0]?.finish_reason === "length") throw new Error("DeepSeek reply was cut off at the token limit");
+    const payload = parseStructuredJson(text);
+    if (validate) validate(payload);
+    return { payload, model: response?.model ?? model };
+   } catch (error) { lastError = error; }
+  }
+  throw lastError;
  }
  if (provider === "groq") {
   if (!env.groqApiKey) throw new Error("GROQ_API_KEY missing");
@@ -465,7 +481,10 @@ async function enrichCityFacts(
  // sized for the visible 5-field answer can be consumed entirely before any
  // output is ever emitted. 1,800 leaves headroom for that even though the
  // schema itself is small.
- const { payload, model } = await requestJsonCompletion(env, http, provider, prompt, schema, 1_800);
+ const { payload, model } = await requestJsonCompletion(env, http, provider, prompt, schema, 1_800, value => {
+  if (!value || typeof value !== "object" || typeof (value as Record<string, unknown>).sections !== "object")
+   throw new Error(`${provider} returned no institution facts object`);
+ });
  const rawSections = payload && typeof payload === "object" && !Array.isArray(payload)
   && typeof (payload as Record<string, unknown>).sections === "object"
   ? (payload as Record<string, unknown>).sections as Record<string, unknown> : {};
@@ -492,9 +511,16 @@ async function enrichPersonalBrief(
  const sourceBudget = provider === "groq" ? 900 : 1_500;
  const facts = evidenceFacts(evidence, totalBudget, listingBudget, sourceBudget);
  const prompt = `${personalBriefInstructions(prefs)}\nVACANCY: ${JSON.stringify({ role: candidate.role, organisation: candidate.organization, city: candidate.city, location: candidate.location, country: candidate.country, salary: candidate.salary_display, salary_predicted: candidate.salary_is_predicted })}\nEVIDENCE:\n${facts}`;
- const { payload, model } = await requestJsonCompletion(env, http, provider, prompt, personalAssessmentSchema, provider === "groq" ? 1_800 : 2_000);
- if (!payload || typeof payload !== "object" || Array.isArray(payload))
-  throw new Error(`${provider} returned a non-object personal brief`);
+ // Checked here, inside the provider attempt, so an incomplete reply is retried or
+ // handed to the next provider. It used to surface only after the fallback chain
+ // had already accepted the reply, which failed the card with nothing left to try.
+ const complete = (value: unknown) => {
+  const v = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  if (!v) throw new Error(`${provider} returned a non-object personal brief`);
+  if (!v.sections || !v.fit || !v.money) throw new Error(`${provider} returned a brief missing sections, fit or money`);
+ };
+ const { payload, model } = await requestJsonCompletion(env, http, provider, prompt, personalAssessmentSchema, provider === "groq" ? 1_800 : 2_000, complete);
+ complete(payload);
  return { payload, provider, model };
 }
 

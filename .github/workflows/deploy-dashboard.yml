@@ -35,6 +35,9 @@ jobs:
           npm ci --no-audit --no-fund
           npm run check
       - name: Assemble Pages artifact
+        env:
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: |
           # Allowlist, not a denylist: only what's named here is published, so a
           # new top-level directory (like pipeline/) is private by default instead
@@ -44,6 +47,10 @@ jobs:
           # present in a fresh checkout, so it's deliberately left off this list.
           cp index.html repos.html .nojekyll README.md _site/
           cp -R css js assets _site/
+          # The profile page reads its published content (dashboard → Website) from here.
+          # Same browser-safe values the dashboard is built with.
+          jq -n --arg url "$SUPABASE_URL" --arg key "$SUPABASE_ANON_KEY" -r \
+            '"window.SITE_CONFIG = \({url: $url, key: $key} | tojson);"' > _site/js/site-config.js
           mkdir -p _site/dashboard
           cp -R dashboard-app/dist/. _site/dashboard/
       - if: github.event_name != 'pull_request'

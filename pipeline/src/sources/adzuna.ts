@@ -70,6 +70,7 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
 
    let requests = 0;
    let collected = 0;
+   let answered = 0;   // requests that came back with a readable reply, even an empty one
 
    const pairs = q.terms.slice(0, 3).flatMap(term => countries.map(country => ({ country, term })));
    const exhaustedPairs = new Set<string>();
@@ -91,6 +92,11 @@ export function adzunaAdapter(sourceKey: string): SourceAdapter {
 
      const data = await ctx.http.getJson<{ results?: AdzunaResult[] }>(url);
      requests++;
+     if (data) answered++;
+     // Nothing readable from the first few requests means the API itself is refusing
+     // us (expired key, used-up allowance, outage). Say so: this used to look like a
+     // healthy source that happened to find nothing, night after night.
+     if (!answered && requests >= 3) throw new Error("adzuna: the API returned no readable reply to 3 requests (check the key and the monthly allowance)");
      if (!data?.results?.length) { exhaustedPairs.add(pairKey); continue; }
      if (data.results.length < resultsPerPage) exhaustedPairs.add(pairKey);
 

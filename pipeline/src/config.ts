@@ -32,6 +32,9 @@ export interface Env {
  // so it only ever gets used when DEEPSEEK_API_KEY is explicitly set.
  deepseekApiKey: string | null;
  deepseekModel: string;
+ /** When set (CONTEXT_PROVIDERS=deepseek), only these AI providers are used in this
+  *  run, with no fallback to the others. Null: every configured provider. */
+ contextProviderAllow: string[] | null;
  /** Minimum milliseconds between calls to each free-tier provider, derived
   *  from a conservative requests-per-minute assumption. Waiting this out
   *  ahead of a call is cheaper than discovering the limit via a 429. */
@@ -79,6 +82,10 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   cerebrasModel: env.CEREBRAS_MODEL?.trim() || "llama3.1-8b",
   deepseekApiKey: env.DEEPSEEK_API_KEY?.trim() || null,
   deepseekModel: env.DEEPSEEK_MODEL?.trim() || "deepseek-chat",
+  contextProviderAllow: (() => {
+   const names = (env.CONTEXT_PROVIDERS ?? "").split(",").map(name => name.trim().toLowerCase()).filter(Boolean);
+   return names.length ? names : null;
+  })(),
   rateLimitMs: {
    openrouter: rpmToMinIntervalMs(env.OPENROUTER_RPM, 12),
    // A live run hit Groq's free-tier tokens-per-minute cap (8,000 TPM) well

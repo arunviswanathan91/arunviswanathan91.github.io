@@ -109,6 +109,31 @@ attempted, enriched, failed, and pending totals. Repeat it until pending reaches
 summaries, assessments over 30 days old, and briefs generated for different preferences are eligible
 automatically. Backfill considers New and Shortlisted opportunities; it never changes their status.
 
+### Midday brief sweep (DeepSeek only)
+
+The workflow has a second schedule (06:30 UTC) that runs **mode = sweep**: a backfill that skips
+every crawler, writes briefs for up to 15 waiting opportunities and uses DeepSeek alone
+(`CONTEXT_PROVIDERS=deepseek`; no free-provider fallback, no OpenRouter metadata repair). Run it by
+hand from the workflow page with mode = sweep and any batch size. `CONTEXT_PROVIDERS` accepts a
+comma-separated list of `deepseek, openrouter, groq, gemini, cerebras` and applies to any run.
+
+How briefs are budgeted and retried:
+
+- Briefs have their own call budget (four model calls per requested card). They no longer share
+  `--max-llm` with metadata repair, which used to leave few or no calls for briefs.
+- DeepSeek gets at least 4,000 output tokens and one second request when its reply is empty, cut
+  off or not valid JSON. A reply that parses but lacks `sections`, `fit` or `money` fails inside the
+  provider attempt, so it is retried or handed to the next provider.
+- A card whose brief fails is noted in `score_breakdown.context_failure` and goes to the back of the
+  queue for a week, so it cannot take a slot every night. A successful brief clears the note.
+- The first database calls of a run are retried after 15 and 45 seconds on passing errors (network,
+  5xx, `JWT issued at future`).
+
+Source notes: jobs.ac.uk is no longer crawled (it only ever returned a bot check). EURAXESS has
+answered this client with HTTP 403 since early November 2026; it now reports that as a failed source
+instead of "ok, 0 items". Adzuna likewise fails loudly when the API answers nothing. Listings from the
+general job engines (Jooble, Adzuna) need a research signal in the title or text to be accepted.
+
 ### Research & relocation decision briefs
 
 In **Opportunities → Research & relocation preferences**, select research subjects (or enter your

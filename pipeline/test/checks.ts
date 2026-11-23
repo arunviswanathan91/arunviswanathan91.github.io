@@ -41,6 +41,7 @@ import { collectDecisionEvidence, extractPopulationFact, relevantExcerpt, safeEv
 import { extractDeadlineFact } from "../src/normalize/deadline.js";
 import { sourceIssues } from "../src/normalize/quality.js";
 import { adzunaAdapter } from "../src/sources/adzuna.js";
+import { retryTransient } from "../src/run.js";
 import { joobleAdapter } from "../src/sources/jooble.js";
 import { feedAdapter } from "../src/sources/feed.js";
 import type { SourceContext } from "../src/sources/types.js";
@@ -333,6 +334,36 @@ const decisionPayload = () => ({
   eq("first institution brief keeps its real source citation", resultA.brief?.sections.institution.basis, "source");
   eq("cached institution brief drops the now-stale source citation instead of misattributing it", resultB.brief?.sections.institution.basis, "general");
   check("the personal brief is still requested fresh for every opportunity", resultA.brief?.sections.role.text === resultB.brief?.sections.role.text);
+
+  // DeepSeek: a cut-off or incomplete reply is asked for once more before the card is given up.
+  {
+   const good = JSON.stringify(decisionPayload());
+   const replies = [
+    { choices: [{ message: { content: good.slice(0, 200) }, finish_reason: "length" }] },   // cut off
+    { model: "deepseek-flash", choices: [{ message: { content: good }, finish_reason: "stop" }] },
+   ];
+   let calls = 0; const sent: number[] = [];
+   const deepHttp = { ...fakeHttp, postJson: async (_url: string, body: { max_tokens: number }) => { sent.push(body.max_tokens); return replies[Math.min(calls++, 1)]; } } as unknown as Http;
+   const deepEnv = readEnv({ ...base, DEEPSEEK_API_KEY: "key", OPENROUTER_API_KEY: "key", CONTEXT_PROVIDERS: "deepseek" });
+   eq("CONTEXT_PROVIDERS limits a run to the named providers", contextProviders(deepEnv), ["deepseek"]);
+   eq("without it every configured provider is used, DeepSeek first", contextProviders(readEnv({ ...base, DEEPSEEK_API_KEY: "key", OPENROUTER_API_KEY: "key" })), ["deepseek", "openrouter"]);
+   const deepState = createProviderState();
+   const deepCache = new Map(cache);   // institution facts already known: only the personal brief is requested
+   const result = await enrichWithFallback(deepEnv, deepHttp, candidateA,
+    createContextFallback<CityFactsResult>(["deepseek"], () => {}, Infinity, deepState),
+    createContextFallback<PersonalBriefResult>(["deepseek"], () => {}, Infinity, deepState), prefs, null, null, deepCache);
+   eq("a cut-off DeepSeek reply is requested again and the second reply is used", [calls, result.provider, result.model], [2, "deepseek", "deepseek-flash"]);
+   check("DeepSeek is given room for the whole brief", sent.every(tokens => tokens >= 4000));
+   // A reply that parses but lacks the required parts fails inside the provider attempt, so it can fall back.
+   const partialHttp = { ...fakeHttp, postJson: async () => ({ choices: [{ message: { content: JSON.stringify({ topic: "x", sections: {} }) } }] }) } as unknown as Http;
+   let message = "";
+   try {
+    await enrichWithFallback(deepEnv, partialHttp, candidateA,
+     createContextFallback<CityFactsResult>(["deepseek"], () => {}, Infinity, createProviderState()),
+     createContextFallback<PersonalBriefResult>(["deepseek"], () => {}, Infinity, createProviderState()), prefs, null, null, new Map(cache));
+   } catch (error) { message = (error as Error).message; }
+   check("an incomplete brief is rejected by the provider attempt, not after it", /missing sections, fit or money/.test(message) && message.startsWith("deepseek"));
+  }
  }
 }
 
@@ -670,7 +701,7 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  check("catalog includes the live jobRxiv crawl", keys.includes("crawl:jobrxiv"));
  check("catalog includes EURAXESS", keys.includes("euraxess"));
  check("catalog includes ResearchersJob", keys.includes("feed:researchersjob"));
- check("catalog includes jobs.ac.uk", keys.includes("crawl:jobsacuk"));
+ check("catalog leaves out jobs.ac.uk, which only ever served a bot check", !keys.includes("crawl:jobsacuk"));
  check("catalog includes Science Careers", keys.includes("crawl:sciencecareers"));
  check("catalog includes Times Higher Education unijobs", keys.includes("crawl:timeshighereducation"));
  check("catalog includes Nature Careers", keys.includes("crawl:naturecareers"));
@@ -876,7 +907,6 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  {
   const seeds = Object.fromEntries(CRAWL_SEEDS.map(s => [s.key, s]));
   const detail: Record<string, string[]> = {
-   "crawl:jobsacuk": ["/job/DTN118/postdoctoral-research-associate"],
    "crawl:sciencecareers": ["/job/681097/postdoctoral-research-fellow-rehm-lab-generative-biology-institute/"],
    "crawl:timeshighereducation": ["/unijobs/listing/417210/university-assistant-postdoctoral-law/"],
    "crawl:naturecareers": ["/naturecareers/job/12864938/postdoctoral-position-addressing-the-mechanical-evolution/"],
@@ -913,6 +943,10 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  const conflict = buildOpportunity({ sourceKey:"jooble", externalId:"conflict",url:"https://example.org/job/2",title:"Senior Analytical Scientist – ICP-MS",country:"AT",description:"Location\nDallas, TX\nType of Employment\nContract" })!;
  eq("Dallas/Austria contradiction is explicit before AI", sourceIssues(conflict)[0]?.reason, "location_conflict");
  eq("unrelated employer office mentions do not trigger conflicts", sourceIssues({ ...conflict, descriptionText:"Our company also has an office in Dallas, TX." }).length, 0);
+ eq("a dental coordinator from a general job engine is routed out", sourceIssues({ ...conflict, title:"Insurance Specialist - Dental Coordinator", descriptionText:"Front desk and billing for a busy dental practice." })[0]?.reason, "non_research_role");
+ eq("a marketing manager is routed out", sourceIssues({ ...conflict, title:"Senior Partner Marketing Manager", descriptionText:"Research participants platform" })[0]?.reason, "non_research_role");
+ eq("a research role from the same engine is kept", sourceIssues({ ...conflict, title:"Postdoctoral Fellow in Tumour Immunology", descriptionText:"Join our lab." }).length, 0);
+ eq("academic boards are not second-guessed", sourceIssues({ ...conflict, sourceKey:"crawl:naturecareers", title:"Group Leader", descriptionText:"Lead a team." }).length, 0);
  eq("product manager routed out before AI", sourceIssues({ ...conflict, title:"Staff Product Manager, Machine Learning",descriptionText:"Climate solutions" })[0]?.reason, "non_research_role");
  const adzuna = adzunaAdapter("adzuna");
  adzuna.configure({}, { ADZUNA_APP_ID:"fixture", ADZUNA_APP_KEY:"fixture" });
@@ -938,6 +972,33 @@ eq("hard filter rejects a certain salary below floor", hardFilter(makeOpp({ sala
  const enriched = await enrichMetadataWithOpenRouter(env,http,rows,stats);
  eq("metadata AI receives bounded batches", sizes, [5,5,1]);
  eq("batch-local model indices preserve listing association", enriched.map(row=>row.city), rows.map(row=>row.title));
+}
+
+{
+ let tries = 0; const waits: number[] = [];
+ const value = await retryTransient(async () => { if (tries++ < 2) throw new Error("ensureDefaultSources: JWT issued at future"); return "ok"; }, (_e, wait) => waits.push(wait), [1, 2]);
+ eq("a passing startup error is retried", [value, tries, waits], ["ok", 3, [1, 2]]);
+ let hard = 0, thrown = "";
+ try { await retryTransient(async () => { hard++; throw new Error("permission denied for table profiles"); }, undefined, [1, 2]); } catch (e) { thrown = (e as Error).message; }
+ eq("a real startup error is not retried", [hard, thrown], [1, "permission denied for table profiles"]);
+ let always = 0;
+ try { await retryTransient(async () => { always++; throw new Error("fetch failed"); }, undefined, [1, 2]); } catch { /* expected */ }
+ eq("retries stop after the planned waits", always, 3);
+}
+
+{
+ const adzuna = adzunaAdapter("adzuna"); adzuna.configure({}, { ADZUNA_APP_ID: "x", ADZUNA_APP_KEY: "y" });
+ let message = "", asked = 0;
+ const http = { getJson: async () => { asked++; return null; } } as unknown as Http;
+ try { for await (const _page of adzuna.fetch({terms:["postdoc"],countries:["DE","NL","GB","FR"],cities:[],remoteOk:false,since:null}, {maxItems:100,maxRequests:50,maxPages:10,deadlineAt:Date.now()+5000}, {http,renderer:null,cursorIn:{},now:new Date(),log:()=>{}})) { /* nothing */ } }
+ catch (e) { message = (e as Error).message; }
+ check("an Adzuna API that answers nothing is reported, not counted as an empty night", /no readable reply/.test(message) && asked === 3);
+ const euraxess = euraxessAdapter("euraxess");
+ let empty = "";
+ const page = { get: async () => ({ ok: true, status: 200, body: "<html><body>Checking your browser</body></html>", headers: {}, notModified: false }) } as unknown as Http;
+ try { for await (const _page of euraxess.fetch({terms:[],countries:[],cities:[],remoteOk:false,since:null}, {maxItems:100,maxRequests:40,maxPages:10,deadlineAt:Date.now()+5000}, {http:page,renderer:null,cursorIn:{},now:new Date(),log:()=>{}})) { /* nothing */ } }
+ catch (e) { empty = (e as Error).message; }
+ check("EURAXESS search pages without vacancy links are reported", /no vacancy links/.test(empty));
 }
 
 let bad = 0;

@@ -1,11 +1,12 @@
 import { SECTIONS, type SectionId } from "../extended/lib/sections";
 import { href, useRoute } from "../extended/lib/route";
 import { useMemo, useState } from "react";
-import { Check, Highlighter, Home, Inbox, Moon, PanelLeftClose, PanelLeftOpen, Plus, Send, Settings, Sun, SunMoon, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Highlighter, Home, Inbox, Moon, PanelLeftClose, PanelLeftOpen, Plus, Send, Settings, Sun, SunMoon, Trash2 } from "lucide-react";
 import { useData, useUi } from "../lib/store";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
 import type { Theme, ViewKey } from "../lib/store";
 import type { EntityKey } from "../entities/types";
+import { MENU_GROUPS, PERSONAL_SECTIONS, RESEARCH_SECTIONS, toolKey, useMenuPrefs, viewKey } from "../lib/menuPrefs";
 
 const THEMES:{value:Theme;label:string;icon:any}[]=[
  {value:"system",label:"System",icon:SunMoon},{value:"light",label:"Light",icon:Sun},{value:"dark",label:"Dark",icon:Moon},
@@ -33,6 +34,19 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
  const route=useRoute();
  const onTool=(key:SectionId)=>(ui.view==="extended"&&route.path[0]===key)||(key==="tasks"&&ui.view==="tasks");
  const toolClass=(key:SectionId)=>"extension-nav"+(onTool(key)?" active":"");
+
+ // Menu preferences (Settings → Menu): hidden items are left out, and a group folds when
+ // its heading is clicked. The icon-only sidebar has no headings, so nothing folds there.
+ const menu=useMenuPrefs();
+ const foldable=!collapsed||window.innerWidth<=860;
+ const group=(id:string)=>{
+  const def=MENU_GROUPS.find(g=>g.id===id)!;
+  const any=def.items.some(i=>menu.isShown(i.key));
+  const folded=foldable&&menu.isFolded(id);
+  return {any,open:any&&!folded,label:any&&<button type="button" className="nav-label nav-fold" aria-expanded={!folded} onClick={()=>menu.toggleFolded(id)}>
+   <span>{def.label}</span>{folded?<ChevronRight/>:<ChevronDown/>}</button>};
+ };
+ const research=group("research"),personal=group("personal"),workflows=group("workflows");
 
  return <aside className={"sidebar"+(open?" open":"")+(collapsed?" collapsed":"")}>
   <div className="identity" title={collapsed?"Arun’s workspace":undefined}>
@@ -68,12 +82,12 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
      <button className="link-button" onClick={()=>setShowArchived(v=>!v)}>{showArchived?"Hide archived":"Show archived"}</button>}
    </div>
 
-   <p className="nav-label">Research & planning</p>
-   {(["agenda","review","goals","projects","thesis","tasks","papers","notes","experiments","meetings","deadlines","trips","funding","resumes"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={onTool(key)?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span>{key==="tasks"&&<span className="nav-count">{counts.tasks}</span>}</a>})}
-   <p className="nav-label">Personal</p>
-   {(["budget","loans","networth","habits"] as SectionId[]).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={ui.view==="extended"&&route.path[0]===key?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span></a>})}
-   <p className="nav-label">Workflows</p>
-   {ENTITY_ORDER.filter(key=>key!=="tasks").map(key=>{
+   {research.label}
+   {research.open&&RESEARCH_SECTIONS.filter(key=>menu.isShown(toolKey(key))).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={onTool(key)?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span>{key==="tasks"&&<span className="nav-count">{counts.tasks}</span>}</a>})}
+   {personal.label}
+   {personal.open&&PERSONAL_SECTIONS.filter(key=>menu.isShown(toolKey(key))).map(key=>{const item=SECTIONS[key];return <a key={key} className={toolClass(key)} aria-current={ui.view==="extended"&&route.path[0]===key?"page":undefined} href={href(key)} title={item.label}><span className="sec-chip"><item.icon/></span><span className="nav-text">{item.label}</span></a>})}
+   {workflows.label}
+   {workflows.open&&ENTITY_ORDER.filter(key=>key!=="tasks"&&menu.isShown(viewKey(key))).map(key=>{
     const def=ENTITIES[key];
     const active=ui.view===key||(key==="publications"&&ui.view==="publication");
     return <button key={key} className={active?"active":""} aria-current={active?"page":undefined}
@@ -81,7 +95,7 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
      <span className="sec-chip"><def.icon/></span><span className="nav-text">{def.plural}</span><span className="nav-count">{counts[key]}</span>
     </button>;
    })}
-   <button className={ui.view==="clippings"?"active":""} title="Clippings" onClick={()=>go("clippings")}><span className="sec-chip"><Highlighter/></span><span className="nav-text">Clippings</span></button>
+   {workflows.open&&menu.isShown(viewKey("clippings"))&&<button className={ui.view==="clippings"?"active":""} title="Clippings" onClick={()=>go("clippings")}><span className="sec-chip"><Highlighter/></span><span className="nav-text">Clippings</span></button>}
    <button className={ui.view==="trash"?"active":""} aria-current={ui.view==="trash"?"page":undefined}
     title={collapsed?"Trash":undefined} onClick={()=>go("trash")}>
     <span className="sec-chip"><Trash2/></span><span className="nav-text">Trash</span><span className="nav-count">{trashItems.rows.length}</span>

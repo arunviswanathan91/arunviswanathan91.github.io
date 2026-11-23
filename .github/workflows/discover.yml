@@ -2,7 +2,11 @@ name: Nightly opportunity discovery
 
 on:
   schedule:
-    - cron: '30 20 * * *'   # 02:00 IST
+    - cron: '30 20 * * *'   # 02:00 IST: find new listings, write a few briefs
+    # Midday IST: write AI briefs for listings still waiting for one. No crawling, and
+    # DeepSeek only. GitHub often starts the 02:00 run hours late, hence the long gap;
+    # the two share a concurrency group, so they never overlap either way.
+    - cron: '30 6 * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -14,11 +18,12 @@ on:
           - discovery
           - search
           - backfill
+          - sweep        # briefs only, DeepSeek only (what the midday schedule runs)
       query:
         description: 'Extra search terms for a discovery run'
         required: false
       batchSize:
-        description: 'Opportunities to enrich in backfill mode (1-100)'
+        description: 'Opportunities to enrich in backfill or sweep mode (1-100)'
         required: false
         default: '5'
       refreshExisting:
@@ -42,7 +47,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35        # a sweep may write briefs for up to 25 minutes
     steps:
       - uses: actions/checkout@v4
 
@@ -110,6 +115,7 @@ jobs:
         working-directory: pipeline
         env:
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
           INPUT_MODE: ${{ github.event.inputs.mode || 'discovery' }}
           INPUT_QUERY: ${{ github.event.inputs.query || '' }}
           INPUT_BATCH: ${{ github.event.inputs.batchSize || '5' }}
@@ -145,6 +151,15 @@ jobs:
             MODE="$INPUT_MODE"
             BATCH="$INPUT_BATCH"
             REFRESH="$INPUT_REFRESH"
+          elif [ "$EVENT_SCHEDULE" = "30 6 * * *" ]; then
+            MODE="sweep"
+            BATCH="15"
+          fi
+          # A sweep is a backfill limited to DeepSeek: no free-provider fallbacks, and
+          # no metadata repair (that runs on OpenRouter, in the nightly discovery run).
+          if [ "$MODE" = "sweep" ]; then
+            MODE="backfill"
+            export CONTEXT_PROVIDERS="deepseek"
           fi
           ARGS=(
             run

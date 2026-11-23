@@ -346,6 +346,27 @@ button.tag-chip:hover{border-color:currentColor}
  background:var(--accent);color:var(--accent-text);font-weight:700;font-size:var(--f-xs);flex:none;
 }
 .sidebar nav{display:grid;gap:1px}
+/* A group heading folds its items; it must not look like a menu item. */
+.sidebar nav button.nav-fold{
+ display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);width:auto;min-height:0;
+ padding:2px 0;border:0;border-radius:var(--r-1,6px);background:none;cursor:pointer;text-align:left;
+ margin:var(--s-4) var(--s-2) var(--s-1);color:var(--text-3);
+ font-size:var(--f-2xs);font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+}
+.sidebar nav button.nav-fold:hover{background:none;color:var(--text-2,var(--text))}
+.sidebar nav button.nav-fold svg{width:13px;height:13px;opacity:.7}
+/* Settings → Menu */
+.panel.panel-wide{grid-column:1/-1}
+.menu-groups{display:grid;gap:var(--s-3)}
+.menu-group-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);margin-bottom:var(--s-1)}
+.menu-group-head strong{font-size:var(--f-xs)}
+.menu-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px var(--s-2)}
+.menu-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:var(--r-2);font-size:var(--f-xs);cursor:pointer;min-width:0}
+.menu-item:hover{background:var(--surface-2)}
+.menu-item svg{width:15px;height:15px;flex:none;color:var(--text-3)}
+.menu-item span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-item.off span,.menu-item.off svg{opacity:.5}
+
 .nav-label{
  margin:var(--s-4) var(--s-2) var(--s-1);color:var(--text-3);
  font-size:var(--f-2xs);font-weight:700;letter-spacing:.1em;text-transform:uppercase;

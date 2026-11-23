@@ -32,6 +32,7 @@ always goes at the end of this list, and the commit that adds it says so.
 | 24 | `thesis-outline.sql` | Thesis chapter outlines (sections, paragraph targets, done toggles, figures to prepare) |
 | 25 | `friend-card-payments.sql` | A friend paying your card bill or loan, counted as them paying you back |
 | 26 | `loan-amounts.sql` | Personal loans built up over time: each amount lent or borrowed, with its date |
+| 27 | `website.sql` | Public profile page content, edited in the dashboard (Website); the one table readable without signing in |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set

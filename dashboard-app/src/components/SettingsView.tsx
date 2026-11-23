@@ -8,7 +8,7 @@ import { SelectMenu } from "./ui/SelectMenu";
 import { useConfirmDialog } from "./ui/ConfirmDialog";
 import { saveSettings } from "../extended/lib/settings";
 import { BriefingSetting } from "../extended/modules/alerts/BriefingSetting";
-import { BackupPanel, PreferencesPanel } from "./settings/WorkspacePanels";
+import { BackupPanel, PreferencesPanel, MenuPanel } from "./settings/WorkspacePanels";
 
 const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const generateCode=()=>{
@@ -71,7 +71,7 @@ export function SettingsView(){
 
  return <div className="entity-view">
   <div className="view-head">
-   <div><p className="kicker">Workspace</p><h1>Settings</h1><p className="subtitle">Profile, Telegram, money, backups, projects and tags.</p></div>
+   <div><p className="kicker">Workspace</p><h1>Settings</h1><p className="subtitle">Profile, Telegram, money, menu, backups, projects and tags.</p></div>
   </div>
 
   <div className="settings-grid">
@@ -114,6 +114,7 @@ export function SettingsView(){
 
    <PreferencesPanel/>
    <BackupPanel/>
+   <MenuPanel/>
 
    <section className="panel">
     <header className="panel-head"><h2>Projects</h2>{toggle("Projects")}</header>

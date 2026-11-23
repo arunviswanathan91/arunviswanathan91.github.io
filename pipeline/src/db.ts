@@ -336,14 +336,40 @@ export class Db {
     const context = score && typeof score === "object" ? score.context : null;
     return needsAssessment(context, prefs);
    })());
-  return { candidates: eligible.slice(0, limit), total: eligible.length };
+  // A card whose brief failed in the last week goes to the back of the queue (most
+  // failures last), so one stubborn listing cannot take a slot every night while
+  // others wait. It is still tried once the cards ahead of it are done.
+  const recentFailures = (row: ContextCandidate) => {
+   const failure = row.score_breakdown && typeof row.score_breakdown === "object"
+    ? (row.score_breakdown as Record<string, unknown>).context_failure as { at?: string; count?: number } | undefined : undefined;
+   const at = Date.parse(failure?.at ?? "");
+   return Number.isFinite(at) && Date.now() - at < 7 * 86400000 ? Math.max(1, Number(failure?.count) || 1) : 0;
+  };
+  const ordered = runOrder || refreshExisting ? eligible
+   : eligible.map((row, index) => ({ row, index, failures: recentFailures(row) }))
+    .sort((a, b) => a.failures - b.failures || a.index - b.index).map(entry => entry.row);
+  return { candidates: ordered.slice(0, limit), total: eligible.length };
+ }
+
+ /** Remember that a brief could not be written, for the queue order above. */
+ async saveContextFailure(candidate: ContextCandidate, message: string) {
+  const score = candidate.score_breakdown && typeof candidate.score_breakdown === "object"
+   ? candidate.score_breakdown as Record<string, unknown> : {};
+  const previous = score.context_failure as { count?: number } | undefined;
+  const { error } = await this.client.from("opportunities").update({
+   score_breakdown: { ...score, context_failure: {
+    at: new Date().toISOString(), count: (Number(previous?.count) || 0) + 1, error: message.slice(0, 300),
+   } },
+  }).eq("id", candidate.id);
+  if (error) throw new Error("saveContextFailure: " + error.message);
  }
 
  async saveOpportunityContext(candidate: ContextCandidate, context: Record<string, unknown>) {
   const score = candidate.score_breakdown && typeof candidate.score_breakdown === "object"
    ? candidate.score_breakdown : {};
+  const { context_failure: _cleared, ...rest } = score as Record<string, unknown>;
   const { error } = await this.client.from("opportunities").update({
-   score_breakdown: { ...score, context },
+   score_breakdown: { ...rest, context },
    enrichment: "context_ready",
   }).eq("id", candidate.id);
   if (error) throw new Error("saveOpportunityContext: " + error.message);
