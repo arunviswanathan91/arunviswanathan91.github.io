@@ -5,6 +5,9 @@
   "use strict";
 
   var CACHE_KEY = "site-content:v1";
+  // Unpublished edits, written by the dashboard editor in this same browser. Only ever
+  // read on the preview address (?preview=1), so visitors always get the published page.
+  var PREVIEW_KEY = "site-content:preview";
   var config = window.SITE_CONFIG || {};
 
   var LINKS = [
@@ -121,6 +124,7 @@
     setText("tagline", c.tagline);
     setText("location", c.location);
     setText("bio", c.bio);
+    if (str(c.bio)) each("bio", function (node) { node.style.whiteSpace = "pre-line"; }); // keep paragraph breaks
     setText("address", c.address);
 
     var emails = arr(c.emails).map(str).filter(function (e) { return /^[^@\s]+@[^@\s]+$/.test(e); });
@@ -176,6 +180,24 @@
     var photoUrl = safeUrl(c.photo_url);
     var photo = document.getElementById("profile-photo");
     if (photoUrl && photo && photo.src !== photoUrl) photo.src = photoUrl;
+  }
+
+  /* ---------- Preview: show the editor's draft, and follow it as it changes ---------- */
+  if (/[?&]preview=1(&|$)/.test(window.location.search)) {
+    var draft = "";
+    try { draft = window.localStorage.getItem(PREVIEW_KEY) || ""; } catch (e) { /* storage blocked */ }
+    if (draft) {
+      try { apply(JSON.parse(draft)); } catch (e) { /* unreadable draft: show the page as it is */ }
+      var note = el("div", "", "Preview: these changes are not published yet");
+      note.setAttribute("role", "status");
+      note.style.cssText = "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;padding:8px 16px;border-radius:999px;background:#1d3557;color:#fff;font:500 14px/1.3 Inter,system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:calc(100vw - 32px);text-align:center";
+      document.body.appendChild(note);
+      window.addEventListener("storage", function (e) {
+        if (e.key !== PREVIEW_KEY || !e.newValue) return;
+        try { apply(JSON.parse(e.newValue)); } catch (err) { /* ignore a half-written draft */ }
+      });
+      return;
+    }
   }
 
   /* ---------- Last published copy first (no flicker on a return visit), then the newest ---------- */

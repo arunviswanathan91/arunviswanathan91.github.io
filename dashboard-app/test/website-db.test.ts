@@ -32,6 +32,11 @@ test('website content: anyone reads, only the owner writes',async()=>{
  await db.exec(`insert into ws_site(id,content) values(true,'{"bio":"second"}') on conflict (id) do update set content=excluded.content`);
  assert.deepEqual(await content(),[{bio:'second'}]);
  await assert.rejects(db.exec(`update ws_site set content='[]'`),/check/);
+ // The version a publish replaced is kept, and cannot be overwritten directly.
+ const prev=async()=>(await db.query<any>(`select previous from ws_site`)).rows[0].previous;
+ assert.deepEqual(await prev(),{bio:'first'});
+ await db.exec(`update ws_site set previous='{"bio":"forged"}'`);
+ assert.deepEqual(await prev(),{bio:'first'});
 
  // Another signed-in account can read it but cannot change, replace or take it over.
  await as(other);
@@ -45,7 +50,8 @@ test('website content: anyone reads, only the owner writes',async()=>{
  await anon();
  assert.deepEqual(await content(),[{bio:'second'}]);
  await assert.rejects(db.exec(`update ws_site set content='{}'`),/permission denied/);
- await assert.rejects(db.exec(`select user_id from ws_site`),/permission denied/); // the owner's account id stays private
+ await assert.rejects(db.exec(`select user_id from ws_site`),/permission denied/);
+ await assert.rejects(db.exec(`select previous from ws_site`),/permission denied/); // the owner's account id stays private
 
  // Uploaded files: only inside your own folder of the public bucket.
  await as(uid);

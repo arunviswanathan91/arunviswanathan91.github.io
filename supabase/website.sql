@@ -38,6 +38,29 @@ drop trigger if exists site_touch on public.ws_site;
 create trigger site_touch before update on public.ws_site
   for each row execute function ws_private.touch_updated_at();
 
+-- One step of undo: each publish keeps the version it replaced (owner-only; visitors cannot read it).
+alter table public.ws_site add column if not exists previous jsonb;
+
+create or replace function ws_private.site_keep_previous()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.content is distinct from old.content and old.content <> '{}'::jsonb then
+    new.previous := old.content;
+  else
+    new.previous := old.previous;
+  end if;
+  return new;
+end
+$$;
+revoke all on function ws_private.site_keep_previous() from public, authenticated;
+
+drop trigger if exists site_previous on public.ws_site;
+create trigger site_previous before update on public.ws_site
+  for each row execute function ws_private.site_keep_previous();
+
 -- ── Public files: the CV and the profile photo ──────────────────────────────
 -- Files live at  site/<owner-user-id>/<name>  and are readable by anyone with the link.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

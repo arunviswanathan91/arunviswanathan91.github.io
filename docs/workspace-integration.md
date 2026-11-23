@@ -71,11 +71,11 @@ Apply `supabase/resumes.sql` after `agenda-recurring-followups.sql` (rerunnable)
 
 ## Website
 
-Apply `supabase/website.sql` after `loan-amounts.sql` (rerunnable). Workspace → Website edits what the public profile page (`index.html`) shows: tagline, location, bio, research interests, publications (with DOI lookup), presentations, awards, experience, education, emails, address, profile links, photo and CV. Edits are a draft until **Publish**; the page then shows them on its next load, with no redeploy.
+Apply `supabase/website.sql` after `loan-amounts.sql` (rerunnable). Workspace → Website edits what the public profile page (`index.html`) shows: tagline, location, bio, research interests, publications (with DOI lookup), presentations, awards, experience, education, emails, address, profile links, photo and CV. Edits are a draft until **Publish**; the page then shows them on its next load, with no redeploy. **Preview** opens the real page with the draft applied (address `?preview=1`; the draft is read from this browser's storage, so only you see it, and it follows your typing). **Previous version** loads the version the last publish replaced, to review and publish again.
 
 How: one row in `ws_site` holds the whole page as JSON. It is the only table readable without signing in (content columns only; the owner's id is not exposed), and only the account that owns the row can change it. `js/site-content.js` fetches it with the browser-safe key from `js/site-config.js`, which the deploy workflow writes from the same repository variables the dashboard is built with. Everything published is inserted as text, never as HTML, and links must be `http(s)`. The text in `index.html` is the fallback shown when nothing is published or the fetch fails, and the last published copy is cached in the visitor's browser. Uploaded files go to the public `site` storage bucket under the owner's folder; files the published page no longer points at are removed on the next publish.
 
-Not covered: the page title, name, section headings, `repos.html`, and the description/preview tags used by search engines and link previews stay in `index.html`. Website content is not part of the JSON/ZIP backup, and there is no history of earlier published versions.
+Not covered: the page title, name, section headings, `repos.html`, and the description/preview tags used by search engines and link previews stay in `index.html`. Website content is not part of the JSON/ZIP backup, and only one earlier version is kept (`ws_site.previous`).
 
 ## Trash for workspace records
 

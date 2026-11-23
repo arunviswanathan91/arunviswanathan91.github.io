@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, ChevronUp, ExternalLink, Plus, Search, Trash2, Upload } from "lucide-react";
+import { ArrowDownWideNarrow, ChevronDown, ChevronRight, ChevronUp, ExternalLink, Eye, History, Plus, Search, Trash2, Upload } from "lucide-react";
 import { ask } from "../../../lib/dialogs.tsx";
 import { currentUserId, list, onLoadCacheClear, sb, upsert, useLoad } from "../../lib/db.ts";
 import { fmtDate } from "../../lib/dates.ts";
@@ -11,7 +11,7 @@ import {
   type SiteContent, type SitePublication,
 } from "./model.ts";
 
-interface Row { user_id: string; content: unknown; updated_at: string }
+interface Row { user_id: string; content: unknown; previous: unknown; updated_at: string }
 const BUCKET = "site";
 const SITE_URL = `${window.location.origin}/`;
 
@@ -20,7 +20,10 @@ const setupError = (error: string) =>
 
 // Edits not yet published survive moving to another page of the workspace and back.
 let kept: SiteContent | null = null;
-onLoadCacheClear(() => { kept = null; }); // signing out: the next account must not inherit them
+// The public page reads this (only at ?preview=1, in this browser) to show edits before they are published.
+const PREVIEW_KEY = "site-content:preview";
+const forgetPreview = () => { try { localStorage.removeItem(PREVIEW_KEY); } catch { /* storage blocked */ } };
+onLoadCacheClear(() => { kept = null; forgetPreview(); }); // signing out: the next account must not inherit them
 
 export function WebsiteView() {
   const { data, error } = useLoad(async () => {
@@ -63,6 +66,19 @@ function Editor({ row, uid }: { row: Row | null; uid: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row?.updated_at]);
 
+  // Keep the preview tab (if one is open) showing exactly what Publish would send.
+  const cleanJson = JSON.stringify(clean);
+  useEffect(() => {
+    try { localStorage.setItem(PREVIEW_KEY, cleanJson); } catch { /* storage blocked: preview shows the live page */ }
+  }, [cleanJson]);
+
+  const previous = row?.previous && Object.keys(row.previous as object).length ? normalizeSite(row.previous) : null;
+  const canRestore = !readOnly && !!previous && JSON.stringify(cleanSite(previous)) !== cleanJson;
+  async function restorePrevious() {
+    if (!previous || !(await ask("Load the version that was live before your last publish? Nothing changes on the site until you publish it."))) return;
+    kept = previous; setDraft(previous); setProblems([]);
+  }
+
   useEffect(() => {
     if (!dirty || !published) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -100,12 +116,18 @@ function Editor({ row, uid }: { row: Row | null; uid: string }) {
   return (
     <>
       <PageHeader section="website" title="Website" subtitle="What your public profile page says. Nothing changes on the site until you publish."
-        actions={<a className="button-link" href={SITE_URL} target="_blank" rel="noopener"><ExternalLink size={15} /> View site</a>} />
+        actions={
+          <span className="row">
+            {canRestore && <button onClick={() => void restorePrevious()} disabled={busy} title="Load the version that was live before your last publish"><History size={15} /> Previous version</button>}
+            {!readOnly && <a className="button-link" href={`${SITE_URL}?preview=1`} target="site-preview" title="Opens your site with these edits. It updates as you type and is visible only to you."><Eye size={15} /> Preview</a>}
+            <a className="button-link" href={SITE_URL} target="_blank" rel="noopener"><ExternalLink size={15} /> View site</a>
+          </span>
+        } />
       <fieldset className="site-editor" disabled={readOnly || busy}>
         <Card title="About" hint="The top of the page: the line under your name, where you are, and your bio.">
           <Input label="Tagline" value={draft.tagline} onChange={(v) => set({ tagline: v })} />
           <Input label="Location" value={draft.location} onChange={(v) => set({ location: v })} />
-          <Input label="Bio" area rows={7} value={draft.bio} onChange={(v) => set({ bio: v })} />
+          <Input label="Bio (leave an empty line between paragraphs)" area rows={7} value={draft.bio} onChange={(v) => set({ bio: v })} />
         </Card>
 
         <Card title="Photo and CV" hint="Upload a new file to replace the one on the site. It goes live when you publish.">
@@ -123,6 +145,9 @@ function Editor({ row, uid }: { row: Row | null; uid: string }) {
 
         <Card title="Publications" hint="Shown in this order. Wrap your name in **two stars** to make it bold.">
           <PublicationLookup onFound={(p) => set({ publications: [p, ...draft.publications] })} />
+          {draft.publications.some((p, n) => n > 0 && yearOf(p) > yearOf(draft.publications[n - 1])) && (
+            <button type="button" className="site-add" onClick={() => set({ publications: [...draft.publications].sort((a, b) => yearOf(b) - yearOf(a)) })}><ArrowDownWideNarrow size={14} /> Sort newest first</button>
+          )}
           <Rows items={draft.publications} blank={BLANK_PUBLICATION} noun="publication" onChange={(publications) => set({ publications })}
             summary={(p) => [p.year, p.title].filter(Boolean).join(" · ")}
             fields={[["title", "Title", { area: true }], ["authors", "Authors", { placeholder: "Smith J, **Viswanathan A**, Lee K." }], ["venue", "Journal, volume, pages"], ["year", "Year"], ["url", "Link (optional)", { placeholder: "https://…" }], ["badge", "Badge (optional)", { placeholder: "Preprint" }]]} />
@@ -177,6 +202,8 @@ function Editor({ row, uid }: { row: Row | null; uid: string }) {
     </>
   );
 }
+
+const yearOf = (p: SitePublication) => Number(p.year.match(/\d{4}/)?.[0] ?? 0);
 
 /** Remove uploaded files the published page no longer points at. */
 async function pruneFiles(uid: string, c: SiteContent) {
