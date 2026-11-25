@@ -1,8 +1,11 @@
 """Paraphrase and scoring server for the dashboard's Writing view.
 
-Runs DIPPER (Krishna et al., NeurIPS 2023) in 8-bit on one GPU and scores text with the
-intrinsic-dimension estimator in phd.py. See README.md for how to start it on Colab or Kaggle.
+Runs one rewriting model on one GPU and scores text with the intrinsic-dimension estimator in
+phd.py. DIPPER_KIND picks the model: "dipper" (Krishna et al., NeurIPS 2023, 8-bit) or "humanizer"
+(jialinyyzz/humanizer, GGUF). See README.md for how to start it on Colab or Kaggle.
 """
+import hashlib
+import json
 import os
 import re
 
@@ -11,29 +14,62 @@ import torch
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig, T5ForConditionalGeneration, T5Tokenizer
+from transformers import AutoModel, AutoTokenizer
 
 from phd import MIN_POINTS, phd
 
 TOKEN = os.environ["DIPPER_TOKEN"]
-MODEL = os.environ.get("DIPPER_MODEL", "kalpeshk2011/dipper-paraphraser-xxl")
+KIND = os.environ.get("DIPPER_KIND", "dipper")
+if KIND not in ("dipper", "humanizer"):
+    raise SystemExit('DIPPER_KIND must be "dipper" or "humanizer"')
+MODEL = os.environ.get("DIPPER_MODEL", "kalpeshk2011/dipper-paraphraser-xxl") if KIND == "dipper" else "jialinyyzz/humanizer"
+HUMANIZER_FILE = os.environ.get("HUMANIZER_FILE", "humanizer-12b-Q6_K.gguf")
+# sha256 prefix the model card gives for the prompt built from the draft "X".
+HUMANIZER_PROMPT_HASH = "cc51d66b4c593fbe"
 ORIGIN = os.environ.get("DIPPER_ORIGIN", "https://arunviswanathan91.github.io")
 LEVELS = (0, 20, 40, 60, 80, 100)
 MARK = re.compile(r"ZQX\d+Z")
 
+
+
+def humanizer_prompt(draft):
+    return PROMPT["instr"] + "\n\n" + draft.strip() + PROMPT["sep"]
+
+
+def humanize(text, seed):
+    # Sampling settings from the model card. It says to stop on end-of-sequence only, with no stop strings.
+    out = llm.create_completion(
+        humanizer_prompt(text), temperature=1.0, top_p=0.95, top_k=0, min_p=0.0, repeat_penalty=1.0,
+        max_tokens=2048, seed=-1 if seed is None else seed,
+    )
+    return out["choices"][0]["text"].strip()
+
+
 nltk.download("punkt", quiet=True)
 nltk.download("punkt_tab", quiet=True)
 
-tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-xxl")
-model = T5ForConditionalGeneration.from_pretrained(
-    MODEL, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
-)
-model.eval()
+if KIND == "dipper":
+    from transformers import BitsAndBytesConfig, T5ForConditionalGeneration, T5Tokenizer
+
+    tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-xxl")
+    model = T5ForConditionalGeneration.from_pretrained(
+        MODEL, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+    )
+    model.eval()
+else:
+    from huggingface_hub import hf_hub_download
+    from llama_cpp import Llama
+
+    with open(hf_hub_download(MODEL, "prompt_format.json"), encoding="utf-8") as handle:
+        PROMPT = json.load(handle)
+    if hashlib.sha256(humanizer_prompt("X").encode()).hexdigest()[:16] != HUMANIZER_PROMPT_HASH:
+        raise SystemExit("humanizer prompt does not match the hash on the model card")
+    llm = Llama.from_pretrained(MODEL, filename=HUMANIZER_FILE, n_gpu_layers=-1, n_ctx=8192, verbose=False)
 scorer_tokenizer = AutoTokenizer.from_pretrained("roberta-base")
 scorer = AutoModel.from_pretrained("roberta-base").eval()
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=[ORIGIN], allow_methods=["POST"], allow_headers=["authorization", "content-type"])
+app.add_middleware(CORSMiddleware, allow_origins=[ORIGIN], allow_methods=["GET", "POST"], allow_headers=["authorization", "content-type"])
 
 
 def authorised(authorization: str = Header("")):
@@ -79,11 +115,13 @@ def paraphrase(text, lexical, order, prefix, sent_interval=3):
 
 @app.get("/health")
 def health():
-    return {"model": MODEL}
+    return {"model": MODEL, "kind": KIND}
 
 
 @app.post("/paraphrase", dependencies=[Depends(authorised)])
 def paraphrase_route(body: ParaphraseIn):
+    if KIND == "humanizer":
+        return {"text": humanize(body.text, body.seed)}
     if body.lexical not in LEVELS or body.order not in LEVELS:
         raise HTTPException(422, "lexical and order must be one of 0, 20, 40, 60, 80, 100")
     if body.seed is not None:

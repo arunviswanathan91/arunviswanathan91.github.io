@@ -7,7 +7,7 @@ import { humanize } from "../src/lib/humanizer/rules.ts";
 import { checkFidelity } from "../src/lib/humanizer/fidelity.ts";
 import { compose, wordDiff } from "../src/lib/humanizer/diff.ts";
 import { styleMetrics } from "../src/lib/humanizer/metrics.ts";
-import { dipperBackend, rewrite } from "../src/lib/humanizer/paraphrase.ts";
+import { dipperBackend, rewrite, verifySpans } from "../src/lib/humanizer/paraphrase.ts";
 
 const SCI="CD8+ T cells from STAT3−/− mice showed reduced pSTAT3-Y705 after 2 µM inhibitor (P < 0.05) [3,4].";
 
@@ -90,6 +90,36 @@ test("the server back end sends the documented request",async()=>{
  assert.equal(await backend("hello",{lexical:60,order:20,prefix:"ctx"}),"ok");
  assert.deepEqual(calls,[{url:"https://x.example/paraphrase",auth:"Bearer secret",body:{text:"hello",lexical:60,order:20,prefix:"ctx",seed:null}}]);
  await assert.rejects(rewrite("a",null,{lexical:50,order:0}),/must be 0, 20/);
+});
+
+test("verify mode sends plain text and accepts a rewrite that keeps every span",async()=>{
+ const seen:string[]=[];
+ const backend=async(t:string)=>{seen.push(t);return "After 2 µM inhibitor, pSTAT3-Y705 fell in CD8+ T cells\nfrom STAT3−/− mice (P < 0.05) [3,4].";};
+ const segs=await rewrite(SCI,backend,{lexical:60,order:60,rules:false,protection:"verify"});
+ assert.deepEqual(seen,[SCI]);
+ assert.equal(segs[0].accepted,true);
+ assert.equal(segs[0].revised,"After 2 µM inhibitor, pSTAT3-Y705 fell in CD8+ T cells from STAT3−/− mice (P < 0.05) [3,4].");
+});
+
+test("verify mode retries, then keeps the original after three failures",async()=>{
+ let calls=0;
+ const second=async()=>++calls<2?"T cells showed reduced signal.":"Reduced pSTAT3-Y705 was seen in CD8+ T cells of STAT3−/− mice given 2 µM inhibitor (P < 0.05) [3,4].";
+ const ok=await rewrite(SCI,second,{lexical:60,order:60,rules:false,protection:"verify"});
+ assert.equal(calls,2);
+ assert.equal(ok[0].accepted,true);
+ calls=0;
+ const never=async()=>{calls++;return "CD8+ T cells from STAT3−/− mice showed reduced pSTAT3-Y705 after 5 µM inhibitor (P < 0.05) [3,4].";};
+ const bad=await rewrite(SCI,never,{lexical:60,order:60,rules:false,protection:"verify"});
+ assert.equal(calls,3);
+ assert.equal(bad[0].accepted,false);
+ assert.match(bad[0].rejected??"",/dropped: 2 µM/);
+ assert.equal(compose(bad),SCI);
+});
+
+test("verify rejects invented numbers and a change of language",()=>{
+ assert.equal(verifySpans("IL-6 rose in treated mice.","Treated mice had higher IL-6."),undefined);
+ assert.match(verifySpans("IL-6 rose in treated mice.","IL-6 rose 3-fold in treated mice.")??"",/added: 3-fold/);
+ assert.match(verifySpans("IL-6 rose in treated mice.","IL-6 在小鼠中升高。")??"",/another language/);
 });
 
 test("word diff and style metrics",()=>{

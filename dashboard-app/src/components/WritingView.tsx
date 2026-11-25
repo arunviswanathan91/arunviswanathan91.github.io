@@ -31,6 +31,7 @@ export function WritingView(){
  const [lexical,setLexical]=useState(60),[order,setOrder]=useState(60),[useModel,setUseModel]=useState(true),[useRules,setUseRules]=useState(true);
  const [url,setUrl]=useState(''),[token,setToken]=useState(''),[lockedText,setLockedText]=useState('');
  const [lexicon,setLexicon]=useState<LexRow[]>([]),[docs,setDocs]=useState<Doc[]>([]);
+ const [kind,setKind]=useState<'dipper'|'humanizer'|''>('');
  const [busy,setBusy]=useState(false),[status,setStatus]=useState(''),[scores,setScores]=useState<{before?:Score;after?:Score}>({});
  const chars=useMemo(()=>inspectChars(text).filter(f=>f.action!=='keep'),[text]);
  const links=useMemo(()=>inspectLinks(text),[text]);
@@ -43,6 +44,14 @@ export function WritingView(){
   if(s.error||l.error)setStatus('Writing tables are not set up yet. Apply supabase/writing.sql to save work.');
   await loadDocs();
  })();},[loadDocs]);
+ useEffect(()=>{
+  setKind('');
+  if(!/^https:\/\//.test(url.trim()))return;
+  const stop=new AbortController();
+  fetch(url.trim().replace(/\/+$/,'')+'/health',{signal:stop.signal}).then(r=>r.ok?r.json():null).then((d:{kind?:string}|null)=>{if(d?.kind==='dipper'||d?.kind==='humanizer')setKind(d.kind);}).catch(()=>{});
+  return()=>stop.abort();
+ },[url]);
+ const plain=kind==='humanizer';
  const locked=useMemo(()=>[...lockedText.split(',').map(s=>s.trim()).filter(Boolean),...lexicon.filter(r=>r.locked).map(r=>r.phrase)],[lockedText,lexicon]);
  const personal=useMemo<LexiconEntry[]>(()=>lexicon.filter(r=>!r.locked&&r.replacements.length).map(r=>({from:r.phrase,to:r.replacements})),[lexicon]);
  const run=async()=>{
@@ -51,7 +60,7 @@ export function WritingView(){
   setBusy(true);setStatus('');setScores({});
   try{
    const backend=useModel?dipperBackend(url.trim(),token.trim()):null;
-   const out=await rewrite(text,backend,{lexical,order,locked,lexicon:personal,rules:useRules},(d,t)=>setStatus(`Rewriting paragraph ${d} of ${t}`));
+   const out=await rewrite(text,backend,{lexical,order,locked,lexicon:personal,rules:useRules,protection:plain?'verify':'placeholder'},(d,t)=>setStatus(`Rewriting paragraph ${d} of ${t}`));
    setSegments(out);setSource(text);
    const kept=out.filter(s=>s.rejected).length;
    setStatus(kept?`${kept} paragraph${kept>1?'s':''} kept as written because protected content did not survive.`:'Rewrite ready. Review each change.');
@@ -77,7 +86,7 @@ export function WritingView(){
    if(id){const {error}=await supabase.from('writing_documents').update({title:name,updated_at:new Date().toISOString()}).eq('id',id);if(error)throw error;}
    else{const {data,error}=await supabase.from('writing_documents').insert({title:name}).select('id').single();if(error)throw error;id=data.id as string;setDocId(id);}
    const {error}=await supabase.from('writing_versions').insert({document_id:id,original:source,revised:result,
-    settings:{model:useModel,rules:useRules,lexical,order},flags:segments.flatMap(s=>s.accepted?s.flags:[]),scores});
+    settings:{model:useModel?kind||'unknown':null,rules:useRules,lexical,order},flags:segments.flatMap(s=>s.accepted?s.flags:[]),scores});
    if(error)throw error;
    setStatus('Saved as a new version.');await loadDocs();
   }catch(e){setStatus(message(e));}finally{setBusy(false);}
@@ -106,12 +115,12 @@ export function WritingView(){
   <div className="writing-controls">
    <label><input type="checkbox" checked={useModel} onChange={e=>setUseModel(e.target.checked)}/> Paraphrase model</label>
    <label><input type="checkbox" checked={useRules} onChange={e=>setUseRules(e.target.checked)}/> Phrase rules</label>
-   <label>Word change<select className="input" value={lexical} disabled={!useModel} onChange={e=>setLexical(Number(e.target.value))}>{LEVELS.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
-   <label>Reordering<select className="input" value={order} disabled={!useModel} onChange={e=>setOrder(Number(e.target.value))}>{LEVELS.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+   <label>Word change<select className="input" value={lexical} disabled={!useModel||plain} onChange={e=>setLexical(Number(e.target.value))}>{LEVELS.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+   <label>Reordering<select className="input" value={order} disabled={!useModel||plain} onChange={e=>setOrder(Number(e.target.value))}>{LEVELS.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
    <button className="primary" disabled={busy||!text.trim()} onClick={()=>void run()}>{busy?'Working…':'Rewrite'}</button>
   </div>
   <input className="input" value={lockedText} onChange={e=>setLockedText(e.target.value)} placeholder="Terms to keep exactly, comma-separated"/>
-  <details className="writing-server"><summary>Paraphrase server</summary>
+  <details className="writing-server"><summary>Paraphrase server{kind&&`: ${kind==='dipper'?'DIPPER':'Humanizer'} running`}</summary>
    <input className="input" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://… address printed by the notebook"/>
    <input className="input" type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Token"/>
    {supabase&&<button className="secondary" onClick={()=>void saveSettings()}>Save</button>}
