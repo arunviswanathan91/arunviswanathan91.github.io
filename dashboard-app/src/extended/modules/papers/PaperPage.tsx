@@ -39,7 +39,7 @@ function Authors({ authors }: { authors: string[] }) {
 }
 
 export function PaperPage({ id }: { id: string }) {
-  const { data, error } = useLoad(async () => {
+  const { data, error, fresh } = useLoad(async () => {
     const [paper, links, notes] = await Promise.all([
       getOne<Paper>("papers", id),
       list<ProjectPaper>("project_papers", { eq: { paper_id: id } }),
@@ -49,6 +49,10 @@ export function PaperPage({ id }: { id: string }) {
   }, [id]);
 
   if (error) return <ErrorText error={error} />;
+
+  // Wait for the record itself, not the remembered copy of it: the editor keeps what it starts with.
+
+  if (!fresh) return <Loading rows={6} />;
   // Moving straight from one record to another, the previous one is still on hand while the
   // next loads: never build the editor from it, or its text could be saved into the new record.
   if (!data || (data.paper && data.paper.id !== id)) return <Loading rows={6} />;

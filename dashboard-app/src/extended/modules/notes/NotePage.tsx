@@ -14,8 +14,10 @@ import { TagInput } from "../../components/TagInput.tsx";
 import { Empty, ErrorText, SaveIndicator, Loading } from "../../components/ui.tsx";
 
 export function NotePage({ id }: { id: string }) {
-  const { data: note, error, loading } = useLoad(() => getOne<Note>("notes", id), [id]);
+  const { data: note, error, loading, fresh } = useLoad(() => getOne<Note>("notes", id), [id]);
   if (error) return <ErrorText error={error} />;
+  // Wait for the record itself, not the remembered copy of it: the editor keeps what it starts with.
+  if (!fresh) return <Loading rows={6} />;
   // Moving straight from one record to another, the previous one is still on hand while the
   // next loads: never build the editor from it, or its text could be saved into the new record.
   if ((loading && !note) || (note && note.id !== id)) return <Loading rows={6} />;

@@ -24,8 +24,10 @@ const SECTIONS: [keyof Meeting, string, string][] = [
 ];
 
 export function MeetingPage({ id }: { id: string }) {
-  const { data: meeting, error, loading } = useLoad(() => getOne<Meeting>("meetings", id), [id]);
+  const { data: meeting, error, loading, fresh } = useLoad(() => getOne<Meeting>("meetings", id), [id]);
   if (error) return <ErrorText error={error} />;
+  // Wait for the record itself, not the remembered copy of it: the editor keeps what it starts with.
+  if (!fresh) return <Loading rows={6} />;
   // Moving straight from one record to another, the previous one is still on hand while the
   // next loads: never build the editor from it, or its text could be saved into the new record.
   if ((loading && !meeting) || (meeting && meeting.id !== id)) return <Loading rows={6} />;
