@@ -19,4 +19,6 @@ npm run dev      # local server (needs VITE_SUPABASE_URL and VITE_SUPABASE_ANON_
 npm run check    # tests + typecheck + build, same as CI
 ```
 
+`package-lock.json` is committed and the deploy installs from it with `npm ci`, so a deploy uses the same library versions that were tested. After changing a dependency, run `npm install` and commit the updated lockfile.
+
 Only `main` is published. Database scripts are applied by hand; see `supabase/README.md` for the order.

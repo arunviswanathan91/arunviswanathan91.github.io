@@ -20,9 +20,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # npm ci installs exactly what package-lock.json records. With plain "npm install" and
+      # no lockfile, every deploy picked up whatever versions were newest that day, which is
+      # how the resume PDF broke without any code change.
       - name: Install dashboard
         working-directory: dashboard-app
-        run: npm install
+        run: npm ci --no-audit --no-fund
       - name: Check and build dashboard
         working-directory: dashboard-app
         env:
