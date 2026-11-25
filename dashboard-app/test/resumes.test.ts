@@ -98,7 +98,9 @@ test("itemFromMeta maps a looked-up paper onto a publication entry", () => {
   assert.equal(i.subtitle, "Cell Death Discovery");
   assert.equal(i.link, "https://doi.org/10.1038/x");
   assert.equal(i.start, "2026");
-  assert.equal(i.body, "Uttroside B, Lee C");
+  assert.equal(i.authors, "Uttroside B, Lee C");
+  assert.equal(i.body, undefined, "authors no longer go in the notes");
+  assert.equal(itemFromMeta({ title: "T", publication: "bioRxiv" }).kind, "preprint");
   assert.equal(itemFromMeta({ arxiv_id: "2401.12345", title: "T" }).link, "https://arxiv.org/abs/2401.12345");
   assert.equal(itemFromMeta({ title: "T" }).link, "");
 });
@@ -114,4 +116,95 @@ test("roundRobin deals items across columns like FlowCV skills", () => {
   assert.deepEqual(roundRobin(["comp", "exp", "pre", "add", "soft"], 2), [["comp", "pre", "soft"], ["exp", "add"]]);
   assert.deepEqual(roundRobin([1, 2, 3], 1), [[1, 2, 3]]);
   assert.deepEqual(roundRobin([], 3), [[], [], []]);
+});
+
+import { authorRuns, citationRuns, doiOf, isMe, linkText, pubGroups, pubKind, pubOptions, pubRole, shownLinks, sortNewestFirst, splitAuthors, DEFAULT_PUB } from "../src/extended/modules/resumes/pubs.ts";
+import { newItem as item, normalizeResume as norm } from "../src/extended/modules/resumes/model.ts";
+
+const ME = "Arun Viswanathan";
+test("your name is recognised in the forms author lists use", () => {
+  for (const a of ["Arun Viswanathan", "Viswanathan A", "Viswanathan, A.", "A. Viswanathan", "Viswanathan AG", "viswanathan arun", "Viswanathan A*"]) assert.equal(isMe(a, ME), true, a);
+  for (const a of ["Viswanathan S", "Anand Viswa", "Arun Kumar", "Harikumar KB", ""]) assert.equal(isMe(a, ME), false, a);
+  assert.equal(isMe("A. G. V.", ME, "A. G. V., Arun GV"), true, "an alias matches exactly");
+  assert.deepEqual(splitAuthors("Smith J, Lee K and Viswanathan A, et al."), ["Smith J", "Lee K", "Viswanathan A"]);
+  assert.deepEqual(splitAuthors("Smith, J.; Viswanathan, A."), ["Smith, J.", "Viswanathan, A."]);
+});
+
+test("long author lists are shortened but always keep your name", () => {
+  const many = "A1 X, A2 X, A3 X, A4 X, A5 X, Viswanathan A, A7 X, A8 X";
+  const text = (max: number, list = many) => authorRuns(list, ME, max).map((r) => (r.me ? `**${r.text}**` : r.text)).join(", ");
+  assert.equal(text(0), "A1 X, A2 X, A3 X, A4 X, A5 X, **Viswanathan A**, A7 X, A8 X");
+  assert.equal(text(6), "A1 X, A2 X, A3 X, A4 X, A5 X, **Viswanathan A**, et al.");
+  assert.equal(text(3), "A1 X, A2 X, …, **Viswanathan A**, et al.");
+  assert.equal(text(3, "A1 X, A2 X, A3 X, A4 X, Viswanathan A"), "A1 X, A2 X, …, **Viswanathan A**", "last author: nothing follows");
+  assert.equal(text(3, "Viswanathan A, B X, C X, D X"), "**Viswanathan A**, B X, C X, et al.");
+  assert.equal(text(3, "Viswanathan A, B X"), "**Viswanathan A**, B X");
+});
+
+test("a citation reads Authors. Title. Journal. Year;details. doi", () => {
+  const cite = (over: object, o = DEFAULT_PUB) => citationRuns(item(over), o, ME).map((r) => (r.bold ? `**${r.text}**` : r.italic ? `_${r.text}_` : r.text)).join("");
+  assert.equal(
+    cite({ authors: "Vijayan Y, James S, Viswanathan A, Aparna JS", title: "Targeting acid ceramidase enhances antitumor immune response in colorectal cancer", subtitle: "Journal of Advanced Research", start: "21 Dec 2023", details: "65:73-87", link: "https://doi.org/10.1016/j.jare.2023.12.013" }),
+    "Vijayan Y, James S, **Viswanathan A**, Aparna JS. Targeting acid ceramidase enhances antitumor immune response in colorectal cancer. _Journal of Advanced Research_. 2023;65:73-87. doi:10.1016/j.jare.2023.12.013",
+  );
+  assert.equal(cite({ title: "A title?", subtitle: "Cell.", start: "2026" }), "A title? _Cell_. 2026.", "no doubled full stops, and no authors is fine");
+  assert.equal(cite({ authors: "Viswanathan A, Harikumar KB", title: "T", subtitle: "bioRxiv", role: "cofirst", link: "https://example.org/x" }), "**Viswanathan A**, Harikumar KB. T. _bioRxiv_. (co-first author)");
+  assert.equal(cite({ authors: "Viswanathan A", title: "T", link: "https://doi.org/10.1/x" }, { ...DEFAULT_PUB, showDoi: false }), "**Viswanathan A**. T. ");
+  assert.equal(cite({ title: "Conference Publication: STAT3 in PDAC", subtitle: "Cancer Research" }), "STAT3 in PDAC. _Cancer Research_.", "the label the sub-heading already gives is dropped");
+  assert.equal(doiOf("https://doi.org/10.1038/s41420-026-1"), "10.1038/s41420-026-1");
+  assert.equal(doiOf("https://pubmed.ncbi.nlm.nih.gov/1/"), "");
+});
+
+test("kind and role are guessed until you choose them", () => {
+  assert.equal(pubKind(item({ title: "Uttroside B…", subtitle: "Cell Death Discovery" })), "article");
+  assert.equal(pubKind(item({ title: "A workflow", subtitle: "Bioprotocol (in communication)" })), "submitted");
+  assert.equal(pubKind(item({ title: "Uttroside B attenuates…", subtitle: "In communication" })), "submitted");
+  assert.equal(pubKind(item({ title: "Conference Publication: STAT3-Mediated Immune Dysfunction", subtitle: "Cancer Research" })), "conference");
+  assert.equal(pubKind(item({ title: "Abstract P29: STAT3…", subtitle: "Cancer Research, 86(13_Supplement)" })), "conference");
+  assert.equal(pubKind(item({ title: "Overweight status drives…", subtitle: "bioRxiv" })), "preprint");
+  assert.equal(pubKind(item({ title: "Meeting the challenge of abstract reasoning", subtitle: "Nature" })), "article", "words inside a title do not decide");
+  assert.equal(pubKind(item({ title: "T", subtitle: "bioRxiv", kind: "article" })), "article", "your choice wins");
+  assert.equal(pubRole(item({ authors: "Viswanathan A, Seby J" }), ME), "first");
+  assert.equal(pubRole(item({ authors: "Mohammed S, Viswanathan A" }), ME), "co");
+  assert.equal(pubRole(item({ authors: "Mohammed S, Viswanathan A", role: "cofirst" }), ME), "cofirst");
+  assert.equal(pubRole(item({}), ME), null, "no author list and no choice: first authorship is never assumed");
+});
+
+test("entries are grouped under sub-headings, empty groups left out, order kept", () => {
+  const items = [
+    item({ id: "a", title: "A", subtitle: "Cell", authors: "Viswanathan A, X Y", start: "2024" }),
+    item({ id: "b", title: "B", subtitle: "bioRxiv", authors: "Viswanathan A", start: "2026" }),
+    item({ id: "c", title: "C", subtitle: "Nature", authors: "X Y, Viswanathan A", start: "2023" }),
+    item({ id: "d", title: "Abstract P1: D", subtitle: "Cancer Research", start: "2025" }),
+  ];
+  const shape = (group: typeof DEFAULT_PUB.group) => pubGroups(items, { ...DEFAULT_PUB, group }, ME).map((g) => `${g.heading}=${g.items.map((i) => i.id).join("")}`);
+  assert.deepEqual(shape("none"), ["null=abcd"]);
+  assert.deepEqual(shape("kind"), ["Peer-reviewed articles=ac", "Preprints=b", "Conference papers and abstracts=d"]);
+  assert.deepEqual(shape("role"), ["First-author publications=ab", "Co-author publications=c", "Other publications=d"]);
+  assert.deepEqual(shape("both"), ["Peer-reviewed articles: first author=a", "Peer-reviewed articles: co-author=c", "Preprints=b", "Conference papers and abstracts=d"]);
+  assert.deepEqual(sortNewestFirst(items).map((i) => i.id), ["b", "d", "a", "c"]);
+  assert.deepEqual(pubOptions({}), DEFAULT_PUB);
+});
+
+test("older resumes pick up the new publication fields safely", () => {
+  const old = norm({ sections: [
+    { id: "s", type: "publications", title: "Publications", pub: { group: "role" }, items: [
+      { id: "1", title: "T", link: "https://doi.org/10.1/x", body: "Arun Viswanathan, K B Harikumar" },     // authors left in notes by the old DOI fill
+      { id: "2", title: "T", link: "https://doi.org/10.1/y", body: "Cover article. Cited 40 times, 2024" },  // real notes
+      { id: "3", title: "T", link: "", body: "Smith J, Lee K" },                                             // typed by hand, no link: left alone
+    ] },
+    { id: "e", type: "experience", title: "X", items: [{ id: "4", title: "Fellow", link: "https://x.org", body: "Cells, mice" }] },
+  ] });
+  const [p, e] = old.sections;
+  assert.equal(p.pub?.group, "role", "section options survive");
+  assert.deepEqual([p.items[0].authors, p.items[0].body], ["Arun Viswanathan, K B Harikumar", ""]);
+  assert.deepEqual([p.items[1].authors, p.items[1].body], [undefined, "Cover article. Cited 40 times, 2024"]);
+  assert.equal(p.items[2].authors, undefined);
+  assert.equal(e.items[0].body, "Cells, mice", "other sections are untouched");
+});
+
+test("research profile links", () => {
+  assert.equal(linkText({ label: "ORCID", url: "https://orcid.org/0000-0002-5682-5170" }), "ORCID 0000-0002-5682-5170");
+  assert.equal(linkText({ label: "Google Scholar", url: "https://scholar.google.com/citations?user=x" }), "Google Scholar");
+  assert.deepEqual(shownLinks([{ label: "ORCID", url: "" }, { label: "Portfolio", url: "" }, { label: "GitHub", url: "https://github.com/x" }]).map((l) => l.label), ["Portfolio", "GitHub"]);
 });
