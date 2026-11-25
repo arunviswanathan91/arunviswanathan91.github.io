@@ -1,0 +1,100 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { cleanChars, inspectChars } from "../src/lib/humanizer/inspect.ts";
+import { cleanLinks, cleanUrl, inspectLinks } from "../src/lib/humanizer/links.ts";
+import { protect, restore } from "../src/lib/humanizer/protect.ts";
+import { humanize } from "../src/lib/humanizer/rules.ts";
+import { checkFidelity } from "../src/lib/humanizer/fidelity.ts";
+import { compose, wordDiff } from "../src/lib/humanizer/diff.ts";
+import { styleMetrics } from "../src/lib/humanizer/metrics.ts";
+import { dipperBackend, rewrite } from "../src/lib/humanizer/paraphrase.ts";
+
+const SCI="CD8+ T cells from STAT3−/− mice showed reduced pSTAT3-Y705 after 2 µM inhibitor (P < 0.05) [3,4].";
+
+test("hidden characters are removed and joiners survive",()=>{
+ const malayalam="ന്‍",family="👨‍👩‍👧";
+ const dirty=`a​b﻿ c­de f ${malayalam} ${family}‮`;
+ const found=inspectChars(dirty);
+ assert.deepEqual(found.filter(f=>f.action==="keep").length,3);
+ const clean=cleanChars(dirty);
+ assert.equal(clean,`ab cde f ${malayalam} ${family}`);
+});
+
+test("tracking parameters go, identifiers and functional queries stay",()=>{
+ assert.equal(cleanUrl("https://pubmed.ncbi.nlm.nih.gov/12345678/?utm_source=chatgpt.com").cleaned,"https://pubmed.ncbi.nlm.nih.gov/12345678/");
+ assert.equal(cleanUrl("https://example.org/search?q=PDAC&utm_medium=x&page=2").cleaned,"https://example.org/search?q=PDAC&page=2");
+ assert.equal(cleanUrl("https://doi.org/10.1038/s41586-024-08025-4").cleaned,"https://doi.org/10.1038/s41586-024-08025-4");
+ assert.equal(cleanLinks("See https://example.org/a?utm_source=x."),"See https://example.org/a.");
+ assert.equal(inspectLinks("https://chatgpt.com/share/abc")[0].sharedChat,true);
+});
+
+test("scientific spans are protected and restored exactly",()=>{
+ const p=protect(SCI);
+ for(const span of ["CD8+","STAT3−/−","pSTAT3-Y705","2 µM","P < 0.05","[3,4]"])assert.ok(p.spans.includes(span),span);
+ assert.equal(restore(p.text,p.spans).text,SCI);
+ assert.ok(!/CD8|STAT3|0\.05/.test(p.text));
+});
+
+test("a lost or repeated placeholder is rejected",()=>{
+ const p=protect("IL-6 rose 3-fold.");
+ assert.equal(restore(p.text.replace("ZQX0Z",""),p.spans).ok,false);
+ assert.equal(restore(p.text+" ZQX0Z",p.spans).ok,false);
+});
+
+test("rules rewrite stock phrases, keep protected spans and are reproducible",()=>{
+ const text=`It is important to note that we utilize CD8+ T cells in order to measure pSTAT3-Y705. Moreover, 2 µM inhibitor was added (P < 0.05).`;
+ const a=humanize(text,{seed:7}),b=humanize(text,{seed:7});
+ assert.equal(a.text,b.text);
+ assert.ok(a.text.startsWith("We use CD8+ T cells to measure pSTAT3-Y705."),a.text);
+ for(const span of ["CD8+","pSTAT3-Y705","2 µM","P < 0.05"])assert.ok(a.text.includes(span),span);
+ assert.ok(!/moreover/i.test(a.text));
+ assert.deepEqual(checkFidelity(text,a.text),[]);
+});
+
+test("personal lexicon and locked terms are honoured",()=>{
+ const out=humanize("We leverage the tumour microenvironment model.",{lexicon:[{from:"model",to:["system"]}],locked:["tumour microenvironment model"]});
+ assert.equal(out.text,"We use the tumour microenvironment model.");
+});
+
+test("fidelity flags swapped values, lost negation and reversed direction",()=>{
+ const kinds=(a:string,b:string)=>checkFidelity(a,b).map(f=>f.kind);
+ assert.deepEqual(kinds("Controls had 12% and treated had 48%.","Controls had 48% and treated had 12%."),["number-order"]);
+ assert.deepEqual(kinds("There was no change in viability.","There was a change in viability."),["negation"]);
+ assert.deepEqual(kinds("IL-6 increased after treatment.","IL-6 decreased after treatment."),["direction"]);
+ assert.deepEqual(kinds("Survival was 14 months [2].","Survival was 41 months."),["number-missing","number-added","citation"]);
+ assert.deepEqual(kinds("Cells were treated for 24 h [2].","For 24 h, cells were treated [2]."),[]);
+});
+
+test("rewrite keeps the original when the back end drops protected content",async()=>{
+ const text="IL-6 rose 3-fold in treated mice.\n\nSTAT3−/− mice did not respond.";
+ const lossy=async(t:string)=>t.replace(/ZQX0Z\s*/,"");
+ const segs=await rewrite(text,lossy,{lexical:60,order:60,rules:false});
+ assert.equal(segs[0].accepted,false);
+ assert.match(segs[0].rejected??"",/dropped/);
+ assert.equal(compose(segs),text);
+});
+
+test("rewrite restores spans, flags meaning changes and supports undo",async()=>{
+ const text="Tumour volume did not increase in STAT3−/− mice (P < 0.05).";
+ const backend=async(t:string)=>t.replace("did not increase","increased");
+ const segs=await rewrite(text,backend,{lexical:40,order:0,rules:false});
+ assert.equal(segs[0].revised,"Tumour volume increased in STAT3−/− mice (P < 0.05).");
+ assert.deepEqual(segs[0].flags.map(f=>f.kind),["negation"]);
+ segs[0].accepted=false;
+ assert.equal(compose(segs),text);
+});
+
+test("the server back end sends the documented request",async()=>{
+ const calls:{url:string;auth:string;body:Record<string,unknown>}[]=[];
+ const backend=dipperBackend("https://x.example/",  "secret",async(url,init)=>{calls.push({url,auth:init.headers.authorization,body:JSON.parse(init.body)});return {ok:true,status:200,json:async()=>({text:" ok "})};});
+ assert.equal(await backend("hello",{lexical:60,order:20,prefix:"ctx"}),"ok");
+ assert.deepEqual(calls,[{url:"https://x.example/paraphrase",auth:"Bearer secret",body:{text:"hello",lexical:60,order:20,prefix:"ctx",seed:null}}]);
+ await assert.rejects(rewrite("a",null,{lexical:50,order:0}),/must be 0, 20/);
+});
+
+test("word diff and style metrics",()=>{
+ assert.deepEqual(wordDiff("a b c","a x c").filter(p=>p.type!=="same").map(p=>p.type+":"+p.text),["del:b","add:x"]);
+ const m=styleMetrics("Short one. This sentence is quite a lot longer than the first one. However, it ends.");
+ assert.equal(m.sentences,3);
+ assert.ok(m.lengthVariation>0&&m.connectorRate>0.3);
+});

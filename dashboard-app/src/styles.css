@@ -1355,3 +1355,18 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .briefing-setting .row{display:flex;gap:var(--s-3);align-items:center;flex-wrap:wrap}
 .briefing-toggle{display:inline-flex;gap:6px;align-items:center;font-size:var(--f-sm)}
 .briefing-setting input[type=time]{width:auto}
+
+.writing{display:flex;flex-direction:column;gap:12px;max-width:980px}
+.writing-toolbar,.writing-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.writing-toolbar input{flex:1;min-width:220px}
+.writing-controls label{display:flex;gap:6px;align-items:center;font-size:12px}.writing-controls select{width:auto}
+.writing-input{min-height:220px;line-height:1.6;resize:vertical}
+.writing-findings,.writing-server{display:flex;flex-direction:column;gap:6px;align-items:flex-start;border:1px solid var(--border,#cbd5d1);border-radius:12px;padding:12px;font-size:12px}
+.writing-findings small{overflow-wrap:anywhere}.writing-server[open] summary{margin-bottom:6px}.writing-server summary{cursor:pointer}
+.writing-status{font-size:12px;margin:0;opacity:.85}
+.writing-metrics{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;opacity:.85}
+.writing-segments{display:flex;flex-direction:column;gap:10px}
+.writing-segment{border:1px solid var(--border,#cbd5d1);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.writing-segment p{margin:0;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.writing-segment.rejected{border-style:dashed}
+.writing-add{background:rgba(31,107,79,.16);border-radius:3px}.writing-del{text-decoration:line-through;opacity:.5}
+.writing-flag{color:#b7791f}

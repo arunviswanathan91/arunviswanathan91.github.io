@@ -2,7 +2,7 @@
 // so a phone can show a shorter menu than a desktop. Hiding an item never removes the
 // page: it stays reachable from Search & commands and from links elsewhere.
 import { useSyncExternalStore } from "react";
-import { Highlighter, type LucideIcon } from "lucide-react";
+import { Highlighter, PenLine, type LucideIcon } from "lucide-react";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
 import { SECTIONS, type SectionId } from "../extended/lib/sections";
 import { loadRaw, save } from "./persist";
@@ -23,6 +23,7 @@ export const MENU_GROUPS: MenuGroup[] = [
   { id: "workflows", label: "Workflows", items: [
     ...ENTITY_ORDER.filter((k) => k !== "tasks").map((k) => ({ key: viewKey(k), label: ENTITIES[k].plural, icon: ENTITIES[k].icon as LucideIcon })),
     { key: viewKey("clippings"), label: "Clippings", icon: Highlighter },
+    { key: viewKey("writing"), label: "Writing", icon: PenLine },
   ] },
 ];
 

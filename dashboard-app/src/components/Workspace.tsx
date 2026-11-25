@@ -21,6 +21,7 @@ import { ProjectComposer } from "./ProjectComposer";
 import { ProjectView } from "./projects/ProjectView";
 import { PublicationView } from "./publications/PublicationView";
 import { ClippingsView } from "./ClippingsView";
+import { WritingView } from "./WritingView";
 import { TrashView } from "./TrashView";
 import type { EntityKey } from "../entities/types";
 
@@ -85,7 +86,7 @@ function Shell(){
  const currentPublication=ui.publicationId?tables.publications.byId.get(ui.publicationId):null;
  const sharedPublication=projectOnly&&sharedProject&&currentPublication?.project_id===sharedProject.id?currentPublication:null;
  const sectionLabel=(SECTIONS as Record<string,{label:string}|undefined>)[route.path[0]]?.label;
- const title=ui.view==="extended"?sectionLabel??"Workspace":ui.view==="clippings"?"Clippings":ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
+ const title=ui.view==="extended"?sectionLabel??"Workspace":ui.view==="clippings"?"Clippings":ui.view==="writing"?"Writing":ui.view==="home"?"Home":ui.view==="settings"?"Settings":ui.view==="trash"?"Trash":ui.view==="project"?(currentProject?.name??"Project"):
   ui.view==="publication"?(String(currentPublication?.title??"")||"Publication"):ENTITIES[ui.view as EntityKey].plural;
 
  useEffect(()=>{
@@ -132,6 +133,7 @@ function Shell(){
      :ui.view==="extended"?<Extension/>
      :ui.view==="home"?(ui.scope==="all"?<><Extension home/><HomeView compact/></>:<HomeView/>)
      :ui.view==="clippings"?<ClippingsView/>
+     :ui.view==="writing"?<WritingView/>
      :ui.view==="settings"?<SettingsView/>
      :ui.view==="trash"?<TrashView/>
      :ui.view==="project"&&typeof ui.scope==="string"?<ProjectView projectId={ui.scope}/>

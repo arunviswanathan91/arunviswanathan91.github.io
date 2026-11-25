@@ -1,7 +1,7 @@
 import { SECTIONS, type SectionId } from "../extended/lib/sections";
 import { href, useRoute } from "../extended/lib/route";
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Highlighter, Home, Inbox, Moon, PanelLeftClose, PanelLeftOpen, Plus, Send, Settings, Sun, SunMoon, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Highlighter, Home, Inbox, Moon, PanelLeftClose, PanelLeftOpen, PenLine, Plus, Send, Settings, Sun, SunMoon, Trash2 } from "lucide-react";
 import { useData, useUi } from "../lib/store";
 import { ENTITIES, ENTITY_ORDER } from "../entities";
 import type { Theme, ViewKey } from "../lib/store";
@@ -96,6 +96,7 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
     </button>;
    })}
    {workflows.open&&menu.isShown(viewKey("clippings"))&&<button className={ui.view==="clippings"?"active":""} title="Clippings" onClick={()=>go("clippings")}><span className="sec-chip"><Highlighter/></span><span className="nav-text">Clippings</span></button>}
+   {workflows.open&&menu.isShown(viewKey("writing"))&&<button className={ui.view==="writing"?"active":""} title="Writing" onClick={()=>go("writing")}><span className="sec-chip"><PenLine/></span><span className="nav-text">Writing</span></button>}
    <button className={ui.view==="trash"?"active":""} aria-current={ui.view==="trash"?"page":undefined}
     title={collapsed?"Trash":undefined} onClick={()=>go("trash")}>
     <span className="sec-chip"><Trash2/></span><span className="nav-text">Trash</span><span className="nav-count">{trashItems.rows.length}</span>
