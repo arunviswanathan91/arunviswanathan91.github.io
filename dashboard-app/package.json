@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-pdf/renderer": "4.9.0",
+    "@react-pdf/renderer": "4.9.1",
     "@supabase/supabase-js": "^2.57.0",
     "fflate": "0.8.3",
     "lucide-react": "^0.468.0",
@@ -27,5 +27,8 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.2",
     "vite": "^6.0.7"
+  },
+  "overrides": {
+    "pdfkit": "0.21.0"
   }
 }
