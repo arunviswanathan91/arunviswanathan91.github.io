@@ -11,7 +11,7 @@ export type Protection="placeholder"|"verify";
 export interface RewriteOptions extends ParaphraseOptions{locked?:string[];lexicon?:LexiconEntry[];rules?:boolean;protection?:Protection}
 export const LEVELS=[0,20,40,60,80,100];
 type Fetch=(url:string,init:{method:string;headers:Record<string,string>;body:string})=>Promise<{ok:boolean;status:number;json():Promise<unknown>}>;
-/** Back end for the server in tools/dipper-server, whichever model it runs. */
+/** Back end for the paraphrase server, whichever model it runs. */
 export function dipperBackend(url:string,token:string,fetchImpl:Fetch=(u,i)=>fetch(u,i)):Backend{
  const endpoint=url.replace(/\/+$/,"")+"/paraphrase";
  return async(text,o)=>{
