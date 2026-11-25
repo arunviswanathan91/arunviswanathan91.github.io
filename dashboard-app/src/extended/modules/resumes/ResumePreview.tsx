@@ -5,6 +5,8 @@ import {
   type ResumeData, type ResumeItem, type ResumeSection, type ResumeStyle,
 } from "./model.ts";
 
+import { citationRuns, linkText, pubGroups, pubOptions, shownLinks } from "./pubs.ts";
+
 interface Opts { below: boolean; full: boolean; left: boolean; swap: boolean }
 
 function Bullets({ s, body }: { s: ResumeSection; body: string }) {
@@ -37,6 +39,28 @@ function Entry({ s, i, o }: { s: ResumeSection; i: ResumeItem; o: Opts }) {
         {(!o.left || o.full) && side}
       </div>
       <Bullets s={s} body={i.body} />
+    </div>
+  );
+}
+
+/** Publications: sub-headings by kind or role, each entry a citation with your name in bold. */
+function Pubs({ s, name, o }: { s: ResumeSection; name: string; o: Opts }) {
+  const opt = pubOptions(s);
+  return (
+    <div className="rv-items">
+      {pubGroups(s.items, opt, name).map((g, n) => (
+        <div key={n} className="rv-pubgroup">
+          {g.heading && <h3 className="rv-subhead">{g.heading}</h3>}
+          {opt.style === "classic" ? g.items.map((i) => <Entry key={i.id} s={s} i={i} o={o} />) : (
+            <ol className={`rv-cites${opt.numbered ? "" : " rv-nonum"}`}>
+              {g.items.map((i) => {
+                const cite = citationRuns(i, opt, name).map((r, k) => r.bold ? <strong key={k}>{r.text}</strong> : r.italic ? <em key={k}>{r.text}</em> : <span key={k}>{r.text}</span>);
+                return <li key={i.id} className="rv-cite">{i.link ? <a href={i.link}>{cite}</a> : cite}<Bullets s={s} body={i.body} /></li>;
+              })}
+            </ol>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -119,7 +143,7 @@ export function ResumePreview({ data }: { data: ResumeData }) {
     "--rv-lh": st.lineHeight, "--rv-gap": `${st.spacing}pt`, "--rv-mx": `${st.marginX}mm`, "--rv-my": `${st.marginY}mm`,
     "--rv-w": `${page.w}mm`, "--rv-h": `${page.h}mm`,
   } as CSSProperties;
-  const links = p.links.filter((l) => l.label || l.url);
+  const links = shownLinks(p.links);
   const sections = visibleSections(data);
   const summary = p.summary.trim();
   const base = { below: st.subtitle === "below", full: st.entryLayout === "full", left: st.datePos === "left" };
@@ -130,7 +154,7 @@ export function ResumePreview({ data }: { data: ResumeData }) {
         <div className="rv-contact">
           {p.email && <span>{p.email}</span>}
           {p.phone && <span>{p.phone}</span>}
-          {links.map((l, n) => <span key={n}>{l.url ? <a href={l.url}>{l.label || l.url}</a> : l.label}</span>)}
+          {links.map((l, n) => <span key={n}>{l.url ? <a href={l.url}>{linkText(l)}</a> : l.label}</span>)}
           {p.location && <span>{p.location}</span>}
         </div>
         {summary && st.summaryInHeader && <p className="rv-summary">{p.summary}</p>}
@@ -146,7 +170,7 @@ export function ResumePreview({ data }: { data: ResumeData }) {
         return (
           <section key={s.id} className="rv-section">
             <h2>{s.title}</h2>
-            {asGroup ? <Group s={s} st={st} /> : (
+            {s.type === "publications" ? <Pubs s={s} name={p.name} o={o} /> : asGroup ? <Group s={s} st={st} /> : (
               <div className="rv-items">
                 {(grouped ? groupRuns(s.items) : s.items.map((i) => [i])).map((run) =>
                   run.length > 1 ? <Promoted key={run[0].id} s={s} run={run} o={o} /> : <Entry key={run[0].id} s={s} i={run[0]} o={o} />)}

@@ -738,6 +738,15 @@
 .extension-workspace .rv-h-bar h2 { border-left: 3pt solid var(--rv-accent); padding-left: 5pt; }
 .extension-workspace .rv-h-dotted h2 { border-bottom: 1px dotted var(--rv-accent); }
 .extension-workspace .rv-entry { margin-bottom: var(--rv-gap); break-inside: avoid-page; }
+.extension-workspace .rv-pubgroup + .rv-pubgroup { margin-top: var(--rv-gap); }
+.extension-workspace .rv-page .rv-subhead { margin: 0 0 calc(var(--rv-gap) * 0.75); font: italic 700 var(--rv-base)/1.3 var(--rv-font); color: inherit; text-transform: none; letter-spacing: 0; break-after: avoid; }
+.extension-workspace .rv-cites { margin: 0; padding-left: 1.5em; }
+.extension-workspace .rv-cites.rv-nonum { list-style: none; padding-left: 0; }
+.extension-workspace .rv-cite { margin-bottom: var(--rv-gap); break-inside: avoid-page; }
+.extension-workspace .rv-cite a { color: inherit; text-decoration: none; }
+.extension-workspace .rb-pubopts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; }
+.extension-workspace .rb-pubopts .wide { grid-column: 1 / -1; }
+.extension-workspace .rb-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .extension-workspace .rv-row { display: flex; justify-content: space-between; gap: 16pt; }
 .extension-workspace .rv-row.rv-full { flex-direction: column; gap: 0; }
 .extension-workspace .rv-main { font-size: var(--rv-entry); min-width: 0; }

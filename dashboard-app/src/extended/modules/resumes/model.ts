@@ -1,6 +1,8 @@
 // Resume document model. One resume = one JSON document: a profile block, an ordered list of
 // sections (each with items) and a style. Everything here is pure so it can be unit-tested.
 
+import type { PubKind, PubOptions, PubRole } from "./pubs.ts";
+
 export interface ResumeLink { label: string; url: string }
 export interface ResumeProfile {
   name: string; headline: string; email: string; phone: string; location: string;
@@ -14,11 +16,20 @@ export interface ResumeItem {
   link: string;
   start: string; end: string; location: string;
   body: string;         // one bullet per line
+  // Publications only (see pubs.ts). All optional: older entries have none of them.
+  authors?: string;     // "Smith J, Viswanathan A, Lee K"
+  details?: string;     // volume(issue):pages, e.g. "65:73-87"
+  kind?: PubKind;       // unset: guessed from the journal and title
+  role?: PubRole;       // unset: worked out from the author list
 }
 export type SectionType =
   | "education" | "experience" | "skills" | "languages" | "certification" | "interests" | "projects" | "courses"
   | "awards" | "volunteering" | "publications" | "references" | "conferences" | "scores" | "teaching" | "custom";
-export interface ResumeSection { id: string; type: SectionType; title: string; hidden?: boolean; items: ResumeItem[] }
+export interface ResumeSection {
+  id: string; type: SectionType; title: string; hidden?: boolean; items: ResumeItem[];
+  /** Publications sections: how entries are cited and grouped (defaults in pubs.ts). */
+  pub?: Partial<PubOptions>;
+}
 export type HeadingStyle = "underline" | "box" | "plain" | "bar" | "overline" | "dotted";
 /** Customize tab. Font sizes are in pt; the *Size fields are offsets from the base size (as in the reference builder). */
 export type DisplayMode = "grid" | "rows" | "compact" | "bubble";
@@ -99,7 +110,7 @@ export const SECTION_TYPES: Record<SectionType, SectionTypeDef> = {
   courses: { label: "Courses", blurb: "Online or in-person courses and trainings completed.", defaultTitle: "Courses", labels: { title: "Course", subtitle: "Institution", link: "Link", dates: "Dates", body: "Description" } },
   awards: { label: "Awards", blurb: "Awards and recognitions from industry or academia.", defaultTitle: "Awards", labels: { title: "Award", subtitle: "Awarded by", dates: "Dates", body: "Description" } },
   volunteering: { label: "Volunteering and Community Involvement", blurb: "Memberships or volunteering, including your role.", defaultTitle: "Volunteering and Community Involvement", labels: { title: "Role", subtitle: "Organisation", link: "Link", dates: "Dates", location: "Location", body: "Description" } },
-  publications: { label: "Publications", blurb: "Publications, articles or books you wrote or contributed to.", defaultTitle: "Publications", labels: { title: "Citation", subtitle: "Journal", link: "Link", dates: "Date", body: "Notes" } },
+  publications: { label: "Publications", blurb: "Papers, preprints and conference abstracts, cited with authors and grouped by kind.", defaultTitle: "Publications", labels: { title: "Title", subtitle: "Journal or conference", link: "DOI or link", dates: "Date", body: "Notes" } },
   references: { label: "References", blurb: "References from managers or coworkers, with contact details.", defaultTitle: "References", labels: { title: "Name", subtitle: "Position, organisation", body: "Contact details" } },
   conferences: { label: "Conferences", blurb: "Conferences attended or presented at.", defaultTitle: "Conferences", labels: { title: "Presentation or event", subtitle: "Conference", link: "Link", dates: "Dates", location: "Location", body: "Description" } },
   scores: { label: "Test Scores", blurb: "Exam and test results.", defaultTitle: "Test Scores", labels: { title: "Test", subtitle: "Score", dates: "Date" } },
@@ -174,9 +185,22 @@ export function normalizeResume(raw: unknown): ResumeData {
       type: s.type in SECTION_TYPES ? s.type : "custom",
       title: s.title ?? SECTION_TYPES[(s.type in SECTION_TYPES ? s.type : "custom") as SectionType].defaultTitle,
       hidden: !!s.hidden,
-      items: (Array.isArray(s.items) ? s.items : []).map((i) => newItem({ ...i, id: i.id || uid() })),
+      ...(s.pub && typeof s.pub === "object" ? { pub: s.pub } : {}),
+      items: (Array.isArray(s.items) ? s.items : []).map((i) => newItem({ ...i, id: i.id || uid(), ...(s.type === "publications" ? authorsFromNotes(i) : {}) })),
     })),
   };
+}
+
+/**
+ * Entries filled from a DOI used to put the author list in the notes. Move it to the authors field,
+ * but only when the notes are plainly that: one line of comma-separated names on an entry with a link.
+ */
+function authorsFromNotes(i: Partial<ResumeItem>): Partial<ResumeItem> {
+  const body = (i.body ?? "").trim();
+  if (i.authors !== undefined || !body || !i.link || body.includes("\n") || /[.:;!?]\s|\d{3}/.test(body)) return {};
+  const names = body.split(",").map((n) => n.trim());
+  if (names.length < 2 || names.some((n) => !n || n.split(/\s+/).length > 4)) return {};
+  return { authors: body, body: "" };
 }
 
 /** Deep copy with fresh ids, so a duplicate never shares ids with its source. */
@@ -206,7 +230,7 @@ export function dateRange(i: Pick<ResumeItem, "start" | "end">): string {
 /** What shows on the page: hidden sections and items are dropped, as are sections left empty. */
 /** A freshly added, still-blank entry should not print an empty heading. */
 export function hasContent(i: ResumeItem): boolean {
-  return [i.title, i.subtitle, i.body, i.start, i.end, i.location, i.link].some((v) => v.trim());
+  return [i.title, i.subtitle, i.body, i.start, i.end, i.location, i.link, i.authors ?? ""].some((v) => v.trim());
 }
 
 export function visibleSections(d: ResumeData): ResumeSection[] {
