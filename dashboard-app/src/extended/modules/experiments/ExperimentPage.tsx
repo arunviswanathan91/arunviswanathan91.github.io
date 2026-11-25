@@ -18,8 +18,10 @@ import { dateSpan } from "./ExperimentRows.tsx";
 import { parseSamples, repeatOf, samplesSummary, techniqueOptions } from "./logic.ts";
 
 export function ExperimentPage({ id }: { id: string }) {
-  const { data: experiment, error, loading } = useLoad(() => getOne<Experiment>("experiments", id), [id]);
+  const { data: experiment, error, loading, fresh } = useLoad(() => getOne<Experiment>("experiments", id), [id]);
   if (error) return <ErrorText error={error} />;
+  // Wait for the record itself, not the remembered copy of it: the editor keeps what it starts with.
+  if (!fresh) return <Loading rows={8} />;
   // Moving straight from one record to another, the previous one is still on hand while the
   // next loads: never build the editor from it, or its text could be saved into the new record.
   if ((loading && !experiment) || (experiment && experiment.id !== id)) return <Loading rows={8} />;

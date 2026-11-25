@@ -69,6 +69,8 @@ export function affects(reads: Groups, changed: Groups): boolean {
 
 const LIMIT = 150;
 const cache = new Map<string, unknown>();
+/** Which groups each cached page reads. A key missing here (saved by an older visit) counts as "everything". */
+const readsOf = new Map<string, Groups>();
 
 /** Short stable key for a loader: its source plus its deps (FNV-1a, 52 bits). */
 export function cacheKey(source: string, deps: unknown[]): string {
@@ -85,12 +87,31 @@ export function cacheKey(source: string, deps: unknown[]): string {
 
 export const peek = (key: string) => cache.get(key);
 export const has = (key: string) => !!key && cache.has(key);
-export function put(key: string, value: unknown) {
+export function put(key: string, value: unknown, reads: Groups = null) {
   if (!key) return;
   cache.delete(key);
   cache.set(key, value);
-  if (cache.size > LIMIT) cache.delete(cache.keys().next().value as string);
+  readsOf.set(key, reads);
+  if (cache.size > LIMIT) { const oldest = cache.keys().next().value as string; cache.delete(oldest); readsOf.delete(oldest); }
   schedulePersist();
+}
+
+/**
+ * Forget the remembered copy of every page that reads what a save just changed.
+ *
+ * An editor that saves as you type does not announce each save (reloading the open
+ * page would fight the typing), so nothing refreshed the remembered copy. Opening
+ * the record again then drew the copy from before the edits, and the editor started
+ * from it: the text looked unsaved, and the next keystroke saved the old text over
+ * the new. With the copy gone, the next visit waits for the real record.
+ */
+export function invalidate(changed: Groups) {
+  let removed = false;
+  for (const key of [...cache.keys()]) {
+    if (!affects(readsOf.get(key) ?? null, changed)) continue;
+    cache.delete(key); readsOf.delete(key); removed = true;
+  }
+  if (removed) schedulePersist();
 }
 
 // ── Saved copy in the browser ──────────────────────────────────────────────
@@ -130,10 +151,10 @@ export function hydrate(userId: string, buildId: string) {
   try {
     const raw = s.getItem(STORE);
     if (!raw) return;
-    const saved = JSON.parse(raw) as { user: string; build: string; entries: [string, unknown][] };
+    const saved = JSON.parse(raw) as { user: string; build: string; entries: [string, unknown, string[] | null | undefined][] };
     // Another account, or an older version of the app (its loaders, and so its keys, differ).
     if (saved.user !== userId || saved.build !== buildId) { s.removeItem(STORE); return; }
-    for (const [k, v] of saved.entries) if (!cache.has(k)) cache.set(k, v);
+    for (const [k, v, reads] of saved.entries) if (!cache.has(k)) { cache.set(k, v); readsOf.set(k, Array.isArray(reads) ? new Set(reads) : null); }
   } catch { s.removeItem(STORE); }
 }
 
@@ -152,7 +173,8 @@ export function persist() {
     const json = toSafeJson(v);
     if (json === undefined || json.length > MAX_BYTES / 4) continue;
     if (bytes + json.length > MAX_BYTES) break;
-    parts.unshift(`[${JSON.stringify(k)},${json}]`);
+    const reads = readsOf.get(k);
+    parts.unshift(`[${JSON.stringify(k)},${json},${reads ? JSON.stringify([...reads]) : "null"}]`);
     bytes += json.length;
   }
   try {
@@ -165,6 +187,7 @@ export function persist() {
 /** Forget everything, in memory and in the browser (sign-out). */
 export function clear() {
   cache.clear();
+  readsOf.clear();
   if (timer) clearTimeout(timer);
   timer = undefined;
   user = "";

@@ -20,11 +20,13 @@ import { DeadlineForm } from "./DeadlineForm.tsx";
 import { deadlineTone, isOpenDeadline } from "./DeadlineRows.tsx";
 
 export function DeadlinePage({ id }: { id: string }) {
-  const { data, error } = useLoad(async () => {
+  const { data, error, fresh } = useLoad(async () => {
     const [deadline, tasks] = await Promise.all([getOne<Deadline>("deadlines", id), list<Task>("tasks", { eq: { deadline_id: id } })]);
     return { deadline, tasks };
   }, [id]);
   if (error) return <ErrorText error={error} />;
+  // Wait for the record itself, not the remembered copy of it: the editor keeps what it starts with.
+  if (!fresh) return <Loading rows={6} />;
   // Moving straight from one record to another, the previous one is still on hand while the
   // next loads: never build the editor from it, or its text could be saved into the new record.
   if (!data || (data.deadline && data.deadline.id !== id)) return <Loading rows={6} />;

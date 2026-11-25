@@ -19,8 +19,10 @@ interface Row { id: string; title: string; data: unknown }
 
 export function ResumeEditor({ id }: { id: string }) {
   useEffect(loadResumeFonts, []); // the font picker shows each typeface by name
-  const { data: row, error, loading } = useLoad(() => getOne<Row>("resumes", id), [id]);
+  const { data: row, error, loading, fresh } = useLoad(() => getOne<Row>("resumes", id), [id]);
   if (error) return <ErrorText error={error} />;
+  // Wait for the record itself, not the remembered copy of it: the editor keeps what it starts with.
+  if (!fresh) return <Loading rows={8} />;
   // Moving straight from one record to another, the previous one is still on hand while the
   // next loads: never build the editor from it, or its text could be saved into the new record.
   if ((loading && !row) || (row && row.id !== id)) return <Loading rows={8} />;
