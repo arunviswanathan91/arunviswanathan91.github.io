@@ -1371,3 +1371,36 @@ a.resource-button{color:var(--text);text-decoration:none}
 .publication-linked-group a:hover{color:var(--accent)}
 .publication-linked-group a>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .publication-linked-group a small{flex:none;color:var(--text-3);font-size:var(--f-2xs);font-weight:400}
+
+/* ============================================================================
+   Phones and the installed app
+   ========================================================================= */
+/* Edge to edge (viewport-fit=cover): keep clear of the notch, the rounded corners and the
+   home indicator. The insets are zero in an ordinary browser tab. */
+.topbar{height:calc(48px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top);
+ padding-left:max(var(--s-5),env(safe-area-inset-left));padding-right:max(var(--s-5),env(safe-area-inset-right))}
+.page{padding-bottom:max(var(--s-6),env(safe-area-inset-bottom))}
+.sidebar{padding-top:max(var(--s-3),env(safe-area-inset-top));padding-bottom:max(var(--s-3),env(safe-area-inset-bottom));
+ padding-left:max(var(--s-2),env(safe-area-inset-left))}
+.app-status svg{width:15px;height:15px;vertical-align:-2px;margin-right:4px}
+/* Being offline or having an update waiting is information, not an error. */
+.data-notice.app-status{border-color:var(--border-strong);background:var(--surface-2);color:var(--text-2)}
+@media (max-width:860px){
+ .topbar{padding-left:max(var(--s-3),env(safe-area-inset-left));padding-right:max(var(--s-3),env(safe-area-inset-right))}
+ /* Dialogs become sheets that fill the screen, so long forms scroll in one place. */
+ .modal,.modal-lg{width:100vw;max-width:100vw;max-height:100dvh;height:100dvh;margin:0}
+ .modal .modal-inner{height:100%;border-radius:0;border:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+ .modal-actions{flex-wrap:wrap}
+ .palette{margin:0;width:100vw}
+}
+/* Touch screens: controls big enough for a finger, and text fields at 16px so iOS does not
+   zoom the page when one is tapped. */
+@media (pointer:coarse){
+ /* !important: many fields set a smaller size with a more specific rule. */
+ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea{font-size:16px!important}
+ .input,.input-compact,select,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]){min-height:40px}
+ .icon-button,.nav-toggle{min-width:40px;min-height:40px}
+ .chip-button,button.primary,button.secondary,button.small,.danger-button{min-height:40px}
+ .topbar .chip-button .kbd-hint{display:none}
+ main button:not(.link-button){min-height:36px}
+}

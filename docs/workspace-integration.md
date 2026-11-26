@@ -25,6 +25,10 @@ Run `supabase/cross-links.sql` last. Each link shows on both sides:
 - **Agenda, calendar feed, Telegram**: thesis chapter due dates, the thesis submission date and goal due dates.
 - **Search and backup** read the clipper's `clippings` table; the backup also holds resumes.
 
+## Phone app
+
+The dashboard installs as an app: on Android or desktop Chrome use Settings → App → Install app; on iPhone open it in Safari, tap Share, then “Add to Home Screen”. `public/manifest.webmanifest` and `public/icons/` describe it (`scripts/make-icons.mjs` regenerates the icons). `public/sw.js` keeps the build's own files so the app opens offline and never handles requests to the database; pages opened before show their last content, and saving needs a connection. A notice offers a reload when a newer release is live.
+
 ## Database setup
 
 Apply `supabase/workspace-extension.sql` after the existing schema, project collaboration and Trash scripts. It is additive and rerunnable. New private tables/RPCs use the `ws_` prefix. Security-invoker views adapt the original projects/tasks. New tables enforce account-level RLS and related-record ownership. The same authenticated client is used; no new service key or login is needed. Never run Justin's single-owner database setup against this database.
