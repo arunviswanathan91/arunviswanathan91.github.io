@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, CheckSquare, FileText, FlaskConical, Folder, NotebookPen, Plane, Search as SearchIcon, Target, Users } from "lucide-react";
+import { CalendarClock, CheckSquare, FileText, FlaskConical, Folder, Highlighter, NotebookPen, Plane, Search as SearchIcon, Target, Users } from "lucide-react";
 import { rpc } from "../../lib/db.ts";
 import { fmtDate } from "../../lib/dates.ts";
 import { go, href, setQuery, type Route } from "../../lib/route.ts";
@@ -12,7 +12,7 @@ export const KIND = {
   job: {label:"Job",icon:FileText,path:()=>"#/jobs"},
   read: {label:"Read",icon:FileText,path:()=>"#/reads"},
   reminder: {label:"Reminder",icon:CalendarClock,path:()=>"#/reminders"},
-  clipping: {label:"Clipping",icon:FileText,path:()=>"#/clippings"},
+  clipping: {label:"Clipping",icon:Highlighter,path:(h:SearchHit)=>`#/clippings?id=${h.id}`},
   project: { label: "Project", icon: Folder, path: (h: SearchHit) => `projects/${h.id}` },
   task: { label: "Task", icon: CheckSquare, path: (h: SearchHit) => (h.project_id ? `projects/${h.project_id}?tab=tasks` : "tasks?view=all") },
   paper: { label: "Paper", icon: FileText, path: (h: SearchHit) => `papers/${h.id}` },

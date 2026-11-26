@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { AppStatus } from "./AppStatus";
 import { CircleUserRound, Command, Menu, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { StoreProvider, useData, useUi } from "../lib/store";
@@ -118,6 +119,7 @@ function Shell(){
    </header>
 
    <div className="page">
+    <AppStatus/>
     {notices.map(n=><p key={n.key} className="data-notice" role="alert">
      <span>{n.message}</span>
      <button className="icon-button" onClick={n.dismiss} aria-label="Dismiss"><X/></button>

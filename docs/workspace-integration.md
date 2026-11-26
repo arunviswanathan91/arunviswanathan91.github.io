@@ -10,6 +10,25 @@ The task planner and project overview use the original task/project records. **W
 
 Search and Ctrl/Cmd+K search both original work and new research records. Settings links to backup, restore and finance preferences (default INR/Asia/Kolkata).
 
+## Links between sections
+
+Run `supabase/cross-links.sql` last. Each link shows on both sides:
+
+- **Experiments**: name a thesis chapter; list their own tasks and notes. A thesis chapter lists its experiments.
+- **Manuscripts**: the publication page has a Linked panel with the experiments, thesis chapters, trips and deadlines that point at it. Thesis, trip and deadline pages can open their manuscript.
+- **Projects**: Trips and Goals tabs; documents open their Drive link.
+- **Notes**: can name a meeting and an experiment; a meeting lists its notes.
+- **People**: the meeting participant picker also offers project people; choosing one creates a contact linked to that person (`ws_contacts.person_id`), so the two lists stay separate without duplicates.
+- **Library**: a clipping whose DOI or PMID matches a library paper links to it, or can be added as one; reads can name a library paper; the paper page lists both.
+- **Resumes and Website**: publications can be picked from the Publications tracker as well as typed or fetched by DOI.
+- **Applications**: record the resume used; an opportunity opens its application.
+- **Agenda, calendar feed, Telegram**: thesis chapter due dates, the thesis submission date and goal due dates.
+- **Search and backup** read the clipper's `clippings` table; the backup also holds resumes.
+
+## Phone app
+
+The dashboard installs as an app: on Android or desktop Chrome use Settings → App → Install app; on iPhone open it in Safari, tap Share, then “Add to Home Screen”. `public/manifest.webmanifest` and `public/icons/` describe it (`scripts/make-icons.mjs` regenerates the icons). `public/sw.js` keeps the build's own files so the app opens offline and never handles requests to the database; pages opened before show their last content, and saving needs a connection. A notice offers a reload when a newer release is live.
+
 ## Database setup
 
 Apply `supabase/workspace-extension.sql` after the existing schema, project collaboration and Trash scripts. It is additive and rerunnable. New private tables/RPCs use the `ws_` prefix. Security-invoker views adapt the original projects/tasks. New tables enforce account-level RLS and related-record ownership. The same authenticated client is used; no new service key or login is needed. Never run Justin's single-owner database setup against this database.

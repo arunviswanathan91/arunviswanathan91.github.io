@@ -11,6 +11,7 @@ import { FieldInput } from "../entity/FieldInput";
 import { GmailLinkPicker } from "../entity/GmailLinkPicker";
 import { useEntityCtx } from "../entity/ctx";
 import { PublicationLifecycle } from "./PublicationLifecycle";
+import { PublicationLinked } from "./PublicationLinked";
 import { PublicationWorkflow } from "./PublicationWorkflow";
 import { ReviewTasks } from "./ReviewTasks";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
@@ -78,6 +79,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
     <section className="panel publication-workflow-panel">
      <PublicationWorkflow publicationId={publication.id} canEdit={canEdit} canDelete={isOwner}/>
     </section>
+    <PublicationLinked publicationId={publication.id}/>
     {canEdit&&String(publication.review_comments??"").trim()&&<ReviewTasks key={`rt-${publication.id}`} publication={publication}/>}
     <PublicationNotes key={publication.id} publicationId={publication.id} canEdit={canEdit} canDelete={isOwner}/>
    </main>

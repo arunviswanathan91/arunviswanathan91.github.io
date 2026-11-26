@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ask } from "../../../lib/dialogs.tsx";
+import { supabase as core } from "../../../lib/supabase";
+import { normDoi, normPmid, sameArticle } from "../../../lib/libraryLinks";
 import { ArrowLeft, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { getOne, insert, list, remove, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDate, today } from "../../lib/dates.ts";
@@ -27,6 +29,30 @@ const NOTE_FIELDS: [keyof Paper, string, string][] = [
   ["ideas", "Questions & ideas", "Follow-ups, things to try, open questions"],
 ];
 
+// Records outside the workspace tables that point at a paper: browser clippings taken from the
+// same article (same DOI or PubMed id) and reading-list items linked to it.
+interface PaperClip { id: string; title: string | null; original_url: string; anchor: { exact?: string } | null; doi: string | null; pmid: string | null; created_at: string }
+interface PaperRead { id: string; title: string | null; url: string; read_at: string | null }
+const httpLink = (value: string) => { try { const u = new URL(value); return u.protocol === "http:" || u.protocol === "https:" ? u.href : undefined; } catch { return undefined; } };
+/** The page the clipping was taken from, opening at the highlighted passage. */
+const clipSource = (c: PaperClip) => { const link = httpLink(c.original_url); return link ? `${link.split("#")[0]}#excerptide=${c.id}` : undefined; };
+
+/** Neither list is essential to the page: a failed lookup shows as none. */
+async function linkedRecords(paper: Paper | null): Promise<{ clips: PaperClip[]; reads: PaperRead[] }> {
+  if (!core || !paper) return { clips: [], reads: [] };
+  const cols = "id,title,original_url,anchor,doi,pmid,created_at";
+  const doi = normDoi(paper.doi), pmid = normPmid(paper.pmid);
+  const [byDoi, byPmid, reads] = await Promise.all([
+    // Ends with the DOI, in any letter case: clippings may store it as a doi.org address.
+    doi ? core.from("clippings").select(cols).ilike("doi", `%${doi.replace(/[\\%_]/g, "\\$&")}`) : null,
+    pmid ? core.from("clippings").select(cols).eq("pmid", pmid) : null,
+    core.from("reads").select("id,title,url,read_at").eq("paper_id", paper.id).is("deleted_at", null).order("created_at", { ascending: false }),
+  ]);
+  const clips = new Map<string, PaperClip>();
+  for (const c of [...(byDoi?.data ?? []), ...(byPmid?.data ?? [])] as PaperClip[]) if (sameArticle(paper, c)) clips.set(c.id, c);
+  return { clips: [...clips.values()].sort((a, b) => b.created_at.localeCompare(a.created_at)), reads: (reads.data ?? []) as PaperRead[] };
+}
+
 function Authors({ authors }: { authors: string[] }) {
   const [all, setAll] = useState(false);
   const max = 8;
@@ -45,7 +71,7 @@ export function PaperPage({ id }: { id: string }) {
       list<ProjectPaper>("project_papers", { eq: { paper_id: id } }),
       list<Note>("notes", { eq: { paper_id: id }, order: [["updated_at", false]] }),
     ]);
-    return { paper, links, notes };
+    return { paper, links, notes, ...(await linkedRecords(paper)) };
   }, [id]);
 
   if (error) return <ErrorText error={error} />;
@@ -57,10 +83,10 @@ export function PaperPage({ id }: { id: string }) {
   // next loads: never build the editor from it, or its text could be saved into the new record.
   if (!data || (data.paper && data.paper.id !== id)) return <Loading rows={6} />;
   if (!data.paper) return <Empty>This paper doesn’t exist (it may have been deleted). <a href={href("papers")}>Back to papers</a></Empty>;
-  return <PaperDetail key={id} paper={data.paper} links={data.links} notes={data.notes} />;
+  return <PaperDetail key={id} paper={data.paper} links={data.links} notes={data.notes} clips={data.clips ?? []} reads={data.reads ?? []} />;
 }
 
-function PaperDetail({ paper, links, notes }: { paper: Paper; links: ProjectPaper[]; notes: Note[] }) {
+function PaperDetail({ paper, links, notes, clips, reads }: { paper: Paper; links: ProjectPaper[]; notes: Note[]; clips: PaperClip[]; reads: PaperRead[] }) {
   const { projects } = useProjects();
   const [editing, setEditing] = useState(false);
   const [editingNotes,setEditingNotes]=useState(false);
@@ -186,6 +212,44 @@ function PaperDetail({ paper, links, notes }: { paper: Paper; links: ProjectPape
             </div>
             <NoteRows notes={notes} empty="No notes linked to this paper yet." />
           </div>
+
+          {clips.length > 0 && (
+            <div className="card pad">
+              <div className="section-head">
+                <h2 className="section-title">Clippings</h2>
+                <a className="small" href="#/clippings">All clippings</a>
+              </div>
+              <ul className="note-list">
+                {clips.map((c) => (
+                  <li key={c.id}>
+                    <a href={clipSource(c)} target="_blank" rel="noreferrer">
+                      <span style={{ whiteSpace: "pre-wrap" }}>{c.anchor?.exact || c.title || c.original_url}</span>
+                      <span className="muted small"><ExternalLink size={12} /> Source · clipped {fmtDate(c.created_at)}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {reads.length > 0 && (
+            <div className="card pad">
+              <div className="section-head">
+                <h2 className="section-title">Reading list</h2>
+                <a className="small" href="#/reads">All reads</a>
+              </div>
+              <ul className="note-list">
+                {reads.map((r) => (
+                  <li key={r.id}>
+                    <a href={httpLink(r.url)} target="_blank" rel="noreferrer">
+                      <span>{r.title || r.url}</span>
+                      <span className="muted small"><ExternalLink size={12} /> {r.read_at ? `Read ${fmtDate(r.read_at)}` : "Unread"}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <aside className="detail-side">

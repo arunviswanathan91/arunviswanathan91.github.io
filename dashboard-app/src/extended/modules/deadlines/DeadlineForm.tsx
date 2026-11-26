@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useData } from "../../../lib/store";
 import { insert, update } from "../../lib/db.ts";
 import { go } from "../../lib/route.ts";
 import { DEADLINE_CATEGORY, DEADLINE_STATUS, PRIORITY, type Deadline, type DeadlineCategory, type DeadlineStatus, type Link, type Priority } from "../../lib/types.ts";
@@ -17,6 +18,8 @@ export function DeadlineForm({ deadline, presetProjectId, presetDate, onDone }: 
   const [status, setStatus] = useState<DeadlineStatus>(deadline?.status ?? "upcoming");
   const [priority, setPriority] = useState<Priority>(deadline?.priority ?? "medium");
   const [projectId, setProjectId] = useState<string | null>(deadline?.project_id ?? presetProjectId ?? null);
+  const [publicationId, setPublicationId] = useState<string | null>(deadline?.publication_id ?? null);
+  const publications = useData().tables.publications.rows;
   const [links, setLinks] = useState<Link[]>(deadline?.links ?? []);
   const [tags, setTags] = useState<string[]>(deadline?.tags ?? []);
   const [error, setError] = useState("");
@@ -34,6 +37,7 @@ export function DeadlineForm({ deadline, presetProjectId, presetDate, onDone }: 
       status,
       priority,
       project_id: projectId,
+      publication_id: publicationId,
       links,
       tags,
       completed_at: status === "done" ? (deadline?.completed_at ?? new Date().toISOString()) : null,
@@ -84,6 +88,13 @@ export function DeadlineForm({ deadline, presetProjectId, presetDate, onDone }: 
           <ProjectSelect value={projectId} onChange={setProjectId} />
         </Field>
       </div>
+      <Field label="Manuscript (optional)">
+        <select value={publicationId ?? ""} onChange={(e) => setPublicationId(e.target.value || null)}>
+          <option value="">No manuscript</option>
+          {publications.map((p) => <option key={p.id} value={p.id}>{String(p.title ?? "Untitled").slice(0, 80)}</option>)}
+        </select>
+      </Field>
+      {publicationId && <div className="link-row small"><a href={`#/publication/${publicationId}`}>→ Open manuscript</a></div>}
       <Field label="Description">
         <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>

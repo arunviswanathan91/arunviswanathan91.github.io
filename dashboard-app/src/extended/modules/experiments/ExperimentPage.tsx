@@ -3,16 +3,23 @@ import { Archive, ArchiveRestore, ArrowLeft, ClipboardPaste, Pin, Plus, Repeat2,
 import { ask } from "../../../lib/dialogs.tsx";
 import { useData } from "../../../lib/store";
 import { DateInput } from "../../../components/ui/DateInput";
+import { supabase as original } from "../../../lib/supabase";
 import { getOne, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDateTime } from "../../lib/dates.ts";
 import { go, href } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
-import { EXPERIMENT_OUTCOME, EXPERIMENT_STATUS, type Experiment, type ExperimentOutcome, type ExperimentSample, type ExperimentStatus } from "../../lib/types.ts";
+import { EXPERIMENT_OUTCOME, EXPERIMENT_STATUS, type Experiment, type ExperimentOutcome, type ExperimentSample, type ExperimentStatus, type Note, type Task, type ThesisChapter } from "../../lib/types.ts";
 import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
+import { Modal } from "../../components/Modal.tsx";
 import { ProjectSelect, projectName, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { Empty, ErrorText, Loading, SaveIndicator } from "../../components/ui.tsx";
+import { NoteRows } from "../notes/NoteRows.tsx";
+import { createNote } from "../notes/NotesView.tsx";
+import { sortTasks } from "../tasks/logic.ts";
+import { TaskForm } from "../tasks/TaskForm.tsx";
+import { TaskList } from "../tasks/TaskList.tsx";
 import { createExperiment } from "./create.ts";
 import { dateSpan } from "./ExperimentRows.tsx";
 import { parseSamples, repeatOf, samplesSummary, techniqueOptions } from "./logic.ts";
@@ -38,6 +45,7 @@ function ExperimentEditor({ initial }: { initial: Experiment }) {
   const publications = useData().tables.publications.rows;
   // Other runs: technique suggestions, the run this one repeats, and the runs that repeat it.
   const { data: others = [] } = useLoad(() => list<Experiment>("experiments", { order: [["updated_at", false]] }), []);
+  const { data: chapters = [] } = useLoad(() => list<ThesisChapter>("thesis_chapters", { order: [["position"], ["created_at"]] }), []);
   const parent = e.repeat_of ? others.find((o) => o.id === e.repeat_of) : undefined;
   const repeats = others.filter((o) => o.repeat_of === e.id);
   const autosave = useAutosave<Experiment>(async (patch) => {
@@ -70,6 +78,7 @@ function ExperimentEditor({ initial }: { initial: Experiment }) {
 
   const blur = () => void autosave.flush();
   const pub = publications.find((p) => p.id === e.publication_id);
+  const chapter = chapters.find((c) => c.id === e.chapter_id);
 
   return (
     <section className="detail experiment">
@@ -126,6 +135,13 @@ function ExperimentEditor({ initial }: { initial: Experiment }) {
             {publications.map((p) => <option key={p.id} value={p.id}>{String(p.title ?? "Untitled").slice(0, 80)}</option>)}
           </select>
         </label>
+        <label className="field">
+          <span>Thesis chapter</span>
+          <select value={e.chapter_id ?? ""} onChange={(ev) => change({ chapter_id: ev.target.value || null })}>
+            <option value="">No chapter</option>
+            {chapters.map((c) => <option key={c.id} value={c.id}>{c.title.slice(0, 80)}</option>)}
+          </select>
+        </label>
         <div className="field grow">
           <span>Tags</span>
           <TagInput value={e.tags} onChange={(tags) => change({ tags })} />
@@ -134,6 +150,7 @@ function ExperimentEditor({ initial }: { initial: Experiment }) {
       <div className="link-row small">
         {e.project_id && <a href={href(`projects/${e.project_id}`)}>→ {projectName(projects, e.project_id)}</a>}
         {pub && <a href={`#/publication/${pub.id}`}>→ {String(pub.title ?? "Manuscript")}</a>}
+        {chapter && <a href={href("thesis")}>→ Thesis: {chapter.title}</a>}
         {parent && <a href={href(`experiments/${parent.id}`)}><Repeat2 size={12} /> Repeat of {parent.title}{dateSpan(parent) ? ` (${dateSpan(parent)})` : ""}</a>}
         {repeats.map((r) => <a key={r.id} href={href(`experiments/${r.id}`)}><Repeat2 size={12} /> Repeated: {r.title}{dateSpan(r) ? ` (${dateSpan(r)})` : ""}</a>)}
       </div>
@@ -160,9 +177,52 @@ function ExperimentEditor({ initial }: { initial: Experiment }) {
         <div className="card pad">
           <Attachments owner={{ experiment_id: e.id }} title="Data & images" />
         </div>
+        <ExperimentLinked experiment={e} beforeLeave={() => autosave.flush()} />
       </div>
       <p className="small muted">Last saved {fmtDateTime(e.updated_at)}</p>
     </section>
+  );
+}
+
+/** Tasks and notes attached to this experiment, each with a way to add one already linked. */
+function ExperimentLinked({ experiment, beforeLeave }: { experiment: Experiment; beforeLeave: () => Promise<unknown> }) {
+  const id = experiment.id;
+  const { projects } = useProjects();
+  const [adding, setAdding] = useState(false);
+  const { data, error } = useLoad(async () => {
+    // The link lives on the tasks table itself; the view the task list reads does not carry it.
+    if (!original) throw new Error("Supabase is not configured");
+    const linked = await original.from("tasks").select("id").eq("experiment_id", id).is("deleted_at", null);
+    if (linked.error) throw new Error(linked.error.message);
+    const [tasks, notes] = await Promise.all([
+      list<Task>("tasks", { in: ["id", (linked.data ?? []).map((t) => String(t.id))] }),
+      list<Note>("notes", { eq: { experiment_id: id, archived_at: null }, order: [["pinned", false], ["updated_at", false]] }),
+    ]);
+    return { tasks, notes };
+  }, [id]);
+  return (
+    <>
+      <div className="card pad">
+        <div className="section-head">
+          <h3>Tasks</h3>
+          <button type="button" onClick={() => setAdding(true)}><Plus size={14} /> Task</button>
+        </div>
+        <ErrorText error={error} />
+        <TaskList tasks={sortTasks(data?.tasks ?? [], "all")} projects={projects} showProject={false} empty="No tasks linked to this experiment yet." />
+      </div>
+      <div className="card pad">
+        <div className="section-head">
+          <h3>Notes</h3>
+          <button type="button" onClick={() => void beforeLeave().then(() => createNote({ experiment_id: id, project_id: experiment.project_id }))}><Plus size={14} /> Note</button>
+        </div>
+        <NoteRows notes={data?.notes ?? []} empty="No notes linked to this experiment yet." />
+      </div>
+      {adding && (
+        <Modal title="New task for this experiment" onClose={() => setAdding(false)}>
+          <TaskForm preset={{ experiment_id: id, project_id: experiment.project_id }} onDone={() => setAdding(false)} />
+        </Modal>
+      )}
+    </>
   );
 }
 

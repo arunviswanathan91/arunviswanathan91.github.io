@@ -1,4 +1,5 @@
 import { EditToggle } from "./ui/EditToggle";
+import { InstallPanel } from "./AppStatus";
 import { useEffect, useState } from "react";
 import { Archive, ArchiveRestore, RefreshCw, Send, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -155,6 +156,7 @@ export function SettingsView(){
      {!tags.tags.length&&<p className="muted-note">No tags yet — add one from any record.</p>}
     </div> </>:<div className="detail-summary">{tags.tags.map(t=><div key={t.id}><strong>{t.name}</strong><span className="muted-note"> · {tags.usage.get(t.id)??0} uses</span></div>)}{!tags.tags.length&&<p>No tags yet.</p>}</div>}
    </section>
+   <InstallPanel/>
   </div>
  {confirmation}</div>;
 }

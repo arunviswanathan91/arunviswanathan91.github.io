@@ -2,11 +2,11 @@ import { useState } from "react";
 import { ask } from "../../../lib/dialogs.tsx";
 import { Archive, ArchiveRestore, ArrowLeft, Download, Pin, Trash2 } from "lucide-react";
 import { getOne, list, trash, update, useLoad } from "../../lib/db.ts";
-import { fmtDateTime } from "../../lib/dates.ts";
+import { fmtDate, fmtDateTime } from "../../lib/dates.ts";
 import { downloadNotes } from "../../lib/download.ts";
 import { go, href } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
-import { NOTE_TYPE, type Note, type NoteType, type Paper } from "../../lib/types.ts";
+import { NOTE_TYPE, type Experiment, type Meeting, type Note, type NoteType, type Paper } from "../../lib/types.ts";
 import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { ProjectSelect, projectName, useProjects } from "../../components/pickers.tsx";
@@ -29,6 +29,11 @@ function NoteEditor({ initial }: { initial: Note }) {
   const [note, setNote] = useState(initial);
   const { projects } = useProjects();
   const { data: papers = [] } = useLoad(() => list<Paper>("papers", { order: [["title"]] }), []);
+  const { data: meetings = [] } = useLoad(() => list<Meeting>("meetings", { order: [["starts_at", false]] }), []);
+  const { data: experiments = [] } = useLoad(() => list<Experiment>("experiments", { order: [["updated_at", false]] }), []);
+  // Archived items are hidden unless already selected.
+  const meetingOptions = meetings.filter((m) => !m.archived_at || m.id === note.meeting_id);
+  const experimentOptions = experiments.filter((x) => !x.archived_at || x.id === note.experiment_id);
   const autosave = useAutosave<Note>(async (patch) => {
     const row = await update<Note>("notes", note.id, patch, true);
     setNote((n) => ({ ...n, updated_at: row.updated_at }));
@@ -92,6 +97,20 @@ function NoteEditor({ initial }: { initial: Note }) {
             {papers.map((p) => <option key={p.id} value={p.id}>{p.title.slice(0, 80)}</option>)}
           </select>
         </label>
+        <label className="field">
+          <span>Meeting</span>
+          <select value={note.meeting_id ?? ""} onChange={(e) => change({ meeting_id: e.target.value || null })}>
+            <option value="">No meeting</option>
+            {meetingOptions.map((m) => <option key={m.id} value={m.id}>{`${fmtDate(m.starts_at)} · ${m.title}`.slice(0, 80)}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>Experiment</span>
+          <select value={note.experiment_id ?? ""} onChange={(e) => change({ experiment_id: e.target.value || null })}>
+            <option value="">No experiment</option>
+            {experimentOptions.map((x) => <option key={x.id} value={x.id}>{x.title.slice(0, 80)}</option>)}
+          </select>
+        </label>
         <div className="field grow">
           <span>Tags</span>
           <TagInput value={note.tags} onChange={(tags) => change({ tags })} />
@@ -100,6 +119,8 @@ function NoteEditor({ initial }: { initial: Note }) {
       <div className="link-row small">
         {note.project_id && <a href={href(`projects/${note.project_id}`)}>→ {projectName(projects, note.project_id)}</a>}
         {note.paper_id && <a href={href(`papers/${note.paper_id}`)}>→ {papers.find((p) => p.id === note.paper_id)?.title ?? "Paper"}</a>}
+        {note.meeting_id && <a href={href(`meetings/${note.meeting_id}`)}>→ {meetings.find((m) => m.id === note.meeting_id)?.title ?? "Meeting"}</a>}
+        {note.experiment_id && <a href={href(`experiments/${note.experiment_id}`)}>→ {experiments.find((x) => x.id === note.experiment_id)?.title ?? "Experiment"}</a>}
       </div>
 
       <MarkdownEditor value={note.body} rows={22} onChange={(body) => change({ body })} onBlur={() => void autosave.flush()} />

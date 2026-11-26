@@ -3,18 +3,21 @@ import { askText, notify } from "../../../lib/dialogs.tsx";
 import { ask } from "../../../lib/dialogs.tsx";
 import { Archive, ArchiveRestore, ArrowLeft, CheckSquare, FileDown, ListPlus, Plus, Trash2, UserPlus } from "lucide-react";
 import { supabase as original } from "../../../lib/supabase";
+import { useData } from "../../../lib/store";
 import { emitChange, getOne, insert, list, remove, rpc, trash, update, useLoad } from "../../lib/db.ts";
 import { addDays, fmtDate, fromLocalInput, toLocalInput, today } from "../../lib/dates.ts";
 import { prepAgenda } from "./prep.ts";
 import { go, href } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
-import { MEETING_TYPE, type ActionItem, type ContactRow, type Deadline, type Meeting, type MeetingParticipant, type MeetingProject, type MeetingType, type Paper, type Task } from "../../lib/types.ts";
+import { MEETING_TYPE, type ActionItem, type ContactRow, type Deadline, type Meeting, type MeetingParticipant, type MeetingProject, type MeetingType, type Note, type Paper, type Task } from "../../lib/types.ts";
 import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { MultiPicker, useContacts, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { Empty, ErrorText, SaveIndicator, Loading } from "../../components/ui.tsx";
 import { DateInput } from "../../../components/ui/DateInput";
+import { createNote } from "../notes/NotesView.tsx";
+import { NoteRows } from "../notes/NoteRows.tsx";
 
 const SECTIONS: [keyof Meeting, string, string][] = [
   ["agenda", "Agenda", "Topics to cover…"],
@@ -40,6 +43,12 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
   const [error, setError] = useState("");
   const { projects } = useProjects();
   const contacts = useContacts();
+  // The project people directory (base table people). Meetings keep their own contacts; a person
+  // chosen here gets one contact linked by person_id, so the two lists never duplicate each other.
+  const people = useData().people.rows;
+  const linkedPersonIds = new Set(contacts.map((c) => c.person_id).filter(Boolean));
+  const newPeople = people.filter((p) => !linkedPersonIds.has(p.id));
+  const { data: notes = [] } = useLoad(() => list<Note>("notes", { eq: { meeting_id: m.id }, order: [["updated_at", false]] }), [m.id]);
   const { data: links } = useLoad(async () => {
     const [proj, people] = await Promise.all([
       list<MeetingProject>("meeting_projects", { eq: { meeting_id: m.id } }),
@@ -61,6 +70,24 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
     if (!name?.trim()) return;
     const c = await insert<ContactRow>("contacts", { name: name.trim() });
     await insert("meeting_participants", { meeting_id: m.id, contact_id: c.id });
+  }
+
+  const PERSON = "person:";
+  async function addParticipant(id: string) {
+    if (!id.startsWith(PERSON)) return void (await insert("meeting_participants", { meeting_id: m.id, contact_id: id }));
+    const person = people.find((p) => p.id === id.slice(PERSON.length));
+    if (!person) return;
+    // Ask the server, not the list on screen: the contact may have been made a moment ago.
+    const [existing] = await list<ContactRow>("contacts", { eq: { person_id: person.id }, limit: 1 });
+    const c = existing ?? await insert<ContactRow>("contacts", { name: person.name, email: person.email, person_id: person.id });
+    if (links?.people.some((l) => l.contact_id === c.id)) return;
+    await insert("meeting_participants", { meeting_id: m.id, contact_id: c.id });
+  }
+
+  async function addNote() {
+    await autosave.flush();
+    const projectIds = links?.proj.map((l) => l.project_id) ?? [];
+    await createNote({ title: `${m.title}: notes`, type: "meeting_prep", meeting_id: m.id, project_id: projectIds.length === 1 ? projectIds[0] : null });
   }
 
   async function del() {
@@ -102,6 +129,9 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
     await autosave.flush();
   }
 
+  const participantsInPeople = contacts.filter((c) => c.person_id && links?.people.some((l) => l.contact_id === c.id));
+  const shownNotes = notes.filter((n) => !n.archived_at);
+
   async function exportPdf() {
     await autosave.flush();
     go("print/meetings", { ids: m.id });
@@ -134,6 +164,13 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
           ))}
           <div className="card pad">
             <ActionItems meeting={m} projectIds={links?.proj.map((l) => l.project_id) ?? []} />
+          </div>
+          <div className="card pad">
+            <div className="section-head">
+              <h2 className="section-title">Notes</h2>
+              <button onClick={() => void run(addNote())}><Plus size={14} /> Add note</button>
+            </div>
+            <NoteRows notes={shownNotes} empty="No notes linked to this meeting yet." />
           </div>
         </div>
 
@@ -171,11 +208,15 @@ function MeetingEditor({ initial }: { initial: Meeting }) {
               <span>Participants</span>
               <MultiPicker
                 selected={links?.people.map((l) => l.contact_id) ?? []}
-                options={contacts.map((c) => ({ id: c.id, label: c.name }))}
-                onAdd={(contact_id) => void run(insert("meeting_participants", { meeting_id: m.id, contact_id }))}
+                options={[
+                  ...contacts.map((c) => ({ id: c.id, label: c.name })),
+                  ...newPeople.map((p) => ({ id: PERSON + p.id, label: `${p.name} (from project people)` })),
+                ]}
+                onAdd={(id) => void run(addParticipant(id))}
                 onRemove={(contact_id) => void run(remove("meeting_participants", { meeting_id: m.id, contact_id }))}
                 placeholder="Add person…"
               />
+              {participantsInPeople.length > 0 && <span className="muted small">Also in project people: {participantsInPeople.map((c) => c.name).join(", ")}</span>}
               <button type="button" className="link small" onClick={() => void run(addPerson())}><UserPlus size={13} /> New person</button>
             </div>
             <label className="field">

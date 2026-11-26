@@ -7,7 +7,7 @@ import { insert, list, remove, trash, update, upsert, useLoad } from "../../lib/
 import { fmtDate } from "../../lib/dates.ts";
 import { go, href } from "../../lib/route.ts";
 import { addDays } from "../../lib/dates.ts";
-import { CHAPTER_STATUS, FEEDBACK_SOURCE, type ChapterStatus, type Deadline, type FeedbackSource, type Thesis, type ThesisChapter, type ThesisFeedback } from "../../lib/types.ts";
+import { CHAPTER_STATUS, EXPERIMENT_STATUS, FEEDBACK_SOURCE, type ChapterStatus, type Deadline, type Experiment, type FeedbackSource, type Thesis, type ThesisChapter, type ThesisFeedback } from "../../lib/types.ts";
 import { Badge, Empty, ErrorText, PageHeader } from "../../components/ui.tsx";
 import { SECTIONS } from "../../lib/sections.ts";
 import { todayISO } from "../loans/balance.ts";
@@ -24,13 +24,14 @@ const fmtN = (n: number) => new Intl.NumberFormat("en-IN").format(n);
 export function ThesisView() {
   const today = todayISO();
   const { data, error, reload } = useLoad(async () => {
-    const [thesis, chapters, feedback, milestones] = await Promise.all([
+    const [thesis, chapters, feedback, milestones, experiments] = await Promise.all([
       list<Thesis>("thesis"),
       list<ThesisChapter>("thesis_chapters", { order: [["position"], ["created_at"]] }),
       list<ThesisFeedback>("thesis_feedback", { order: [["given_on", false], ["created_at", false]] }),
       list<Deadline>("deadlines", { in: ["category", MILESTONE_CATEGORIES], order: [["due_date"]] }),
+      list<Experiment>("experiments", { notNull: ["chapter_id"], order: [["started_on", false], ["updated_at", false]] }),
     ]);
-    return { thesis: thesis[0] ?? null, chapters, feedback, milestones };
+    return { thesis: thesis[0] ?? null, chapters, feedback, milestones, experiments: experiments.filter((x) => !x.archived_at) };
   }, []);
   const [open, setOpen] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -145,7 +146,7 @@ export function ThesisView() {
                           {fb.length ? `${pending ? `${pending} open` : "All addressed"} · ${fb.length} feedback` : (c.outline?.length ? "Outline & notes" : "Outline, feedback & notes")}
                         </button>
                       </div>
-                      {open === c.id && <ChapterDetail chapter={c} feedback={fb} patch={(p) => patchChapter(c.id, p)} patchFeedback={patchFeedback} onError={setErr} onChanged={() => void reload()} />}
+                      {open === c.id && <ChapterDetail chapter={c} feedback={fb} experiments={data.experiments.filter((x) => x.chapter_id === c.id)} patch={(p) => patchChapter(c.id, p)} patchFeedback={patchFeedback} onError={setErr} onChanged={() => void reload()} />}
                     </li>
                   );
                 })}
@@ -164,7 +165,7 @@ export function ThesisView() {
 export const setupError = (error: string) =>
   /ws_thesis|ws_goals|ws_trips|schema cache|does not exist/i.test(error) ? "This page needs its database tables: run supabase/planning.sql in the Supabase SQL Editor, then reload." : error;
 
-function ChapterDetail({ chapter, feedback, patch, patchFeedback, onError, onChanged }: { chapter: ThesisChapter; feedback: ThesisFeedback[]; patch: (p: Partial<ThesisChapter>) => void; patchFeedback: (id: string, p: Partial<ThesisFeedback>) => void; onError: (e: string) => void; onChanged: () => void }) {
+function ChapterDetail({ chapter, feedback, experiments, patch, patchFeedback, onError, onChanged }: { chapter: ThesisChapter; feedback: ThesisFeedback[]; experiments: Experiment[]; patch: (p: Partial<ThesisChapter>) => void; patchFeedback: (id: string, p: Partial<ThesisFeedback>) => void; onError: (e: string) => void; onChanged: () => void }) {
   const publications = useData().tables.publications.rows;
   const [source, setSource] = useState<FeedbackSource>("supervisor");
   const [body, setBody] = useState("");
@@ -174,7 +175,7 @@ function ChapterDetail({ chapter, feedback, patch, patchFeedback, onError, onCha
       <ChapterOutline chapter={chapter} patch={patch} onError={onError} />
       <div className="note-props">
         <label className="field"><span>Due</span><DateInput type="date" value={chapter.due_on ?? ""} onChange={(e) => patch({ due_on: e.target.value || null })} /></label>
-        <label className="field"><span>Built on manuscript</span>
+        <label className="field"><span>Built on manuscript{chapter.publication_id && <> · <a href={`#/publication/${chapter.publication_id}`}>Open</a></>}</span>
           <select value={chapter.publication_id ?? ""} onChange={(e) => patch({ publication_id: e.target.value || null })}>
             <option value="">None</option>
             {publications.map((p) => <option key={p.id} value={p.id}>{String(p.title ?? "Untitled").slice(0, 70)}</option>)}
@@ -184,6 +185,14 @@ function ChapterDetail({ chapter, feedback, patch, patchFeedback, onError, onCha
           <textarea rows={2} defaultValue={chapter.notes} placeholder="Structure, figures to make, what is missing…" onBlur={(e) => e.target.value !== chapter.notes && void run(() => update("thesis_chapters", chapter.id, { notes: e.target.value }))} />
         </label>
       </div>
+      {experiments.length > 0 && (
+        <div>
+          <h3 className="md-label small-label">Experiments</h3>
+          <div className="row wrap small">
+            {experiments.map((x) => <a key={x.id} href={href(`experiments/${x.id}`)}>→ {x.title || "Untitled experiment"} <span className="muted">({EXPERIMENT_STATUS[x.status]})</span></a>)}
+          </div>
+        </div>
+      )}
       <FeedbackList items={feedback} title="Feedback" patch={patchFeedback} onError={onError} />
       <form className="feedback-add" onSubmit={(e) => { e.preventDefault(); if (!body.trim()) return; void run(async () => { await insert("thesis_feedback", { chapter_id: chapter.id, source, body: body.trim() }); setBody(""); }); }}>
         <select aria-label="Feedback from" value={source} onChange={(e) => setSource(e.target.value as FeedbackSource)}>

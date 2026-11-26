@@ -1,8 +1,8 @@
 import { EditToggle } from "../ui/EditToggle";
 import { FieldValue } from "../entity/FieldValue";
 import { useState } from "react";
-import { ExternalLink, Mail, Trash2 } from "lucide-react";
-import { useData, useEntityTable } from "../../lib/store";
+import { BriefcaseBusiness, ExternalLink, Mail, Trash2 } from "lucide-react";
+import { useData, useEntityTable, useUi } from "../../lib/store";
 import { isEditable } from "../../entities/types";
 import { formatDate } from "../../lib/format";
 import { Modal } from "../ui/Modal";
@@ -23,7 +23,10 @@ export function Drawer({def,row,onClose,canEdit=true,canDelete=true,hiddenFields
  def:EntityDef;row:Row;onClose():void;canEdit?:boolean;canDelete?:boolean;hiddenFields?:string[];people?:Person[];
 }){
  const table=useEntityTable(def.key);
- const {tags}=useData();
+ const {tags,tables}=useData();
+ const ui=useUi();
+ // An opportunity that was tracked has its own job application: one click opens it.
+ const application=def.key==="opportunities"&&row.job_application_id?tables.jobs.byId.get(String(row.job_application_id))??null:null;
  const {inputCtx,valueCtx}=useEntityCtx(def);
  const [editingId,setEditingId]=useState<string|null>(null);
  const editing=editingId=== row.id && canEdit;
@@ -71,6 +74,13 @@ export function Drawer({def,row,onClose,canEdit=true,canDelete=true,hiddenFields
      if(Object.keys(patch).length)void table.update(row.id,patch);
     }}/>}
     {def.key==="publications"&&<PublicationLifecycle publication={row} canEdit={canEdit} canReassign={canDelete}/>} 
+    {application&&<div className="field field-wide">
+     <label className="field-label">Job application</label>
+     <div className="field-with-action">
+      <div className="detail-value">{[application.role,application.organization].filter(Boolean).join(" · ")||"Application"}{application.stage?` (${application.stage})`:""}</div>
+      <button type="button" className="secondary" onClick={()=>{ui.setView("jobs");ui.openDrawer("jobs",application.id)}}><BriefcaseBusiness/>Open application</button>
+     </div>
+    </div>}
     {editable.map(f=><div key={f.key} className={"field"+(f.wide||f.kind==="tags"||f.kind==="longtext"?" field-wide":"")}>
      <label className="field-label">{f.label}{f.required&&<span className="req" aria-hidden="true">*</span>}</label>
      <div className="field-with-action">

@@ -1066,3 +1066,12 @@
 .extension-workspace .site-bar-text .error { margin: 6px 0 0; }
 .extension-workspace .site-status { font-size: 0.9rem; color: var(--muted); }
 .extension-workspace .site-status.dirty { color: var(--tone-ink); font-weight: 600; }
+
+/* Phones: a dialog fills the screen, so a long form scrolls in one place and nothing is cut
+   off beside the keyboard. Padding keeps it clear of the notch and the home indicator. */
+@media (max-width: 600px) {
+  .extension-workspace .modal, .extension-workspace .modal.wide {
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+}

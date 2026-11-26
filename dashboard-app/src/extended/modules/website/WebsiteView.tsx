@@ -4,6 +4,7 @@ import { ask } from "../../../lib/dialogs.tsx";
 import { currentUserId, list, onLoadCacheClear, sb, upsert, useLoad } from "../../lib/db.ts";
 import { fmtDate } from "../../lib/dates.ts";
 import { ErrorText, Loading, PageHeader } from "../../components/ui.tsx";
+import { PublicationPicker, isListed, publicationLink, type OwnPublication } from "../../components/PublicationPicker.tsx";
 import { lookupPaper } from "../papers/lookup.ts";
 import { moveBy } from "../resumes/model.ts";
 import {
@@ -145,6 +146,8 @@ function Editor({ row, uid }: { row: Row | null; uid: string }) {
 
         <Card title="Publications" hint="Shown in this order. Wrap your name in **two stars** to make it bold.">
           <PublicationLookup onFound={(p) => set({ publications: [p, ...draft.publications] })} />
+          <PublicationPicker existing={draft.publications.map((p) => ({ link: p.url, title: p.title }))}
+            onPick={(rows) => set({ publications: [...rows.filter((p) => !isListed(p, draft.publications.map((x) => ({ link: x.url, title: x.title })))).map(siteFromOwn), ...draft.publications] })} />
           {draft.publications.some((p, n) => n > 0 && yearOf(p) > yearOf(draft.publications[n - 1])) && (
             <button type="button" className="site-add" onClick={() => set({ publications: [...draft.publications].sort((a, b) => yearOf(b) - yearOf(a)) })}><ArrowDownWideNarrow size={14} /> Sort newest first</button>
           )}
@@ -202,6 +205,12 @@ function Editor({ row, uid }: { row: Row | null; uid: string }) {
     </>
   );
 }
+
+/** A manuscript from the Publications tracker as a website entry. Authors and year stay to be typed in. */
+const siteFromOwn = (p: OwnPublication): SitePublication => ({
+  year: "", authors: "", title: p.title ?? "", venue: p.venue ?? "", url: publicationLink(p),
+  badge: p.stage === "Published" ? "" : p.stage === "Accepted" ? "Accepted" : p.stage === "Under Review" || p.stage === "Revision Requested" ? "Under review" : "In preparation",
+});
 
 const yearOf = (p: SitePublication) => Number(p.year.match(/\d{4}/)?.[0] ?? 0);
 

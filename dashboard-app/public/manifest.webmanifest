@@ -1,0 +1,22 @@
+{
+  "name": "Arun's Workspace",
+  "short_name": "Workspace",
+  "description": "Private research, publication and career workspace.",
+  "id": "/dashboard/",
+  "start_url": "/dashboard/",
+  "scope": "/dashboard/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f6f5",
+  "theme_color": "#1f6b4f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Agenda", "url": "/dashboard/#/tools/agenda" },
+    { "name": "Tasks", "url": "/dashboard/#/tools/tasks" },
+    { "name": "Budget", "url": "/dashboard/#/tools/budget" }
+  ]
+}

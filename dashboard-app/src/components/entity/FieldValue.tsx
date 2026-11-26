@@ -1,4 +1,4 @@
-import { Check, ExternalLink, StickyNote } from "lucide-react";
+import { BookOpen, Check, ExternalLink, FileText, StickyNote } from "lucide-react";
 import { formatDate, formatRelative, hostname, isOverdue } from "../../lib/format";
 import { groupValue } from "../../entities/types";
 import { Badge, Dot } from "../ui/Badge";
@@ -12,6 +12,8 @@ export interface ValueCtx{
  projectColor(id:string|null):string|null;
  personName(id:string|null):string|null;
  publicationTitle(id:string|null):string|null;
+ paperTitle(id:string|null):string|null;
+ resumeTitle(id:string|null):string|null;
  tagIds(id:string):string[];
  tagsById:Map<string,Tag>;
 }
@@ -55,6 +57,14 @@ export function FieldValue({field,row,ctx,mode}:{field:FieldDef;row:Row;ctx:Valu
    const title=ctx.publicationTitle(raw??null);
    if(!title)return mode==="cell"?<span className="muted-note">—</span>:null;
    return <span className={mode==="card"?"clamp-1":""}>{title}</span>;
+  }
+  case "paper":
+  case "resume":{
+   if(!raw)return mode==="cell"?<span className="muted-note">—</span>:null;
+   const paper=field.kind==="paper";
+   const title=(paper?ctx.paperTitle(raw):ctx.resumeTitle(raw))??(paper?"Open paper":"Open resume");
+   return <a href={`#/tools/${paper?"papers":"resumes"}/${raw}`} className="link-value" title={title}
+    onClick={e=>e.stopPropagation()}>{paper?<BookOpen/>:<FileText/>}<span className="clamp-1">{title}</span></a>;
   }
   case "tags":{
    const ids=ctx.tagIds(row.id);

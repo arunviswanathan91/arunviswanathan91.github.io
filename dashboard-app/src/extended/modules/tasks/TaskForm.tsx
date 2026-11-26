@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { ask } from "../../../lib/dialogs.tsx";
 import { fmtDate } from "../../lib/dates.ts";
-import { insert, list, trash, update, useLoad } from "../../lib/db.ts";
-import { PRIORITY, TASK_STATUS, WEEKDAYS, type Deadline, type Priority, type Recurrence, type Task, type TaskStatus } from "../../lib/types.ts";
+import { supabase as original } from "../../../lib/supabase";
+import { emitChange, insert, list, trash, update, useLoad } from "../../lib/db.ts";
+import { PRIORITY, TASK_STATUS, WEEKDAYS, type Deadline, type Experiment, type Priority, type Recurrence, type Task, type TaskStatus } from "../../lib/types.ts";
 import { ProjectSelect } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { ErrorText, Field } from "../../components/ui.tsx";
@@ -13,6 +14,21 @@ export interface TaskPreset {
   project_id?: string | null;
   deadline_id?: string | null;
   due_date?: string | null;
+  experiment_id?: string | null;
+}
+
+// The task list reads a view without the experiment link, so that one column is read from and written to the tasks table itself.
+async function experimentOf(taskId: string): Promise<string | null> {
+  if (!original) throw new Error("Supabase is not configured");
+  const { data, error } = await original.from("tasks").select("experiment_id").eq("id", taskId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.experiment_id as string | null | undefined) ?? null;
+}
+async function linkExperiment(taskId: string, experiment_id: string | null) {
+  if (!original) throw new Error("Supabase is not configured");
+  const { error } = await original.from("tasks").update({ experiment_id }).eq("id", taskId);
+  if (error) throw new Error(error.message);
+  emitChange("tasks");
 }
 
 /** Create a task, or edit one when `task` is given. */
@@ -24,11 +40,17 @@ export function TaskForm({ task, preset, onDone }: { task?: Task; preset?: TaskP
   const [due, setDue] = useState(task?.due_date ?? preset?.due_date ?? "");
   const [projectId, setProjectId] = useState<string | null>(task?.project_id ?? preset?.project_id ?? null);
   const [deadlineId, setDeadlineId] = useState<string | null>(task?.deadline_id ?? preset?.deadline_id ?? null);
+  // undefined: not chosen here yet, so an existing task keeps the experiment it has.
+  const [pickedExperiment, setPickedExperiment] = useState<string | null | undefined>(task ? undefined : preset?.experiment_id ?? null);
   const [tags, setTags] = useState<string[]>(task?.tags ?? []);
   const [recurrence, setRecurrence] = useState<Recurrence | null>(task?.recurrence ?? null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const { data: deadlines = [] } = useLoad(() => list<Deadline>("deadlines", { order: [["due_date"]] }), []);
+  const { data: experiments = [] } = useLoad(() => list<Experiment>("experiments", { order: [["updated_at", false]] }), []);
+  const taskId = task?.id;
+  const { data: savedExperiment = null } = useLoad(async () => (taskId ? experimentOf(taskId) : null), [taskId]);
+  const experimentId = pickedExperiment === undefined ? savedExperiment : pickedExperiment;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -46,8 +68,13 @@ export function TaskForm({ task, preset, onDone }: { task?: Task; preset?: TaskP
       recurrence,
     };
     try {
-      if (task) await update("tasks", task.id, values);
-      else await insert("tasks", values);
+      if (task) {
+        await update("tasks", task.id, values);
+        if (pickedExperiment !== undefined && pickedExperiment !== savedExperiment) await linkExperiment(task.id, pickedExperiment);
+      } else {
+        const created = await insert<Task>("tasks", values);
+        if (pickedExperiment) await linkExperiment(created.id, pickedExperiment);
+      }
       onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -62,6 +89,7 @@ export function TaskForm({ task, preset, onDone }: { task?: Task; preset?: TaskP
   }
 
   const openDeadlines = deadlines.filter((d) => d.status === "upcoming" || d.status === "in_progress" || d.id === deadlineId);
+  const openExperiments = experiments.filter((x) => !x.archived_at || x.id === experimentId);
 
   return (
     <form className="form" onSubmit={submit}>
@@ -93,6 +121,12 @@ export function TaskForm({ task, preset, onDone }: { task?: Task; preset?: TaskP
         <select value={deadlineId ?? ""} onChange={(e) => setDeadlineId(e.target.value || null)}>
           <option value="">None</option>
           {openDeadlines.map((d) => <option key={d.id} value={d.id}>{d.title} ({fmtDate(d.due_date)})</option>)}
+        </select>
+      </Field>
+      <Field label="Experiment">
+        <select value={experimentId ?? ""} onChange={(e) => setPickedExperiment(e.target.value || null)}>
+          <option value="">None</option>
+          {openExperiments.map((x) => <option key={x.id} value={x.id}>{(x.title || "Untitled experiment").slice(0, 80)}</option>)}
         </select>
       </Field>
       <Field label="Tags">
