@@ -18,6 +18,7 @@ import type { EntityKey, Row } from "../../entities/types";
 import type { Person, Project, ProjectStage } from "../../lib/store";
 import { ProjectSection, type ProjectSectionTab } from "../../extended/modules/projects/ProjectSections";
 import { DateInput } from "../ui/DateInput";
+import { SubmissionTrail } from "../publications/SubmissionTrail";
 import { publishedLink, publishedOf, publishedSource } from "../../lib/published";
 
 type ProjectTab="overview"|"work"|"publications"|ProjectSectionTab|"reads"|"people";
@@ -357,13 +358,14 @@ function ProjectPublications({project,direct,related,canEdit,isOwner,onAdd,onOpe
   const nodes=publicationNodes.rows.filter(n=>n.publication_id===paper.id);
   const done=nodes.filter(n=>n.status==="Done").length;
   const tagIds=tags.idsFor("publication",paper.id);
-  return <article className="project-paper" key={paper.id} onClick={e=>{if(!(e.target as HTMLElement).closest("button,a"))onOpen(paper.id)}}>
+  return <article className="project-paper" key={paper.id} onClick={e=>{if(!(e.target as HTMLElement).closest("button,a,input,select,textarea,label"))onOpen(paper.id)}}>
    <div className="project-paper-head"><span className="badge tone-blue">{paper.stage}</span>
     {paper.id===project.output_publication_id&&<span className="badge tone-green">Output</span>}
     {relation==="tag"&&<span className="badge tone-violet">Related by tag</span>}</div>
    <button className="project-paper-title" onClick={()=>onOpen(paper.id)}>{paper.title}</button>
    {paper.venue&&<p className="subtitle">{paper.venue}</p>}
    {tagIds.length>0&&<TagChips ids={tagIds} byId={tags.byId} max={4}/>}
+   {isOwner&&<SubmissionTrail publication={paper} canEdit={isOwner} compact/>}
    <div className="paper-progress"><span>{nodes.length?`${done} of ${nodes.length} custom steps complete`:"No custom steps yet"}</span>
     {relation==="tag"&&isOwner&&<button className="link-button" onClick={()=>void tables.publications.update(paper.id,{project_id:project.id})}>Link directly</button>}</div>
   </article>;

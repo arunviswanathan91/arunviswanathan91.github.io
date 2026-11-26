@@ -17,7 +17,7 @@ export const GROUPS: Record<string, readonly string[]> = {
   money: ["goals", "trips", "transactions", "budget_categories", "monthly_budgets", "savings_accounts", "recurring", "loans", "loan_payments", "contacts"],
   work: [
     "tasks", "projects", "papers", "project_papers", "deadlines", "notes", "experiments", "thesis", "thesis_chapters", "thesis_feedback", "goals", "trips", "paper_alerts", "funding_calls", "meetings", "meeting_projects",
-    "meeting_action_items", "meeting_participants", "attachments", "publications", "publication_stage_events", "contacts",
+    "meeting_action_items", "meeting_participants", "attachments", "publications", "publication_stage_events", "publication_submissions", "contacts",
   ],
   habits: ["habits", "habit_checkins"],
   resumes: ["resumes"],
