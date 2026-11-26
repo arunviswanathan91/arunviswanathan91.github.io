@@ -17,6 +17,7 @@ test('closing a project: the output publication is yours, clears with the paper 
  // The clipper's table is created by the clipper, not by these scripts.
  await db.exec(`create table public.clippings(id uuid primary key default gen_random_uuid(),user_id uuid not null default auth.uid(),original_url text,title text,anchor jsonb,doi text,pmid text,notes text,tags text[],created_at timestamptz not null default now(),updated_at timestamptz not null default now());alter table public.clippings enable row level security;create policy own on public.clippings for all using(auth.uid()=user_id) with check(auth.uid()=user_id)`);
  await db.exec(sql('cross-links.sql'));
+ await db.exec(sql('publication-published.sql'));await db.exec(sql('publication-published.sql'));
  const mig=sql('project-close.sql');
  try{await db.exec(mig);await db.exec(mig)}catch(e){throw new Error('project-close: '+(e as Error).message)}
  await db.exec(`grant usage on schema public to authenticated;grant select,insert,update,delete on all tables in schema public to authenticated;insert into profiles(id,timezone) values('${uid}','UTC'),('${other}','UTC') on conflict do nothing`);
@@ -35,6 +36,10 @@ test('closing a project: the output publication is yours, clears with the paper 
  await db.query(`update projects set phase='Completed',ws_status='completed',completed_on=current_date,output_publication_id=$1 where id=$2`,[paper,project]);
  assert.equal((await one(`select status from ws_projects where id=$1`,[project])).status,'completed');
 
+ // The published version is a record, and travels with the backup.
+ await assert.rejects(db.query(`update publications set published='[]'::jsonb where id=$1`,[paper]),/publications_published_object/);
+ await db.query(`update publications set published=$2::jsonb where id=$1`,[paper,JSON.stringify({title:'STAT3 in obese PDAC',authors:['A. Author'],journal:'Cancer Research',year:2026,doi:'10.1000/xyz'})]);
+
  // A restore brings the link back although projects are restored before publications.
  const backup=(await one(`select ws_backup_data() as b`)).b;
  assert.equal(backup.projects[0].output_publication_id,paper);
@@ -42,6 +47,7 @@ test('closing a project: the output publication is yours, clears with the paper 
  await db.query(`delete from publications where id=$1`,[paper]);
  await db.query(`select ws_restore_data($1,$2)`,[uid,JSON.stringify(backup)]);
  assert.equal((await one(`select output_publication_id as p from projects where id=$1`,[project])).p,paper);
+ assert.equal((await one(`select published->>'doi' as d from publications where id=$1`,[paper])).d,'10.1000/xyz');
 
  // Deleting the paper clears the link and keeps the project closed.
  await db.query(`delete from publications where id=$1`,[paper]);

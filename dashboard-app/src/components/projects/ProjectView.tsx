@@ -18,6 +18,7 @@ import type { EntityKey, Row } from "../../entities/types";
 import type { Person, Project, ProjectStage } from "../../lib/store";
 import { ProjectSection, type ProjectSectionTab } from "../../extended/modules/projects/ProjectSections";
 import { DateInput } from "../ui/DateInput";
+import { publishedLink, publishedOf, publishedSource } from "../../lib/published";
 
 type ProjectTab="overview"|"work"|"publications"|ProjectSectionTab|"reads"|"people";
 const PROJECT_TABS:ProjectTab[]=["overview","work","publications","papers","notes","experiments","meetings","deadlines","trips","goals","reads","files","people"];
@@ -135,12 +136,21 @@ const outputOptions=(rows:Row[],projectId:string)=>[{value:"",label:"None"},
  ...[...rows].sort((a,b)=>Number(b.project_id===projectId)-Number(a.project_id===projectId)||String(a.title).localeCompare(String(b.title)))
   .map(r=>({value:String(r.id),label:String(r.title)+(r.project_id===projectId?"":" (another project)")}))];
 
+/** Authors, year, journal and DOI of the output paper, once its published version has been fetched. */
+function OutputReference({paper}:{paper:Row}){
+ const p=publishedOf(paper);
+ if(!p)return <small className="output-reference">No published version yet: add the final DOI on the publication page.</small>;
+ const link=publishedLink(p);
+ return <small className="output-reference">{publishedSource(p)}{link&&<> · <a href={link} target="_blank" rel="noopener noreferrer">{p.doi?`doi:${p.doi}`:"Open"}</a></>}</small>;
+}
+
 function ClosedBanner({project,isOwner,onOpen}:{project:Project;isOwner:boolean;onOpen(id:string):void}){
  const {projects,tables}=useData();
  const output=project.output_publication_id?tables.publications.byId.get(project.output_publication_id)??null:null;
  return <p className="project-closed-banner" role="status">
   <span><CircleCheck aria-hidden/> Closed{project.completed_on?` on ${formatDate(project.completed_on)}`:""}
-   {output&&<> · Output: <button className="link-button" onClick={()=>onOpen(String(output.id))}>{String(output.title)}</button></>}
+   {output&&<> · Output: <button className="link-button" onClick={()=>onOpen(String(output.id))}>{publishedOf(output)?.title??String(output.title)}</button></>}
+   {output&&<OutputReference paper={output}/>}
    <small> Everything in this project is kept and can still be edited.</small></span>
   {isOwner&&<button className="secondary" onClick={()=>void projects.update(project.id,phasePatch("Active"))}>Reopen</button>}
  </p>;
@@ -229,7 +239,7 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
    <div><span className="field-label">Area</span><p>{AREAS.find(a=>a.value===(project.area||"research"))?.label}</p></div>
    <div><span className="field-label">Start date</span><p>{project.start_date?formatDate(project.start_date):"Not set"}</p></div>
    <div><span className="field-label">Target date</span><p>{project.target_date?formatDate(project.target_date):"Not set"}</p></div></div>
-   <div><span className="field-label">Output publication</span><p>{output?<button className="link-button" onClick={()=>openPublication(output.id)}>{String(output.title)}</button>:"None yet."}</p></div>
+   <div><span className="field-label">Output publication</span><p>{output?<button className="link-button" onClick={()=>openPublication(output.id)}>{publishedOf(output)?.title??String(output.title)}</button>:"None yet."}</p>{output&&<OutputReference paper={output}/>}</div>
    <div><span className="field-label">Project tags</span>{selectedTags.length?<TagChips ids={selectedTags} byId={tags.byId}/>:<p>No tags yet.</p>}</div>
   </div>}
   </section>

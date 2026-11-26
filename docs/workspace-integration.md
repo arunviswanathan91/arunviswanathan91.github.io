@@ -29,6 +29,10 @@ Run `supabase/cross-links.sql` last. Each link shows on both sides:
 
 A project page has an “Output publication” field on its Overview tab (the paper it produced) and a “Close project” button. Closing sets the phase to Closed (stored as `Completed`, with the date in `completed_on`) and keeps everything the project holds; “Reopen” sets it back to Active. Closed projects are listed after open ones in the sidebar and on the Projects page. Run `supabase/project-close.sql` after `cross-links.sql`.
 
+## Published version of a manuscript
+
+The publication page has a “Published version” panel: enter the final DOI (or PubMed id) and it fetches the published title, authors, journal and year with the same lookup the Papers module uses, and stores them in `publications.published`. The manuscript’s working title and stage history are kept; its DOI, link and venue are filled where empty, and the stage can be set to Published in the same step. The reference then shows on the project that names the paper as its output, and resume and website entries picked from Publications take their authors and year from it. Run `supabase/publication-published.sql` after `project-close.sql`.
+
 ## Phone app
 
 The dashboard installs as an app: on Android or desktop Chrome use Settings → App → Install app; on iPhone open it in Safari, tap Share, then “Add to Home Screen”. `public/manifest.webmanifest` and `public/icons/` describe it (`scripts/make-icons.mjs` regenerates the icons). `public/sw.js` keeps the build's own files so the app opens offline and never handles requests to the database; pages opened before show their last content, and saving needs a connection. A notice offers a reload when a newer release is live.
