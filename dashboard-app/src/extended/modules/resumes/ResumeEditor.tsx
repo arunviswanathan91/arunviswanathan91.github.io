@@ -5,6 +5,7 @@ import { getOne, update, useLoad } from "../../lib/db.ts";
 import { go } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
 import { Modal } from "../../components/Modal.tsx";
+import { PublicationPicker, isListed, publicationLink, type OwnPublication } from "../../components/PublicationPicker.tsx";
 import { ErrorText, SaveIndicator, Loading } from "../../components/ui.tsx";
 import {
   ACCENTS, ACCENT_TARGETS, DEFAULT_STYLE, FONTS, HEADING_STYLES, LAYOUT_TYPES, SECTION_ORDER, layoutFor, SECTION_TYPES, moveBy, newItem, newSection, normalizeResume, pdfFilename,
@@ -219,11 +220,25 @@ function SectionCard({ s, name, first, last, onChange, onMove, onDelete }: {
               onChange((x) => ({ ...x, items: [...x.items, it] })); setOpenItem(it.id);
             }} />
           )}
+          {s.type === "publications" && (
+            <PublicationPicker existing={s.items} onPick={(rows) => {
+              // Listed again inside the update, so two picks in a row cannot add the same one twice.
+              const made = rows.map((p) => newItem(itemFromOwn(p)));
+              onChange((x) => ({ ...x, items: [...x.items, ...made.filter((it) => !isListed({ doi: it.link, title: it.title }, x.items))] }));
+              if (made.length === 1) setOpenItem(made[0].id);
+            }} />
+          )}
           <button onClick={addItem}><Plus size={14} /> Add {def.label.toLowerCase()} entry</button>
         </div>
       )}
     </div>
   );
+}
+
+/** A manuscript from the Publications tracker as a resume entry. Authors, year and pages stay to be typed in. */
+function itemFromOwn(p: OwnPublication): Partial<ResumeItem> {
+  const done = p.stage === "Published" || p.stage === "Accepted";
+  return { title: (p.title ?? "").replace(/\s+/g, " ").trim(), subtitle: p.venue ?? "", link: publicationLink(p), ...(done ? {} : { kind: "submitted" as const }) };
 }
 
 /** "Fetch from DOI": same lookup as adding a paper (Crossref, Europe PMC, DataCite). */
