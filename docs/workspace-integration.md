@@ -25,6 +25,10 @@ Run `supabase/cross-links.sql` last. Each link shows on both sides:
 - **Agenda, calendar feed, Telegram**: thesis chapter due dates, the thesis submission date and goal due dates.
 - **Search and backup** read the clipper's `clippings` table; the backup also holds resumes.
 
+## Closing a project
+
+A project page has an “Output publication” field on its Overview tab (the paper it produced) and a “Close project” button. Closing sets the phase to Closed (stored as `Completed`, with the date in `completed_on`) and keeps everything the project holds; “Reopen” sets it back to Active. Closed projects are listed after open ones in the sidebar and on the Projects page. Run `supabase/project-close.sql` after `cross-links.sql`.
+
 ## Phone app
 
 The dashboard installs as an app: on Android or desktop Chrome use Settings → App → Install app; on iPhone open it in Safari, tap Share, then “Add to Home Screen”. `public/manifest.webmanifest` and `public/icons/` describe it (`scripts/make-icons.mjs` regenerates the icons). `public/sw.js` keeps the build's own files so the app opens offline and never handles requests to the database; pages opened before show their last content, and saving needs a connection. A notice offers a reload when a newer release is live.

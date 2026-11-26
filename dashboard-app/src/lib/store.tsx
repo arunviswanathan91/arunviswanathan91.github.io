@@ -14,6 +14,8 @@ import type { EntityKey, Row } from "../entities/types";
 export interface Project extends Row{
  id:string;name:string;description:string|null;objective:string|null;status:string;phase:string;
  ws_status?:string;area?:string;pinned?:boolean;completed_on?:string|null;
+ /** The paper this project produced. */
+ output_publication_id?:string|null;
  color:string|null;start_date:string|null;target_date:string|null;created_at:string;updated_at:string;
 }
 export interface Person extends Row{
@@ -51,7 +53,7 @@ export type ViewKey=EntityKey|"extended"|"clippings"|"home"|"project"|"publicati
 export type Theme="system"|"light"|"dark";
 export interface NoticeItem{key:string;message:string;dismiss():void}
 
-const PROJECT_SELECT="id,user_id,name,description,objective,status,phase,ws_status,area,pinned,completed_on,color,start_date,target_date,created_at,updated_at";
+const PROJECT_SELECT="id,user_id,name,description,objective,status,phase,ws_status,area,pinned,completed_on,output_publication_id,color,start_date,target_date,created_at,updated_at";
 interface DataValue{
  userId:string;
  tables:Record<EntityKey,TableStore>;

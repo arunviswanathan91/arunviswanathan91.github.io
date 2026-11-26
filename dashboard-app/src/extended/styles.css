@@ -1075,3 +1075,7 @@
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 }
+
+.extension-workspace .project-group + .project-group { margin-top: 20px; }
+.extension-workspace .project-group-title { margin: 0 0 10px; color: var(--muted); }
+.extension-workspace .project-card.is-closed { opacity: 0.85; }

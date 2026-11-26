@@ -28,7 +28,8 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
   return out;
  },[tables]);
 
- const visibleProjects=projects.rows.filter(p=>showArchived||p.status==="Active");
+ // Closed projects (phase "Completed") stay in the list, after the open ones.
+ const visibleProjects=projects.rows.filter(p=>showArchived||p.status==="Active").sort((a,b)=>Number(a.phase==="Completed")-Number(b.phase==="Completed"));
  const go=(v:ViewKey)=>ui.setView(v);
  // Workspace pages are hash routes (#/tools/agenda…); highlight the open one like the other menu items.
  const route=useRoute();
@@ -70,10 +71,10 @@ export function Sidebar({open,collapsed,onToggleCollapsed,onNewProject}:{open:bo
     <Inbox/><span className="nav-project-copy"><span>Inbox</span><small>Unassigned items</small></span>{ui.scope===null&&<Check className="nav-tick"/>}
    </button>
    {visibleProjects.map(p=>
-    <button key={p.id} className={"nav-project"+(ui.scope===p.id?" active":"")} title={collapsed?p.name:undefined} onClick={()=>ui.openProject(p.id)}>
+    <button key={p.id} className={"nav-project"+(ui.scope===p.id?" active":"")+(p.phase==="Completed"?" is-closed":"")} title={collapsed?p.name:undefined} onClick={()=>ui.openProject(p.id)}>
      <span className={"project-dot tint-"+(p.color??"slate")}/>
      <span className="clamp-1 nav-text">{p.name}</span>
-     {p.status==="Archived"&&<small className="muted-note">archived</small>}
+     {p.status==="Archived"?<small className="muted-note">archived</small>:p.phase==="Completed"&&<small className="muted-note">closed</small>}
      {ui.scope===p.id&&<Check className="nav-tick"/>}
     </button>)}
    <div className="nav-row">

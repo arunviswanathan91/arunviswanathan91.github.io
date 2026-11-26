@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useData } from "../../../lib/store";
 import { CalendarClock, CheckSquare, FileText, Pin, Plus } from "lucide-react";
 import { list, useLoad } from "../../lib/db.ts";
 import { fmtDate, today } from "../../lib/dates.ts";
@@ -36,14 +37,25 @@ export function ProjectsView({ route }: { route: Route }) {
   }, []);
 
   const projects = (data?.projects ?? [])
-    .filter((p) => (status === "all" ? true : status === "current" ? ["idea", "planned", "active", "paused"].includes(p.status) : p.status === status))
+    .filter((p) => (status === "all" ? true : status === "current" ? ["idea", "planned", "active", "paused", "completed"].includes(p.status) : p.status === status))
     .filter((p) => (!area || p.area === area) && (!tag || p.tags.includes(tag)))
     .filter((p) => !search || `${p.title} ${p.description ?? ""} ${p.tags.join(" ")}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) =>
+      Number(a.status === "completed") - Number(b.status === "completed") ||
       Number(b.pinned) - Number(a.pinned) ||
       (sort === "title" ? a.title.localeCompare(b.title) : sort === "target" ? (a.target_date ?? "9999").localeCompare(b.target_date ?? "9999") : b.updated_at.localeCompare(a.updated_at)),
     );
   const now = today();
+  // Closed projects are listed after the open ones, under their own heading, each with the paper it produced.
+  const core = useData();
+  const outputOf = (id: string) => {
+    const paper = core.projects.byId.get(id)?.output_publication_id;
+    return paper ? core.tables.publications.byId.get(paper) ?? null : null;
+  };
+  const closed = projects.filter((p) => p.status === "completed");
+  const groups = closed.length && closed.length < projects.length
+    ? [{ label: "", rows: projects.filter((p) => p.status !== "completed") }, { label: "Closed", rows: closed }]
+    : [{ label: "", rows: projects }];
 
   return (
     <section className={!data && !error ? "is-loading" : undefined} aria-busy={!data && !error || undefined}>
@@ -58,7 +70,7 @@ export function ProjectsView({ route }: { route: Route }) {
         <Select
           label="Status"
           value={status}
-          options={[["current", "Current"], ...(Object.entries(PROJECT_STATUS) as [ProjectStatus, string][]), ["all", "All statuses"]] as [StatusFilter, string][]}
+          options={[["current", "Open and closed"], ...(Object.entries(PROJECT_STATUS) as [ProjectStatus, string][]), ["all", "All statuses"]] as [StatusFilter, string][]}
           onChange={(v) => setQuery("status", v || undefined)}
         />
         <Select label="Area" allLabel="Any area" value={area} options={Object.entries(PROJECT_AREA) as [ProjectArea, string][]} onChange={(v) => setQuery("area", v)} />
@@ -69,19 +81,24 @@ export function ProjectsView({ route }: { route: Route }) {
       {data && projects.length === 0 ? (
         <Empty>{data.projects.length ? "No projects match these filters." : "No projects yet. Create your first one."}</Empty>
       ) : (
+        <>{groups.map((g) => (
+          <div key={g.label} className="project-group">
+            {g.label && <h2 className="section-title project-group-title">{g.label}</h2>}
         <div className="card-grid">
-          {projects.map((p) => {
+          {g.rows.map((p) => {
+            const output = p.status === "completed" ? outputOf(p.id) : null;
             const open = data!.tasks.filter((t) => t.project_id === p.id && isOpen(t));
             const overdue = open.filter((t) => t.due_date && t.due_date < now).length;
             const papers = data!.links.filter((l) => l.project_id === p.id).length;
             return (
-              <a key={p.id} className="card project-card" href={href(`projects/${p.id}`)}>
+              <a key={p.id} className={"card project-card" + (p.status === "completed" ? " is-closed" : "")} href={href(`projects/${p.id}`)}>
                 <div className="project-card-head">
                   <Badge tone={statusTone(p.status)}>{PROJECT_STATUS[p.status]}</Badge>
                   <span className="muted small">{PROJECT_AREA[p.area]}</span>
                   {p.pinned && <Pin size={13} className="muted" aria-label="Pinned" />}
                 </div>
                 <h3>{p.title}</h3>
+                {output && <p className="small"><FileText size={13} /> {String(output.title)}</p>}
                 {p.description && <p className="muted small clamp">{noteExcerpt(p.description, 200)}</p>}
                 <div className="project-card-meta">
                   <span><CheckSquare size={13} /> {open.length} open{overdue ? <span className="neg"> · {overdue} overdue</span> : null}</span>
@@ -93,6 +110,8 @@ export function ProjectsView({ route }: { route: Route }) {
             );
           })}
         </div>
+          </div>
+        ))}</>
       )}
       {adding && (
         <Modal title="New project" onClose={() => setAdding(false)}>
