@@ -48,6 +48,9 @@ export type FieldDef=
  | (FieldBase&{kind:"project"})
  | (FieldBase&{kind:"person"})
  | (FieldBase&{kind:"publication"})
+ /** A paper in the workspace library (ws_papers) / a resume (ws_resumes), linked by id. */
+ | (FieldBase&{kind:"paper"})
+ | (FieldBase&{kind:"resume"})
  | (FieldBase&{kind:"tags"})
  | (FieldBase&{kind:"bool";trueLabel?:string})
  | (FieldBase&{kind:"stamp"});

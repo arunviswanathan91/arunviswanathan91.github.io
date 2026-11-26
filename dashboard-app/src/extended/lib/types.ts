@@ -312,6 +312,8 @@ export interface ContactRow {
   name: string;
   affiliation: string | null;
   email: string | null;
+  /** The same person in the project people directory (base table people), when linked. */
+  person_id?: string | null;
 }
 
 export interface Settings {

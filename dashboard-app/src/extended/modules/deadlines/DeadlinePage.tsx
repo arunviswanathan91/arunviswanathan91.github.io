@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ask } from "../../../lib/dialogs.tsx";
 import { ArrowLeft, Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { useData } from "../../../lib/store";
 import { getOne, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDate, relDay } from "../../lib/dates.ts";
 import { go, href } from "../../lib/route.ts";
@@ -36,11 +37,14 @@ export function DeadlinePage({ id }: { id: string }) {
 
 function DeadlineDetail({ d, tasks }: { d: Deadline; tasks: Task[] }) {
   const { projects } = useProjects();
+  const publications = useData().tables.publications.rows;
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [notes, setNotes] = useState(d.notes);
+  const [error, setError] = useState("");
   const autosave = useAutosave<Deadline>((patch) => update("deadlines", d.id, patch, true).then(() => undefined));
   const open = isOpenDeadline(d);
+  const pub = publications.find((p) => p.id === d.publication_id);
 
   async function del() {
     if (!(await ask(`Move “${d.title}” to Trash? Preparation tasks are kept. You can restore it from Trash.`))) return;
@@ -62,6 +66,7 @@ function DeadlineDetail({ d, tasks }: { d: Deadline; tasks: Task[] }) {
           <p className="muted small">
             {DEADLINE_CATEGORY[d.category]} · {PRIORITY[d.priority]} priority
             {d.project_id && <> · <a href={href(`projects/${d.project_id}`)}>{projectName(projects, d.project_id)}</a></>}
+            {d.publication_id && <> · <a href={`#/publication/${d.publication_id}`}>{pub ? String(pub.title ?? "Manuscript") : "Manuscript"}</a></>}
           </p>
           <TagList tags={d.tags} />
         </div>
@@ -90,6 +95,18 @@ function DeadlineDetail({ d, tasks }: { d: Deadline; tasks: Task[] }) {
         </div>
         <aside className="detail-side">
           {d.links.length > 0 && <div className="card pad"><h3>Links</h3><LinksView links={d.links} /></div>}
+          <div className="card pad side-fields">
+            <label className="field">
+              <span>Manuscript</span>
+              <select value={d.publication_id ?? ""} onChange={(e) => void update("deadlines", d.id, { publication_id: e.target.value || null }).catch((err: Error) => setError(err.message))}>
+                <option value="">No manuscript</option>
+                {d.publication_id && !pub && <option value={d.publication_id}>Manuscript</option>}
+                {publications.map((p) => <option key={p.id} value={p.id}>{String(p.title ?? "Untitled").slice(0, 80)}</option>)}
+              </select>
+            </label>
+            {d.publication_id && <a className="small" href={`#/publication/${d.publication_id}`}>→ Open {pub ? String(pub.title ?? "manuscript") : "manuscript"}</a>}
+            <ErrorText error={error} />
+          </div>
           <div className="card pad"><Attachments owner={{ deadline_id: d.id }} /></div>
         </aside>
       </div>

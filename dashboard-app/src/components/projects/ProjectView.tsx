@@ -20,7 +20,7 @@ import { ProjectSection, type ProjectSectionTab } from "../../extended/modules/p
 import { DateInput } from "../ui/DateInput";
 
 type ProjectTab="overview"|"work"|"publications"|ProjectSectionTab|"reads"|"people";
-const PROJECT_TABS:ProjectTab[]=["overview","work","publications","papers","notes","experiments","meetings","deadlines","reads","files","people"];
+const PROJECT_TABS:ProjectTab[]=["overview","work","publications","papers","notes","experiments","meetings","deadlines","trips","goals","reads","files","people"];
 // Old workspace links say ?tab=tasks for the work board.
 const tabFromHash=():ProjectTab=>{const t=new URLSearchParams(location.hash.split("?")[1]??"").get("tab");return t==="tasks"?"work":PROJECT_TABS.includes(t as ProjectTab)?t as ProjectTab:"overview"};
 // Phase is the one project stage the user edits; the workspace lists read the coarser ws_status.
@@ -79,7 +79,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
  const tabs:{key:ProjectTab;label:string;count?:number}[]=[
   {key:"overview",label:"Overview"},{key:"work",label:"Work board",count:projectTasks.length},
   {key:"publications",label:"Publications",count:directPapers.length+relatedPapers.length},
-  {key:"papers",label:"Papers"},{key:"notes",label:"Notes"},{key:"experiments",label:"Experiments"},{key:"meetings",label:"Meetings"},{key:"deadlines",label:"Deadlines"},
+  {key:"papers",label:"Papers"},{key:"notes",label:"Notes"},{key:"experiments",label:"Experiments"},{key:"meetings",label:"Meetings"},{key:"deadlines",label:"Deadlines"},{key:"trips",label:"Trips"},{key:"goals",label:"Goals"},
   {key:"reads",label:"Reads",count:projectReads.length},{key:"files",label:"Files"},{key:"people",label:"People"},
  ];
 
@@ -107,7 +107,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
    canEdit={canEdit} onAdd={stageId=>newEntity("tasks",{stage_id:stageId})} onOpen={id=>ui.openDrawer("tasks",id)} onManage={()=>setManageStages(true)}/>}
   {tab==="publications"&&<ProjectPublications project={project} direct={directPapers} related={relatedPapers}
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("publications")} onOpen={ui.openPublication}/>}
-  {(tab==="papers"||tab==="notes"||tab==="experiments"||tab==="meetings"||tab==="deadlines"||tab==="files")&&<ProjectSection key={tab} id={projectId} tab={tab}/>}
+  {(tab==="papers"||tab==="notes"||tab==="experiments"||tab==="meetings"||tab==="deadlines"||tab==="trips"||tab==="goals"||tab==="files")&&<ProjectSection key={tab} id={projectId} tab={tab}/>}
   {tab==="reads"&&<ProjectReads project={project} rows={projectReads}
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("reads")} onOpen={id=>ui.openDrawer("reads",id)}/>}
   {tab==="people"&&<ProjectPeople projectId={projectId} isOwner={isOwner} onAdd={()=>setPerson({person:"new"})}
@@ -124,6 +124,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
 
 function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:boolean;isOwner:boolean}){
  const {projects,projectLinks,projectFields,tables,tags}=useData();
+ const {openDrawer}=useUi();
  const {ask,confirmation}=useConfirmDialog();
  const [overviewEdit,setOverviewEdit]=useState(false);
  const [linksEdit,setLinksEdit]=useState(false);
@@ -232,7 +233,12 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
 
    <section className="panel">
     <header className="panel-head"><h2>Documents</h2><FileText/></header>
-    {documents.slice(0,5).map(doc=><button className="resource-button" key={doc.id}><span>{doc.title}</span><small>{doc.kind}</small></button>)}
+    {documents.slice(0,5).map(doc=>{
+     // A document with a Drive link opens it; one without opens its details, where the link can be added.
+     const url=safeHttp(String(doc.drive_url??""));
+     return url?<a className="resource-button" key={doc.id} href={url} target="_blank" rel="noopener noreferrer" title="Open in a new tab"><span>{doc.title}</span><small>{doc.kind}</small></a>
+      :<button className="resource-button" key={doc.id} title="Open document details" onClick={()=>openDrawer("documents",doc.id)}><span>{doc.title}</span><small>{doc.kind}</small></button>;
+    })}
     {!documents.length&&<p className="muted-note">No project documents yet.</p>}
    </section>
   </div>

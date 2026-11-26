@@ -36,6 +36,47 @@ create index if not exists reads_paper_idx on public.reads(paper_id) where paper
 create index if not exists ws_contacts_person_idx on public.ws_contacts(person_id) where person_id is not null;
 create index if not exists job_applications_resume_idx on public.job_applications(resume_id) where resume_id is not null;
 
+-- Links must be your own records (the check is skipped while a backup is restored).
+drop trigger if exists cross_link_chapter_id on public.ws_experiments;
+create trigger cross_link_chapter_id before insert or update of chapter_id, user_id on public.ws_experiments
+  for each row execute function ws_private.check_owned_link('chapter_id', 'ws_thesis_chapters');
+drop trigger if exists cross_link_experiment_id on public.tasks;
+create trigger cross_link_experiment_id before insert or update of experiment_id, user_id on public.tasks
+  for each row execute function ws_private.check_owned_link('experiment_id', 'ws_experiments');
+drop trigger if exists cross_link_experiment_id on public.ws_notes;
+create trigger cross_link_experiment_id before insert or update of experiment_id, user_id on public.ws_notes
+  for each row execute function ws_private.check_owned_link('experiment_id', 'ws_experiments');
+drop trigger if exists cross_link_meeting_id on public.ws_notes;
+create trigger cross_link_meeting_id before insert or update of meeting_id, user_id on public.ws_notes
+  for each row execute function ws_private.check_owned_link('meeting_id', 'ws_meetings');
+drop trigger if exists cross_link_publication_id on public.ws_deadlines;
+create trigger cross_link_publication_id before insert or update of publication_id, user_id on public.ws_deadlines
+  for each row execute function ws_private.check_owned_link('publication_id', 'publications');
+drop trigger if exists cross_link_paper_id on public.reads;
+create trigger cross_link_paper_id before insert or update of paper_id, user_id on public.reads
+  for each row execute function ws_private.check_owned_link('paper_id', 'ws_papers');
+drop trigger if exists cross_link_person_id on public.ws_contacts;
+create trigger cross_link_person_id before insert or update of person_id, user_id on public.ws_contacts
+  for each row execute function ws_private.check_owned_link('person_id', 'people');
+drop trigger if exists cross_link_resume_id on public.job_applications;
+create trigger cross_link_resume_id before insert or update of resume_id, user_id on public.job_applications
+  for each row execute function ws_private.check_owned_link('resume_id', 'ws_resumes');
+
+-- Notes can now point at experiments and meetings, which a restore brings back after the
+-- notes. check_links learns what check_owned_link already does: stand aside while a backup
+-- is restored (the backup holds only the owner's rows). Patched in place, as in experiments.sql.
+do $$
+declare def text; guard text := $g$if coalesce(current_setting('workspace.restoring', true), '') = 'on' then return new; end if;$g$;
+begin
+ select pg_get_functiondef('ws_private.check_links()'::regprocedure) into def;
+ if position('workspace.restoring' in def) = 0 then
+  if (length(def) - length(replace(def, 'for fk in select', ''))) / length('for fk in select') <> 1 then
+   raise exception 'check_links: loop not found in its expected form';
+  end if;
+  execute replace(def, 'for fk in select', guard || E'\n for fk in select');
+ end if;
+end $$;
+
 -- Agenda, calendar feed and Telegram: thesis chapter due dates, the thesis submission date
 -- and goal due dates join the existing sources.
 create or replace function ws_private.agenda_rows(p_user uuid, p_from date, p_to date)

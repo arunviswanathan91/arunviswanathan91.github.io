@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { FileDown, Link2, Plus, X } from "lucide-react";
 import { insert, list, remove, useLoad } from "../../lib/db.ts";
-import { go } from "../../lib/route.ts";
-import { type Deadline, type Experiment, type Meeting, type MeetingProject, type Note, type Paper, type ProjectPaper } from "../../lib/types.ts";
+import { fmtDate } from "../../lib/dates.ts";
+import { go, href } from "../../lib/route.ts";
+import { GOAL_AREA, TRIP_KIND, TRIP_STATUS, type Deadline, type Experiment, type Goal, type Meeting, type MeetingProject, type Note, type Paper, type ProjectPaper, type Trip } from "../../lib/types.ts";
 import { Attachments } from "../../components/Attachments.tsx";
 import { Modal } from "../../components/Modal.tsx";
-import { ErrorText } from "../../components/ui.tsx";
+import { Badge, Empty, ErrorText } from "../../components/ui.tsx";
+import { SECTIONS } from "../../lib/sections.ts";
 import { DeadlineForm } from "../deadlines/DeadlineForm.tsx";
 import { DeadlineRows } from "../deadlines/DeadlineRows.tsx";
 import { MeetingForm } from "../meetings/MeetingForm.tsx";
@@ -18,25 +20,28 @@ import { CitationExport } from "../papers/CitationExport.tsx";
 import { ExperimentRows } from "../experiments/ExperimentRows.tsx";
 import { createExperiment } from "../experiments/create.ts";
 import { sortExperiments } from "../experiments/logic.ts";
+import { createTrip, tripSpan } from "../planning/TripsView.tsx";
 
-export type ProjectSectionTab = "papers" | "notes" | "experiments" | "meetings" | "deadlines" | "files";
+export type ProjectSectionTab = "papers" | "notes" | "experiments" | "meetings" | "deadlines" | "trips" | "goals" | "files";
 
-/** The library-side parts of a project (papers, notes, meetings, deadlines, files), shown as tabs on the one project page. */
+/** The library-side parts of a project (papers, notes, meetings, deadlines, trips, goals, files), shown as tabs on the one project page. */
 export function ProjectSection({ id, tab }: { id: string; tab: ProjectSectionTab }) {
   const [modal, setModal] = useState<"paper" | "link-paper" | "meeting" | "deadline" | null>(null);
   const { data, error } = useLoad(async () => {
-    const [pp, notes, mp, deadlines, experiments] = await Promise.all([
+    const [pp, notes, mp, deadlines, experiments, trips, goals] = await Promise.all([
       list<ProjectPaper>("project_papers", { eq: { project_id: id } }),
       list<Note>("notes", { eq: { project_id: id }, order: [["updated_at", false]] }),
       list<MeetingProject>("meeting_projects", { eq: { project_id: id } }),
       list<Deadline>("deadlines", { eq: { project_id: id }, order: [["due_date"]] }),
       list<Experiment>("experiments", { eq: { project_id: id }, order: [["updated_at", false]] }),
+      list<Trip>("trips", { eq: { project_id: id }, order: [["starts_on"], ["created_at"]] }),
+      list<Goal>("goals", { eq: { project_id: id }, order: [["year", false], ["position"]] }),
     ]);
     const [papers, meetings] = await Promise.all([
       list<Paper>("papers", { in: ["id", pp.map((l) => l.paper_id)], order: [["created_at", false]] }),
       list<Meeting>("meetings", { in: ["id", mp.map((l) => l.meeting_id)], order: [["starts_at", false]] }),
     ]);
-    return { papers, notes: notes.filter((n) => !n.archived_at), meetings, deadlines, experiments: sortExperiments(experiments.filter((e) => !e.archived_at)) };
+    return { papers, notes: notes.filter((n) => !n.archived_at), meetings, deadlines, experiments: sortExperiments(experiments.filter((e) => !e.archived_at)), trips, goals };
   }, [id]);
 
   if (error) return <ErrorText error={error} />;
@@ -106,6 +111,52 @@ export function ProjectSection({ id, tab }: { id: string; tab: ProjectSectionTab
             <button className="primary" onClick={() => setModal("deadline")}><Plus size={14} /> Deadline</button>
           </div>
           <DeadlineRows deadlines={data.deadlines} empty="No deadlines for this project." />
+        </div>
+      )}
+
+      {tab === "trips" && (
+        <div className="card list-card">
+          <div className="section-head pad-x">
+            <h2 className="section-title">Conferences & trips</h2>
+            <button className="primary" onClick={() => void createTrip({ project_id: id })}><Plus size={14} /> Trip</button>
+          </div>
+          {data.trips.length === 0 && <Empty icon={SECTIONS.trips.icon}>No conferences or trips linked to this project.</Empty>}
+          <ul className="note-list">
+            {data.trips.map((t) => (
+              <li key={t.id}>
+                <a href={href(`trips/${t.id}`)}>
+                  <span className="note-title">{t.title}</span>
+                  <span className="note-meta">
+                    <Badge tone={t.status === "cancelled" ? "quiet" : t.status === "attended" ? "pos" : t.status === "considering" ? undefined : "accent"}>{TRIP_STATUS[t.status]}</Badge>
+                    <span className="muted small">{TRIP_KIND[t.kind]} · {tripSpan(t)}{t.location ? ` · ${t.location}` : ""}</span>
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {tab === "goals" && (
+        <div className="card list-card">
+          <div className="section-head pad-x">
+            <h2 className="section-title">Goals</h2>
+            <a href={href("goals")}>All goals</a>
+          </div>
+          {data.goals.length === 0 && <Empty icon={SECTIONS.goals.icon}>No goals linked to this project. Link one from the Goals page.</Empty>}
+          <ul className="note-list">
+            {data.goals.map((g) => (
+              <li key={g.id}>
+                <a href={href("goals", { year: String(g.year) })}>
+                  <span className="note-title">{g.title}</span>
+                  <span className="note-meta">
+                    <Badge tone={g.status === "achieved" ? "pos" : g.status === "dropped" ? "quiet" : "accent"}>{g.status === "achieved" ? "Achieved" : g.status === "dropped" ? "Dropped" : "Active"}</Badge>
+                    <span className="muted small">{GOAL_AREA[g.area]} · {g.year}{g.due_on ? ` · due ${fmtDate(g.due_on)}` : ""}</span>
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

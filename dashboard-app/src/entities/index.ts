@@ -6,6 +6,7 @@ import { isColumn } from "./types";
 import type { EntityDef, EntityKey, QuickAction, Row, Tone } from "./types";
 import { dayDelta } from "../lib/format";
 import { supabase } from "../lib/supabase";
+import { refreshLibrary } from "../lib/libraryLinks";
 
 export const TASK_STATUS=["Backlog","In progress","Review","Done"] as const;
 export const PRIORITY=["Low","Medium","High","Urgent"] as const;
@@ -126,7 +127,7 @@ export const documents:EntityDef={
 
 export const jobs:EntityDef={
  key:"jobs",table:"job_applications",tagEntity:"job_application",
- select:"id,user_id,organization,role,stage,url,deadline,next_action,notes,project_id,created_at,updated_at",
+ select:"id,user_id,organization,role,stage,url,deadline,next_action,notes,project_id,resume_id,created_at,updated_at",
  singular:"application",plural:"Job tracker",kicker:"Career",subtitle:"Applications by stage, filterable by tag.",icon:BriefcaseBusiness,
  titleField:"role",searchFields:["role","organization","next_action","notes"],projectField:"project_id",groupBy:"stage",
  defaultSort:{key:"created_at",dir:"desc"},defaultLayout:"board",layouts:["board","table"],
@@ -139,6 +140,7 @@ export const jobs:EntityDef={
   {key:"deadline",kind:"date",label:"Deadline",buckets:true,create:true,card:"footer",table:1,filter:true,sort:true},
   {key:"next_action",kind:"text",label:"Next action",card:"footer",table:2},
   {key:"url",kind:"url",label:"Link",short:true,create:true,card:"footer",table:1},
+  {key:"resume_id",kind:"resume",label:"Resume used",table:2},
   projectField,tagsField,
   {key:"notes",kind:"longtext",label:"Notes",rows:5,wide:true},
   ...stamps,
@@ -184,23 +186,27 @@ export const reminders:EntityDef={
  ],
 };
 
-/** Copies a saved link into the Papers library (once per URL) and marks the read as read. */
+/** Copies a saved link into the Papers library (once per URL), links the read to that paper and marks it as read. */
+const movedTo=new Map<string,string>();   // read id -> the paper it became, for the patch that follows
 const moveToPapers=async(r:Row)=>{
  if(!supabase)throw new Error("Sign in to move this to Papers.");
  const url=String(r.url);
  const found=await supabase.from("ws_papers").select("id").eq("url",url).limit(1);
  if(found.error)throw new Error(found.error.message);
- if(found.data?.length)return;
- const {error}=await supabase.from("ws_papers").insert({title:String(r.title||url),url,status:"to_read",summary:r.notes||null});
- if(error)throw new Error(error.message);
+ if(found.data?.length){movedTo.set(r.id,String(found.data[0].id));return}
+ const made=await supabase.from("ws_papers").insert({title:String(r.title||url),url,status:"to_read",summary:r.notes||null}).select("id").single();
+ if(made.error)throw new Error(made.error.message);
+ movedTo.set(r.id,String(made.data.id));
+ void refreshLibrary();   // the paper pickers and links pick it up
 };
 const readQuickActions:QuickAction[]=[
- {key:"to-papers",label:"Move to Papers",icon:BookPlus,tone:"blue",show:r=>!r.read_at,run:moveToPapers,patch:()=>({read_at:new Date().toISOString()})},
+ {key:"to-papers",label:"Move to Papers",icon:BookPlus,tone:"blue",show:r=>!r.read_at,run:moveToPapers,
+  patch:r=>({read_at:new Date().toISOString(),...(!r.paper_id&&movedTo.has(r.id)?{paper_id:movedTo.get(r.id)}:{})})},
 ];
 
 export const reads:EntityDef={
  key:"reads",table:"reads",tagEntity:"read",quickActions:readQuickActions,
- select:"id,user_id,url,title,notes,read_at,project_id,created_at,updated_at",
+ select:"id,user_id,url,title,notes,read_at,project_id,paper_id,created_at,updated_at",
  singular:"read",plural:"Reads",kicker:"Personal",subtitle:"Links saved from Telegram and the web.",icon:BookMarked,
  titleField:"title",searchFields:["title","url","notes"],projectField:"project_id",groupBy:"state",
  defaultSort:{key:"created_at",dir:"desc"},defaultLayout:"table",layouts:["table","board"],
@@ -213,6 +219,7 @@ export const reads:EntityDef={
    derive:(r:Row)=>r.read_at?"Read":"Unread"},
   {key:"read_at",kind:"date",label:"Read at",time:true,buckets:true,card:"footer",table:1,filter:true,sort:true},
   projectField,
+  {key:"paper_id",kind:"paper",label:"Paper",create:true,card:"meta",table:2},
   tagsField,
   {key:"notes",kind:"longtext",label:"Notes",rows:5,create:true,wide:true},
   ...stamps,

@@ -114,7 +114,7 @@ function TripEditor({ initial }: { initial: Trip }) {
         <label className="field"><span>Registration due</span><DateInput type="date" value={t.registration_due ?? ""} onChange={(e) => change({ registration_due: e.target.value || null })} /></label>
         <label className="field"><span>Website</span><input type="url" value={t.url ?? ""} placeholder="https://" onChange={(e) => change({ url: e.target.value || null })} onBlur={blur} /></label>
         <label className="field"><span>Project</span><ProjectSelect value={t.project_id} onChange={(project_id) => change({ project_id })} /></label>
-        <label className="field"><span>Presenting work from</span>
+        <label className="field"><span>Presenting work from{t.publication_id && <> · <a href={`#/publication/${t.publication_id}`}>Open</a></>}</span>
           <select value={t.publication_id ?? ""} onChange={(e) => change({ publication_id: e.target.value || null })}>
             <option value="">No manuscript</option>
             {publications.map((p) => <option key={p.id} value={p.id}>{String(p.title ?? "Untitled").slice(0, 70)}</option>)}

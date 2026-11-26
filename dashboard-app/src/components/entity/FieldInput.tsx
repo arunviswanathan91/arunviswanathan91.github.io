@@ -6,11 +6,14 @@ import { TagChips, TagEditor } from "../ui/TagChips";
 import type { FieldDef, Row } from "../../entities/types";
 import type { Person, Project } from "../../lib/store";
 import type { Tag } from "../../lib/tags";
+import type { LinkOption } from "../../lib/libraryLinks";
 
 export interface InputCtx{
  projects:Project[];
  people:Person[];
  publications:Row[];
+ papers:LinkOption[];
+ resumes:LinkOption[];
  tags:Tag[];
  createTag(name:string):Promise<Tag|null>;
 }
@@ -54,6 +57,16 @@ export function FieldInput({field,value,onCommit,ctx,compact,autoFocus,disabled=
   case "publication":
    return <SelectMenu className={cls} value={value??""} label={field.label} disabled={disabled}
     options={[{value:"",label:"No linked paper"},...ctx.publications.map(p=>({value:p.id,label:String(p.title||"Untitled publication")}))]}
+    onChange={next=>onCommit(next||null)}/>;
+  case "paper":
+   return <SelectMenu className={cls} value={value??""} label={field.label} disabled={disabled} searchable
+    options={[{value:"",label:"No linked paper"},...(!value||ctx.papers.some(p=>p.id===value)?[]:[{value:String(value),label:"Linked paper"}]),
+     ...ctx.papers.map(p=>({value:p.id,label:p.title||"Untitled paper"}))]}
+    onChange={next=>onCommit(next||null)}/>;
+  case "resume":
+   return <SelectMenu className={cls} value={value??""} label={field.label} disabled={disabled}
+    options={[{value:"",label:"Not recorded"},...(!value||ctx.resumes.some(r=>r.id===value)?[]:[{value:String(value),label:"Linked resume"}]),
+     ...ctx.resumes.map(r=>({value:r.id,label:r.title||"Untitled resume"}))]}
     onChange={next=>onCommit(next||null)}/>;
   case "tags":{
    const selected:string[]=Array.isArray(value)?value:[];
