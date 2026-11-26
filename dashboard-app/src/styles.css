@@ -1369,6 +1369,9 @@ button:disabled.icon-button{opacity:.35;cursor:not-allowed}
 .writing-bar-end button.active{background:var(--accent-soft);border-color:var(--accent-border);color:var(--accent)}
 .writing-panel{display:flex;gap:var(--s-2);flex-wrap:wrap;align-items:center;border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface);padding:var(--s-3)}
 .writing-panel .input{flex:1;min-width:200px}
+.writing-server-status{flex-basis:100%;margin:0;font-size:var(--f-sm);color:var(--text-2)}
+.writing-server-status.ready{color:var(--accent)}
+.writing-server-status.silent,.writing-server-status.stopped{color:var(--warning)}
 .writing-history{flex-direction:column;align-items:stretch;max-height:240px;overflow:auto}
 .writing-history button{display:flex;justify-content:space-between;gap:var(--s-3);padding:6px 8px;border-radius:var(--r-1);text-align:left;font-size:var(--f-sm)}
 .writing-history button:hover,.writing-history button.active{background:var(--surface-2)}

@@ -91,3 +91,24 @@ begin
 end $$;
 revoke all on function public.set_writing_server(text, text, text) from public;
 grant execute on function public.set_writing_server(text, text, text) to anon;
+
+-- Progress messages from the notebook: which start-up step it is on, how long that step usually takes, when it will stop.
+alter table public.writing_settings add column if not exists server_status jsonb not null default '{}'::jsonb;
+alter table public.writing_settings add column if not exists server_status_at timestamptz;
+
+create or replace function public.set_writing_status(p_secret text, p_status jsonb)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare owner uuid;
+begin
+  if p_secret is null or length(p_secret) < 32 then return false; end if;
+  if p_status is null or jsonb_typeof(p_status) <> 'object' or length(p_status::text) > 2000 then return false; end if;
+  select k.user_id into owner from public.writing_server_keys k
+   where k.secret_hash = encode(sha256(convert_to(p_secret, 'UTF8')), 'hex');
+  if owner is null then return false; end if;
+  insert into public.writing_settings (user_id, server_status, server_status_at, updated_at)
+  values (owner, p_status, now(), now())
+  on conflict (user_id) do update set server_status = excluded.server_status, server_status_at = now();
+  return true;
+end $$;
+revoke all on function public.set_writing_status(text, jsonb) from public;
+grant execute on function public.set_writing_status(text, jsonb) to anon;

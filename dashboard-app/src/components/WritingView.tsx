@@ -6,6 +6,7 @@ import {cleanLinks,inspectLinks} from '../lib/humanizer/links';
 import {compose,isBreak,wordDiff,type Segment} from '../lib/humanizer/diff';
 import {styleMetrics} from '../lib/humanizer/metrics';
 import {dipperBackend,rewrite} from '../lib/humanizer/paraphrase';
+import {describeServer,type ServerStatus} from '../lib/humanizer/serverStatus';
 import type {LexiconEntry} from '../lib/humanizer/rules';
 type Doc={id:string;title:string;updated_at:string};
 type LexRow={phrase:string;replacements:string[];locked:boolean};
@@ -42,6 +43,7 @@ export function WritingView(){
  const [lexicon,setLexicon]=useState<LexRow[]>([]),[docs,setDocs]=useState<Doc[]>([]);
  const [kind,setKind]=useState<'dipper'|'humanizer'|''>('');
  const [probe,setProbe]=useState(0);
+ const [server,setServer]=useState<{status:ServerStatus|null;at:string|null}>({status:null,at:null}),[now,setNow]=useState(()=>Date.now());
  const [busy,setBusy]=useState(false),[status,setStatus]=useState(''),[scores,setScores]=useState<{before?:Score;after?:Score}>({});
  const chars=useMemo(()=>inspectChars(text).filter(f=>f.action!=='keep'),[text]);
  const links=useMemo(()=>inspectLinks(text),[text]);
@@ -62,16 +64,28 @@ export function WritingView(){
   fetch(url.trim().replace(/\/+$/,'')+'/health',{signal:stop.signal}).then(r=>r.ok?r.json():null).then((d:{kind?:string}|null)=>{if(d?.kind==='dipper'||d?.kind==='humanizer')setKind(d.kind);}).catch(()=>{});
   return()=>stop.abort();
  },[url,probe]);
- // The notebook writes a new address and token at every start; this picks them up without a page reload.
- const reconnect=async()=>{
+ // The notebook writes a new address and token at every start, and a progress message about every 45 seconds.
+ const reconnect=useCallback(async(quiet=false)=>{
   if(supabase){
-   const {data,error}=await supabase.from('writing_settings').select('server_url,server_token').maybeSingle();
-   if(error){setStatus(error.message);return;}
+   const {data,error}=await supabase.from('writing_settings').select('server_url,server_token,server_status,server_status_at').maybeSingle();
+   if(error){if(!quiet)setStatus(error.message);return;}
    setUrl(data?.server_url??'');setToken(data?.server_token??'');
-   if(!data?.server_url)setStatus('The server is off. Start the notebook, wait for it to say READY, then press Reconnect.');
+   setServer({status:(data?.server_status??null) as ServerStatus|null,at:data?.server_status_at??null});
   }
-  setProbe(n=>n+1);
- };
+  setNow(Date.now());
+  if(!quiet)setProbe(n=>n+1);
+ },[]);
+ const serverView=useMemo(()=>describeServer(server.status,server.at,now),[server,now]);
+ // While the panel is open or the server is starting, keep the progress line current without a click.
+ const watching=!!supabase&&(panel==='server'||serverView.state==='starting');
+ useEffect(()=>{
+  if(!watching)return;
+  void reconnect(true);
+  const id=setInterval(()=>void reconnect(true),15000);
+  return()=>clearInterval(id);
+ },[watching,reconnect]);
+ // The address only answers once the server says it is ready, so probe again at that moment.
+ useEffect(()=>{if(serverView.state==='ready')setProbe(n=>n+1);},[serverView.state]);
  const locked=useMemo(()=>[...lockedText.split(',').map(s=>s.trim()).filter(Boolean),...lexicon.filter(r=>r.locked).map(r=>r.phrase)],[lockedText,lexicon]);
  const personal=useMemo<LexiconEntry[]>(()=>lexicon.filter(r=>!r.locked&&r.replacements.length).map(r=>({from:r.phrase,to:r.replacements})),[lexicon]);
  const run=async()=>{
@@ -122,7 +136,7 @@ export function WritingView(){
  const copy=(t:string)=>void navigator.clipboard.writeText(t).then(()=>setStatus('Copied.'));
  const download=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([result],{type:'text/markdown'}));a.download=(title.trim()||'rewrite')+'.md';a.click();URL.revokeObjectURL(a.href);};
  const toggle=(i:number)=>setSegments(list=>list.map((s,j)=>j===i&&!s.rejected?{...s,accepted:!s.accepted}:s));
- const serverLabel=kind?`${kind==='dipper'?'DIPPER':'Humanizer'} connected`:url.trim()?'Server not reachable':'No server';
+ const serverLabel=kind?`${kind==='dipper'?'DIPPER':'Humanizer'} connected`:serverView.state==='starting'?'Server starting…':url.trim()?'Server not reachable':'No server';
  return <div className="writing">
   <div className="writing-bar">
    <div className="writing-modes" role="group" aria-label="Rewrite strength">{MODES.map(m=><button key={m.key} className={mode===m.key?'active':''} aria-pressed={mode===m.key} title={m.hint} onClick={()=>setMode(m.key)}>{m.label}</button>)}</div>
@@ -138,7 +152,7 @@ export function WritingView(){
    <input className="input" type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Token" aria-label="Server token"/>
    {supabase&&<button className="secondary" onClick={()=>void saveSettings()}>Save</button>}
    <button className="secondary" onClick={()=>void reconnect()}><RefreshCw size={14}/> Reconnect</button>
-   {!kind&&<small className="writing-hint">The notebook fills these in when it starts. Run it, wait for READY, then press Reconnect.</small>}
+   {supabase&&<p className={'writing-server-status '+serverView.state} role="status">{serverView.text}</p>}
   </div>}
   {panel==='history'&&<div className="writing-panel writing-history">
    {docs.length?docs.map(d=><button key={d.id} className={docId===d.id?'active':''} onClick={()=>void open(d)}><span>{d.title||'Untitled'}</span><small>{new Date(d.updated_at).toLocaleDateString()}</small></button>):<small>No saved documents yet.</small>}

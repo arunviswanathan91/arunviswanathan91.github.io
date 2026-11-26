@@ -8,6 +8,7 @@ import { checkFidelity } from "../src/lib/humanizer/fidelity.ts";
 import { compose, wordDiff } from "../src/lib/humanizer/diff.ts";
 import { styleMetrics } from "../src/lib/humanizer/metrics.ts";
 import { dipperBackend, rewrite, verifySpans } from "../src/lib/humanizer/paraphrase.ts";
+import { describeServer } from "../src/lib/humanizer/serverStatus.ts";
 
 const SCI="CD8+ T cells from STAT3−/− mice showed reduced pSTAT3-Y705 after 2 µM inhibitor (P < 0.05) [3,4].";
 
@@ -127,4 +128,21 @@ test("word diff and style metrics",()=>{
  const m=styleMetrics("Short one. This sentence is quite a lot longer than the first one. However, it ends.");
  assert.equal(m.sentences,3);
  assert.ok(m.lengthVariation>0&&m.connectorRate>0.3);
+});
+
+test("server status line covers off, starting, ready, silent and stopped",()=>{
+ const t0=Date.parse("2026-11-26T10:00:00Z"),at="2026-11-26T10:00:00Z";
+ assert.equal(describeServer(null,null,t0).state,"off");
+ assert.equal(describeServer({},at,t0).state,"off");
+ const starting=describeServer({stage:"download",step:2,steps:4,label:"Downloading the model (10 GB)",since:"2026-11-26T09:58:00Z",expect_s:240,remaining_s:300},at,t0+30000);
+ assert.equal(starting.state,"starting");
+ assert.equal(starting.text,"Starting, step 2 of 4: Downloading the model (10 GB). 3 minutes so far; this step usually takes about 4 minutes. About 5 minutes left in total.");
+ const ready=describeServer({stage:"ready",idle_minutes:30,stops_at:"2026-11-26T10:25:00Z"},at,t0+60000);
+ assert.equal(ready.text,"Ready. It stops by itself after 30 minutes without a rewrite, in about 24 minutes if you do nothing.");
+ const silent=describeServer({stage:"ready",idle_minutes:30},at,t0+600000);
+ assert.equal(silent.state,"silent");
+ assert.match(silent.text,/No message from the server for 10 minutes/);
+ const stopped=describeServer({stage:"stopped",reason:"idle for 30 minutes"},at,t0+600000);
+ assert.equal(stopped.state,"stopped");
+ assert.match(stopped.text,/\(idle for 30 minutes\)/);
 });
