@@ -36,6 +36,7 @@ always goes at the end of this list, and the commit that adds it says so.
 | 28 | `cross-links.sql` | Links between sections (experiment ↔ thesis chapter, tasks and notes ↔ experiment, note ↔ meeting, deadline ↔ manuscript, read ↔ library paper, contact ↔ person, application ↔ resume); thesis and goal dates on the agenda; search and backup read clippings |
 | 29 | `project-close.sql` | The paper a project produced (`projects.output_publication_id`); closing a project is the Completed phase |
 | 30 | `publication-published.sql` | The published version of a manuscript, fetched from its final DOI (`publications.published`) |
+| 31 | `publication-submissions.sql` | Submission trail of a manuscript: each journal tried, in order, and the outcome there (`ws_publication_submissions`) |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set

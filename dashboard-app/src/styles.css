@@ -1425,3 +1425,27 @@ a.resource-button{color:var(--text);text-decoration:none}
 .published-preview{margin-top:var(--s-3);padding-top:var(--s-3);border-top:1px solid var(--border)}
 .published-mark{display:flex;align-items:center;gap:6px;margin-top:var(--s-2);font-size:var(--f-xs);color:var(--text-2)}
 .output-reference{display:block;color:var(--text-3);font-size:var(--f-xs)}
+
+/* Submission trail: the journals a paper went to and what happened at each. */
+.submission-trail h2 svg{width:16px;height:16px;vertical-align:-3px}
+.submission-headline{font-size:var(--f-sm);font-weight:600;margin:0}
+.submission-list{list-style:none;margin:var(--s-3) 0 0;padding:0;display:grid;gap:var(--s-2)}
+.submission-list>li{border:1px solid var(--border);border-radius:var(--r-2);padding:var(--s-2) var(--s-3)}
+.submission-list>li.is-current{border-color:var(--border-strong);background:var(--surface-2)}
+.submission-row{display:flex;align-items:flex-start;gap:var(--s-2);flex-wrap:wrap}
+.submission-n{flex:none;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:var(--surface-3);color:var(--text-2);font-size:var(--f-xs);font-weight:700}
+.submission-main{flex:1;min-width:140px;display:grid;gap:2px}
+.submission-main small{color:var(--text-3);font-size:var(--f-xs)}
+.submission-notes{margin:4px 0 0;font-size:var(--f-xs);color:var(--text-2);white-space:pre-wrap}
+.submission-tools{display:inline-flex;gap:2px}
+.submission-edit{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--s-2);margin-top:var(--s-2)}
+.submission-edit label{display:grid;gap:4px;font-size:var(--f-xs);color:var(--text-2)}
+.submission-edit-wide{grid-column:1/-1}
+.submission-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-3)}
+.submission-actions>.input{flex:1;min-width:140px;width:auto}
+.submission-actions svg{width:13px;height:13px}
+.submission-on{display:inline-flex;align-items:center;gap:6px;font-size:var(--f-xs);color:var(--text-3)}
+.submission-on .input{width:auto}
+.submission-trail.is-compact{display:grid;gap:6px;margin:var(--s-2) 0;padding-top:var(--s-2);border-top:1px solid var(--border)}
+.submission-trail.is-compact .submission-actions{margin-top:2px}
+.submission-chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px}

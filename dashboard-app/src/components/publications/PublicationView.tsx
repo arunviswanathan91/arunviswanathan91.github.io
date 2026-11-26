@@ -13,6 +13,7 @@ import { useEntityCtx } from "../entity/ctx";
 import { PublicationLifecycle } from "./PublicationLifecycle";
 import { PublicationLinked } from "./PublicationLinked";
 import { PublishedVersion } from "./PublishedVersion";
+import { SubmissionTrail } from "./SubmissionTrail";
 import { PublicationWorkflow } from "./PublicationWorkflow";
 import { ReviewTasks } from "./ReviewTasks";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
@@ -76,6 +77,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
 
   <div className="publication-page-grid">
    <main className="publication-page-main">
+    {isOwner&&<SubmissionTrail key={`st-${publication.id}`} publication={publication} canEdit={isOwner}/>}
     <PublicationLifecycle publication={publication} canEdit={canEdit} canReassign={isOwner}/>
     <PublishedVersion key={`pv-${publication.id}`} publication={publication} canEdit={canEdit}/>
     <section className="panel publication-workflow-panel">
