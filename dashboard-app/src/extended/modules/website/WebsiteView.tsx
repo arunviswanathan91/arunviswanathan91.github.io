@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { publishedLink, publishedOf } from "../../../lib/published";
 import { ArrowDownWideNarrow, ChevronDown, ChevronRight, ChevronUp, ExternalLink, Eye, History, Plus, Search, Trash2, Upload } from "lucide-react";
 import { ask } from "../../../lib/dialogs.tsx";
 import { currentUserId, list, onLoadCacheClear, sb, upsert, useLoad } from "../../lib/db.ts";
@@ -208,7 +209,9 @@ function Editor({ row, uid }: { row: Row | null; uid: string }) {
 
 /** A manuscript from the Publications tracker as a website entry. Authors and year stay to be typed in. */
 const siteFromOwn = (p: OwnPublication): SitePublication => ({
-  year: "", authors: "", title: p.title ?? "", venue: p.venue ?? "", url: publicationLink(p),
+  // The published record (final DOI fetched on the publication page) supplies authors and year.
+  year: publishedOf(p)?.year ? String(publishedOf(p)!.year) : "", authors: publishedOf(p)?.authors.join(", ") ?? "",
+  title: publishedOf(p)?.title ?? p.title ?? "", venue: publishedOf(p)?.journal ?? p.venue ?? "", url: (publishedOf(p) && publishedLink(publishedOf(p)!)) || publicationLink(p),
   badge: p.stage === "Published" ? "" : p.stage === "Accepted" ? "Accepted" : p.stage === "Under Review" || p.stage === "Revision Requested" ? "Under review" : "In preparation",
 });
 

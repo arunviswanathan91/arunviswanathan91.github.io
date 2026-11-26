@@ -78,7 +78,7 @@ const publicationQuickActions:QuickAction[]=[
 export const publications:EntityDef={
  key:"publications",table:"publications",tagEntity:"publication",
  select:"id,user_id,title,venue,stage,rejection_type,review_comments,decision_email_url,"+
-  "next_action,due_at,doi,notes,project_id,url,created_at,updated_at",
+  "next_action,due_at,doi,notes,project_id,url,published,created_at,updated_at",
  singular:"publication",plural:"Publications",kicker:"Knowledge",subtitle:"Every manuscript from idea to print.",icon:FlaskConical,
  titleField:"title",searchFields:["title","venue","next_action","doi","notes","review_comments"],projectField:"project_id",groupBy:"stage",
  defaultSort:{key:"created_at",dir:"desc"},defaultLayout:"board",layouts:["board","table"],

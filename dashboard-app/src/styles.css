@@ -1411,3 +1411,17 @@ a.resource-button{color:var(--text);text-decoration:none}
 .project-closed-banner svg{width:15px;height:15px;vertical-align:-2px;color:var(--tone-green-fg)}
 .project-closed-banner small{display:block;color:var(--text-3);font-size:var(--f-xs)}
 .nav-project.is-closed .nav-text{color:var(--text-3)}
+
+/* The published version of a manuscript, and its reference on a project. */
+.published-panel h2 svg{width:16px;height:16px;vertical-align:-3px;color:var(--tone-green-fg)}
+.published-reference{display:grid;gap:4px;font-size:var(--f-sm)}
+.published-reference span{color:var(--text-2)}
+.published-reference a{display:inline-flex;align-items:center;gap:4px;width:fit-content}
+.published-reference a svg{width:13px;height:13px}
+.published-actions{display:flex;flex-wrap:wrap;gap:var(--s-3);align-items:center;margin-top:var(--s-3)}
+.published-actions svg{width:13px;height:13px;vertical-align:-2px}
+.published-fetch{display:flex;gap:var(--s-2);margin-top:var(--s-3)}
+.published-fetch .input{flex:1;min-width:0}
+.published-preview{margin-top:var(--s-3);padding-top:var(--s-3);border-top:1px solid var(--border)}
+.published-mark{display:flex;align-items:center;gap:6px;margin-top:var(--s-2);font-size:var(--f-xs);color:var(--text-2)}
+.output-reference{display:block;color:var(--text-3);font-size:var(--f-xs)}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { publishedLink, publishedOf } from "../../../lib/published";
 import { ask } from "../../../lib/dialogs.tsx";
 import { ArrowLeft, Search, ChevronDown, ChevronRight, ChevronUp, Download, Eye, EyeOff, Minus, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
 import { getOne, update, useLoad } from "../../lib/db.ts";
@@ -238,6 +239,9 @@ function SectionCard({ s, name, first, last, onChange, onMove, onDelete }: {
 /** A manuscript from the Publications tracker as a resume entry. Authors, year and pages stay to be typed in. */
 function itemFromOwn(p: OwnPublication): Partial<ResumeItem> {
   const done = p.stage === "Published" || p.stage === "Accepted";
+  // Once the final DOI has been fetched on the publication page, its published record is the better source.
+  const out = publishedOf(p);
+  if (out) return { title: out.title, subtitle: out.journal ?? p.venue ?? "", link: publishedLink(out) ?? publicationLink(p), start: out.year ? String(out.year) : "", end: "", authors: out.authors.join(", ") };
   return { title: (p.title ?? "").replace(/\s+/g, " ").trim(), subtitle: p.venue ?? "", link: publicationLink(p), ...(done ? {} : { kind: "submitted" as const }) };
 }
 

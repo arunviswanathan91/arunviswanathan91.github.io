@@ -6,7 +6,7 @@ import { Modal } from "./Modal.tsx";
 import { Empty, ErrorText, Loading } from "./ui.tsx";
 
 /** One of your own manuscripts, from the Publications tracker. */
-export interface OwnPublication { id: string; title: string; venue: string | null; stage: string | null; doi: string | null; url: string | null; updated_at: string }
+export interface OwnPublication { id: string; title: string; venue: string | null; stage: string | null; doi: string | null; url: string | null; updated_at: string; published?: unknown }
 
 /** The DOI inside a link or a line of text ("https://doi.org/10.1/x" → "10.1/x"), or "". */
 export const doiIn = (text: string | null | undefined) => normDoi((text ?? "").match(/10\.\d{4,9}\/\S+/)?.[0]).replace(/[.,;]$/, "");
@@ -42,7 +42,7 @@ function PickModal({ existing, onPick, onClose }: { existing: { link: string; ti
   useEffect(() => {
     if (!core) { setError("Sign in to see your publications."); return; }
     let cancelled = false;
-    void core.from("publications").select("id,title,venue,stage,doi,url,updated_at").is("deleted_at", null).order("updated_at", { ascending: false }).then(({ data, error: e }) => {
+    void core.from("publications").select("id,title,venue,stage,doi,url,updated_at,published").is("deleted_at", null).order("updated_at", { ascending: false }).then(({ data, error: e }) => {
       if (cancelled) return;
       if (e) setError(e.message); else setRows((data ?? []) as OwnPublication[]);
     });
