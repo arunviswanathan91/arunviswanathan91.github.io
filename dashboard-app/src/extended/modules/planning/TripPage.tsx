@@ -17,8 +17,10 @@ import { nextTripDate, relativeDays, tripMoney, unrecorded } from "./logic.ts";
 import { setupError } from "./ThesisView.tsx";
 
 export function TripPage({ id }: { id: string }) {
-  const { data: trip, error, loading } = useLoad(() => getOne<Trip>("trips", id), [id]);
+  const { data: trip, error, loading, fresh } = useLoad(() => getOne<Trip>("trips", id), [id]);
   if (error) return <ErrorText error={setupError(error)} />;
+  // Wait for the record itself, not the remembered copy of it: the editor keeps what it starts with.
+  if (!fresh) return <Loading rows={8} />;
   // Never build the editor from the previous trip while this one loads.
   if ((loading && !trip) || (trip && trip.id !== id)) return <Loading rows={8} />;
   if (!trip) return <Empty>This trip doesn’t exist (it may have been deleted). <a href={href("trips")}>Back to trips</a></Empty>;

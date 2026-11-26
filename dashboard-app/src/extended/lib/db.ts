@@ -74,10 +74,31 @@ export async function upsert(table: string, values: object | object[], onConflic
   if (!quiet) emitChange(table);
 }
 
+// Quiet saves still on their way to the server. A page that opens meanwhile waits for
+// them (see useLoad), so it never reads the record from before a save that is about to land.
+const quietSaves = new Set<Promise<unknown>>();
+/** Resolves once every quiet save sent so far has finished, whether it worked or not. */
+export const quietSavesSettled = () => Promise.allSettled([...quietSaves]).then(() => undefined);
+
+/** `quiet`: open pages are not told to reload (an editor saving as you type would fight
+ *  the typing). Remembered copies of pages that read this table are dropped instead. */
 export async function update<T>(table: string, id: string, values: object, quiet = false): Promise<T> {
-  const row = check(await sb().from(table).update(values).eq("id", id).select().single()) as T;
-  if (!quiet) emitChange(table);
-  return row;
+  if (!quiet) {
+    const row = check(await sb().from(table).update(values).eq("id", id).select().single()) as T;
+    emitChange(table);
+    return row;
+  }
+  const changed = groupsOfTable(table);
+  pages.invalidate(changed);
+  const request = (async () => check(await sb().from(table).update(values).eq("id", id).select().single()) as T)();
+  quietSaves.add(request);
+  try { return await request; }
+  finally {
+    quietSaves.delete(request);
+    // Again: a page opened while the save was in flight may have remembered the old record.
+    pages.invalidate(changed);
+    saves++; // and a load started before this save must not be reused (see `shared`)
+  }
 }
 
 /** Move a record to Trash: recoverable from Trash until the retention period ends (30 days by default), then deleted. */
@@ -127,6 +148,8 @@ function shared<T>(key: string, load: () => Promise<T>): Promise<T> {
  * Load data for a page. The last result is shown at once on later visits (and
  * after a browser reload) while a fresh copy loads, and the page reloads after
  * saves that touch the tables its loader reads (see pageCache.ts).
+ * `fresh` turns true once the server has answered for the current deps; pages that
+ * edit a record wait for it before building their editor.
  */
 export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
   const source = load.toString();
@@ -134,6 +157,10 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | undefined>(() => pages.peek(key) as T | undefined);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(() => !pages.has(key));
+  // The deps whose data has come from the server since this page opened. Until then `data`
+  // may be the remembered copy. An editor must not start from that: it would show old text
+  // and then save it over newer edits made elsewhere.
+  const [freshFor, setFreshFor] = useState<string | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
   const keyRef = useRef(key);
@@ -148,10 +175,12 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
     const mine = ++seq.current;
     const k = keyRef.current;
     try {
+      await quietSavesSettled();
       const value = await shared(k, () => loadRef.current());
       if (mine !== seq.current) return;
-      pages.put(k, value);
+      pages.put(k, value, readsRef.current);
       setData(value);
+      setFreshFor(k);
       setError("");
     } catch (e) {
       if (mine !== seq.current) return;
@@ -169,7 +198,7 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]) {
     window.addEventListener(CHANGED, on);
     return () => { seq.current++; window.removeEventListener(CHANGED, on); };
   }, [reload]);
-  return { data, error, loading, reload };
+  return { data, error, loading, reload, fresh: freshFor === key };
 }
 
 // ── Files ────────────────────────────────────────────────────────────────────

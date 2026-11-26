@@ -8,6 +8,8 @@ import {
   type ResumeData, type ResumeItem, type ResumeSection, type ResumeStyle,
 } from "../model.ts";
 
+import { citationRuns, linkText, pubGroups, pubOptions, shownLinks } from "../pubs.ts";
+
 const MM = 72 / 25.4;
 const INK = "#111111";
 const GROUPED = ["skills", "languages", "interests", "certification", "courses", "awards", "scores"];
@@ -69,6 +71,36 @@ function Entry({ s, i, swap, c }: { s: ResumeSection; i: ResumeItem; swap: boole
       <B s={s} body={i.body} c={c} />
     </View>
   );
+}
+
+/** Publications as citations under sub-headings; mirrors Pubs in ResumePreview. */
+function pubParts(s: ResumeSection, name: string, c: Ctx): ReactNode[] {
+  const { st } = c;
+  const opt = pubOptions(s);
+  const parts: ReactNode[] = [];
+  pubGroups(s.items, opt, name).forEach((g, gn) => {
+    const rows = g.items.map((i, n) => opt.style === "classic" ? <Entry key={i.id} s={s} i={i} swap={false} c={c} /> : (
+      <View key={i.id} style={{ flexDirection: "row", marginBottom: st.spacing }} wrap={false}>
+        {opt.numbered ? <Text style={{ width: g.items.length > 9 ? 18 : 13 }}>{n + 1}.</Text> : null}
+        <View style={{ flex: 1 }}>
+          <Linked url={i.link}>
+            <Text>{citationRuns(i, opt, name).map((r, k) => <Text key={k} style={r.bold ? { fontWeight: 700 } : r.italic ? { fontStyle: "italic" } : {}}>{r.text}</Text>)}</Text>
+          </Linked>
+          <B s={s} body={i.body} c={c} />
+        </View>
+      </View>
+    ));
+    if (!g.heading) { parts.push(...rows); return; }
+    // A sub-heading never ends a page on its own: it travels with its first entry.
+    parts.push(
+      <View key={`h${gn}`} wrap={false} style={{ marginTop: gn ? st.spacing : 0 }}>
+        <Text style={{ fontWeight: 700, fontStyle: "italic", marginBottom: st.spacing * 0.75 }}>{g.heading}</Text>
+        {rows[0]}
+      </View>,
+      ...rows.slice(1),
+    );
+  });
+  return parts;
 }
 
 function Promoted({ s, run, c }: { s: ResumeSection; run: ResumeItem[]; c: Ctx }) {
@@ -203,13 +235,13 @@ export function ResumePdf({ data, body, nameFont, title }: { data: ResumeData; b
   const { profile: p, style: st } = data;
   const c: Ctx = { st };
   const center = st.align === "center";
-  const links = p.links.filter((l) => l.label || l.url);
+  const links = shownLinks(p.links);
   const sep = st.separator === "bar" ? "  |  " : st.separator === "bullet" ? "  •  " : "    ";
   const parts: ReactNode[] = [];
   const add = (node: ReactNode) => { if (parts.length) parts.push(<Text key={`s${parts.length}`} style={{ color: "#777777" }}>{sep}</Text>); parts.push(node); };
   if (p.email) add(<Text key="e">{p.email}</Text>);
   if (p.phone) add(<Text key="p">{p.phone}</Text>);
-  links.forEach((l, n) => add(<Linked key={`l${n}`} url={l.url}><Text>{l.label || l.url}</Text></Linked>));
+  links.forEach((l, n) => add(<Linked key={`l${n}`} url={l.url}><Text>{linkText(l)}</Text></Linked>));
   if (p.location) add(<Text key="o">{p.location}</Text>);
   const summary = p.summary.trim();
   const nameCol = st.accentOn.name ? st.accent : INK, headCol = st.accentOn.headline ? st.accent : INK;
@@ -236,7 +268,7 @@ export function ResumePdf({ data, body, nameFont, title }: { data: ResumeData; b
         {sections.map((s) => {
           const swap = (s.type === "education" && st.swapEducation) || (s.type === "experience" && st.swapExperience);
           const grouped = s.type === "experience" && st.groupPromotions;
-          const parts: ReactNode[] = GROUPED.includes(s.type)
+          const parts: ReactNode[] = s.type === "publications" ? pubParts(s, p.name, c) : GROUPED.includes(s.type)
             ? groupParts(s, c)
             : (grouped ? groupRuns(s.items) : s.items.map((i) => [i])).map((run) =>
                 run.length > 1 ? <Promoted key={run[0].id} s={s} run={run} c={c} /> : <Entry key={run[0].id} s={s} i={run[0]} swap={swap} c={c} />);

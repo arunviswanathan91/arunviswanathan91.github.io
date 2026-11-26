@@ -84,3 +84,20 @@ test("saved pages come back for the same user and build only", () => {
     delete (globalThis as { localStorage?: unknown }).localStorage;
   }
 });
+
+test("a quiet save forgets the remembered pages that read what it changed", async () => {
+  const { put, peek, has, invalidate, clear } = await import("../src/extended/lib/pageCache.ts");
+  clear();
+  put("resume-page", { title: "old" }, new Set(["resumes"]));
+  put("budget-page", { total: 1 }, new Set(["money"]));
+  put("search-page", { hits: [] }, null);          // reads everything
+  put("legacy-page", { x: 1 });                    // remembered without knowing what it reads
+  invalidate(new Set(["resumes"]));
+  assert.equal(has("resume-page"), false, "the edited record's page is forgotten");
+  assert.deepEqual(peek("budget-page"), { total: 1 }, "an unrelated page is kept");
+  assert.equal(has("search-page"), false, "a page that reads everything is forgotten");
+  assert.equal(has("legacy-page"), false, "unknown reads are treated as everything");
+  invalidate(null);                                // a save that names no table
+  assert.equal(has("budget-page"), false);
+  clear();
+});

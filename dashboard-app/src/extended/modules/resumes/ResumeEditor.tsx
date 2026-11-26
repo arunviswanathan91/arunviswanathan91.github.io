@@ -10,6 +10,7 @@ import {
   ACCENTS, ACCENT_TARGETS, DEFAULT_STYLE, FONTS, HEADING_STYLES, LAYOUT_TYPES, SECTION_ORDER, layoutFor, SECTION_TYPES, moveBy, newItem, newSection, normalizeResume, pdfFilename,
   type DisplayMode, type FontKey, type HeadingStyle, type SectionLayout, type ItemField, type ResumeData, type ResumeStyle, type ResumeItem, type ResumeSection, type SectionType,
 } from "./model.ts";
+import { PROFILE_PRESETS, PUB_KINDS, PUB_ROLES, pubKind, pubOptions, pubRole, sortNewestFirst, type PubKind, type PubOptions, type PubRole } from "./pubs.ts";
 import { ResumePreview } from "./ResumePreview.tsx";
 import { loadResumeFonts } from "./fonts.ts";
 import { itemFromMeta } from "./doi.ts";
@@ -19,8 +20,10 @@ interface Row { id: string; title: string; data: unknown }
 
 export function ResumeEditor({ id }: { id: string }) {
   useEffect(loadResumeFonts, []); // the font picker shows each typeface by name
-  const { data: row, error, loading } = useLoad(() => getOne<Row>("resumes", id), [id]);
+  const { data: row, error, loading, fresh } = useLoad(() => getOne<Row>("resumes", id), [id]);
   if (error) return <ErrorText error={error} />;
+  // Wait for the record itself, not the remembered copy of it: the editor keeps what it starts with.
+  if (!fresh) return <Loading rows={8} />;
   // Moving straight from one record to another, the previous one is still on hand while the
   // next loads: never build the editor from it, or its text could be saved into the new record.
   if ((loading && !row) || (row && row.id !== id)) return <Loading rows={8} />;
@@ -97,7 +100,7 @@ function Editor({ row }: { row: Row }) {
             <>
               <ProfileCard data={data} onChange={edit} />
               {data.sections.map((s, n) => (
-                <SectionCard key={s.id} s={s} first={n === 0} last={n === data.sections.length - 1}
+                <SectionCard key={s.id} s={s} name={data.profile.name} first={n === 0} last={n === data.sections.length - 1}
                   onChange={(f) => setSection(s.id, f)}
                   onMove={(d) => edit({ ...data, sections: moveBy(data.sections, n, d) })}
                   onDelete={async () => { if ((await ask(`Delete the “${s.title}” section and its ${s.items.length} entries?`))) edit({ ...data, sections: data.sections.filter((x) => x.id !== s.id) }); }} />
@@ -150,11 +153,18 @@ function ProfileCard({ data, onChange }: { data: ResumeData; onChange: (d: Resum
             {p.links.map((l, n) => (
               <div className="rb-link-row" key={n}>
                 <input placeholder="Label (LinkedIn)" value={l.label} onChange={(e) => set({ links: p.links.map((x, k) => (k === n ? { ...x, label: e.target.value } : x)) })} />
-                <input placeholder="https://…" value={l.url} onChange={(e) => set({ links: p.links.map((x, k) => (k === n ? { ...x, url: e.target.value } : x)) })} />
+                <input placeholder={PROFILE_PRESETS.find((x) => x.label.toLowerCase() === l.label.trim().toLowerCase())?.placeholder ?? "https://…"} value={l.url} onChange={(e) => set({ links: p.links.map((x, k) => (k === n ? { ...x, url: e.target.value } : x)) })} />
                 <button className="icon" aria-label="Remove link" onClick={() => set({ links: p.links.filter((_, k) => k !== n) })}><Trash2 size={14} /></button>
               </div>
             ))}
             <button onClick={() => set({ links: [...p.links, { label: "", url: "" }] })}><Plus size={14} /> Link</button>
+            {PROFILE_PRESETS.some((x) => !p.links.some((l) => l.label.trim().toLowerCase() === x.label.toLowerCase())) && (
+              <div className="rb-presets"><span className="muted small">Add a profile:</span>
+                {PROFILE_PRESETS.filter((x) => !p.links.some((l) => l.label.trim().toLowerCase() === x.label.toLowerCase())).map((x) => (
+                  <button key={x.label} type="button" className="small" onClick={() => set({ links: [...p.links, { label: x.label, url: "" }] })}><Plus size={12} /> {x.label}</button>
+                ))}
+              </div>
+            )}
           </div>
           <Input label="Summary" area rows={5} value={p.summary} onChange={(v) => set({ summary: v })} />
         </div>
@@ -163,8 +173,8 @@ function ProfileCard({ data, onChange }: { data: ResumeData; onChange: (d: Resum
   );
 }
 
-function SectionCard({ s, first, last, onChange, onMove, onDelete }: {
-  s: ResumeSection; first: boolean; last: boolean; onChange: (f: (s: ResumeSection) => ResumeSection) => void; onMove: (d: number) => void; onDelete: () => void;
+function SectionCard({ s, name, first, last, onChange, onMove, onDelete }: {
+  s: ResumeSection; name: string; first: boolean; last: boolean; onChange: (f: (s: ResumeSection) => ResumeSection) => void; onMove: (d: number) => void; onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [openItem, setOpenItem] = useState<string | null>(null);
@@ -185,6 +195,7 @@ function SectionCard({ s, first, last, onChange, onMove, onDelete }: {
       {open && (
         <div className="rb-card-body">
           <Input label="Section heading" value={s.title} onChange={(v) => onChange((x) => ({ ...x, title: v }))} />
+          {s.type === "publications" && <PublicationOptions s={s} onChange={onChange} />}
           {s.items.map((it, n) => (
             <div key={it.id} className={`rb-item${it.hidden ? " is-hidden" : ""}`}>
               <div className="rb-item-head">
@@ -196,7 +207,9 @@ function SectionCard({ s, first, last, onChange, onMove, onDelete }: {
                   <button className="icon" aria-label="Delete entry" onClick={async () => { if ((await ask("Delete this entry?"))) onChange((x) => ({ ...x, items: x.items.filter((i) => i.id !== it.id) })); }}><Trash2 size={14} /></button>
                 </span>
               </div>
-              {openItem === it.id && <ItemForm type={s.type} item={it} onChange={(p) => setItem(it.id, p)} />}
+              {openItem === it.id && (s.type === "publications"
+                ? <PublicationForm item={it} name={name} aliases={pubOptions(s).aliases} onChange={(p) => setItem(it.id, p)} />
+                : <ItemForm type={s.type} item={it} onChange={(p) => setItem(it.id, p)} />)}
             </div>
           ))}
           {s.type === "publications" && (
@@ -236,6 +249,56 @@ function DoiFetch({ onFill, label = "Fetch from DOI, PubMed id or arXiv id" }: {
         </div>
       </label>
       {msg && <p className="small muted">{msg}</p>}
+    </div>
+  );
+}
+
+function Choice<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
+  return (
+    <label className="rb-field"><span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+    </label>
+  );
+}
+
+/** How a publications section is cited and grouped. */
+function PublicationOptions({ s, onChange }: { s: ResumeSection; onChange: (f: (s: ResumeSection) => ResumeSection) => void }) {
+  const o = pubOptions(s);
+  const set = (patch: Partial<PubOptions>) => onChange((x) => ({ ...x, pub: { ...pubOptions(x), ...patch } }));
+  const cited = o.style === "citation";
+  return (
+    <div className="rb-pubopts">
+      <Choice label="Format" value={o.style} options={[["citation", "Full citation"], ["classic", "Title and date"]]} onChange={(v) => set({ style: v })} />
+      <Choice label="Group under sub-headings" value={o.group} options={[["kind", "By type (articles, preprints, conference…)"], ["role", "First author / co-author"], ["both", "By type, articles split by authorship"], ["none", "One list"]]} onChange={(v) => set({ group: v })} />
+      {cited && <Choice label="Authors shown" value={String(o.maxAuthors)} options={[["3", "First 3, then et al."], ["6", "First 6, then et al."], ["10", "First 10, then et al."], ["0", "All authors"]]} onChange={(v) => set({ maxAuthors: Number(v) })} />}
+      {cited && <label className="toggle"><input type="checkbox" checked={o.numbered} onChange={(e) => set({ numbered: e.target.checked })} /> Number the entries</label>}
+      {cited && <label className="toggle"><input type="checkbox" checked={o.showDoi} onChange={(e) => set({ showDoi: e.target.checked })} /> Print the DOI</label>}
+      {cited && <div className="wide"><Input label="Other spellings of your name to make bold (optional)" value={o.aliases} placeholder="Viswanathan AG, A. G. Viswanathan" onChange={(v) => set({ aliases: v })} /></div>}
+      <div className="wide"><button type="button" onClick={() => onChange((x) => ({ ...x, items: sortNewestFirst(x.items) }))}>Sort newest first</button>
+        <span className="muted small"> Your name (from Personal details) is made bold in every author list. Entries appear in this order inside each group.</span></div>
+    </div>
+  );
+}
+
+/** One publication: the parts of a citation, plus what kind of work it is and your place in it. */
+function PublicationForm({ item, name, aliases, onChange }: { item: ResumeItem; name: string; aliases: string; onChange: (p: Partial<ResumeItem>) => void }) {
+  const kindLabel = (k: PubKind) => PUB_KINDS.find(([v]) => v === k)![1];
+  const roleLabel = (r: PubRole) => PUB_ROLES.find(([v]) => v === r)![1];
+  const auto = { ...item, kind: undefined, role: undefined };
+  return (
+    <div className="rb-item-form">
+      <DoiFetch onFill={(p) => onChange(p)} />
+      <Choice<PubKind | ""> label="Type" value={item.kind ?? ""} options={[["", `Automatic: ${kindLabel(pubKind(auto))}`], ...PUB_KINDS]} onChange={(v) => onChange({ kind: v || undefined })} />
+      <Input label="Authors, in order, separated by commas" area rows={2} value={item.authors ?? ""} placeholder="Smith J, Viswanathan A, Lee K" onChange={(v) => onChange({ authors: v })} />
+      <Input label="Title" area rows={2} value={item.title} onChange={(v) => onChange({ title: v })} />
+      <Input label="Journal or conference" value={item.subtitle} placeholder="Journal of Advanced Research" onChange={(v) => onChange({ subtitle: v })} />
+      <div className="rb-dates">
+        <Input label="Year or date" value={item.start} placeholder="2024" onChange={(v) => onChange({ start: v })} />
+        <Input label="Volume, issue, pages" value={item.details ?? ""} placeholder="65:73-87" onChange={(v) => onChange({ details: v })} />
+      </div>
+      <Input label="DOI or link" value={item.link} placeholder="https://doi.org/10.…" onChange={(v) => onChange({ link: v })} />
+      <Choice<PubRole | ""> label="Your role" value={item.role ?? ""} options={[["", (() => { const r = pubRole(auto, name, aliases); return r ? `Automatic: ${roleLabel(r)}` : "Not set (add the authors, or choose)"; })()], ...PUB_ROLES]} onChange={(v) => onChange({ role: v || undefined })} />
+      <Input label="Notes (optional, one bullet per line)" area rows={2} value={item.body} placeholder="Cover article · Highlighted in …" onChange={(v) => onChange({ body: v })} />
     </div>
   );
 }
