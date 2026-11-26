@@ -1,7 +1,7 @@
 import { EditToggle } from "../ui/EditToggle";
 import { useMemo, useState } from "react";
 import {
- ArrowLeft, ArrowRight, BookMarked, CalendarClock, ExternalLink,
+ ArrowLeft, ArrowRight, BookMarked, CalendarClock, CircleCheck, ExternalLink,
  FileDown, FileText, FlaskConical, FolderKanban, Mail, Pencil, Pin, Plus, Send, Trash2, UserRound, Users,
 } from "lucide-react";
 import { ENTITIES, TASK_STATUS } from "../../entities";
@@ -32,7 +32,10 @@ type ProjectEntityKey="tasks"|"publications"|"reads";
 type ComposerState={key:ProjectEntityKey;seed:Record<string,unknown>}|null;
 const TASK_MIME="application/x-science-project-task";
 const PROJECT_PHASES=["Planning","Active","Paused","Analysis","Writing","Completed","Archived"] as const;
-const options=(values:readonly string[])=>values.map(value=>({value,label:value}));
+// A finished project is "Closed" to the reader; the stored phase stays "Completed".
+export const phaseLabel=(phase:string|null|undefined)=>phase==="Completed"?"Closed":phase||"Planning";
+const options=(values:readonly string[])=>values.map(value=>({value,label:phaseLabel(value)}));
+const isClosed=(p:Project)=>p.phase==="Completed";
 
 const cleanTelegram=(value:string|null)=>value?.trim().replace(/^@/,"")||null;
 const safeHttp=(value:string)=>{try{const u=new URL(value);return u.protocol==="http:"||u.protocol==="https:"?u.toString():null}catch{return null}};
@@ -43,6 +46,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
  const [tab,setTab]=useState<ProjectTab>(tabFromHash);
  const [composer,setComposer]=useState<ComposerState>(null);
  const [manageStages,setManageStages]=useState(false);
+ const [closing,setClosing]=useState(false);
  const [person,setPerson]=useState<{person:Person|"new";membershipId?:string}|null>(null);
 
  const projectTasks=useMemo(()=>data.tables.tasks.rows.filter(r=>r.project_id===projectId),[data.tables.tasks.rows,projectId]);
@@ -88,14 +92,18 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
    <div><p className="kicker">Scientific project</p><h1>{project.name}</h1>
     <p className="subtitle">{project.description||"Add a description and objective for this project."}</p></div>
    <div className="project-head-actions">
-    <span className="project-phase">{project.phase||"Planning"}</span>
+    <span className="project-phase">{phaseLabel(project.phase)}</span>
     {isOwner&&<button className={"icon-button"+(project.pinned?" active":"")} aria-pressed={!!project.pinned} title={project.pinned?"Unpin":"Pin to the top of Projects"}
      onClick={()=>void data.projects.update(projectId,{pinned:!project.pinned})}><Pin/></button>}
     <a className="secondary" href={`#/tools/print/project?id=${projectId}`}><FileDown/>PDF summary</a>
     {canEdit&&<button className="secondary" onClick={()=>setManageStages(true)}><FolderKanban/>Manage stages</button>}
+    {isOwner&&!isClosed(project)&&project.phase!=="Archived"&&<button className="secondary" onClick={()=>setClosing(true)}><CircleCheck/>Close project</button>}
     {canEdit&&<button className="primary" onClick={()=>newEntity("tasks",{stage_id:stages[0]?.id})}><Plus/>Add work</button>}
    </div>
   </header>
+
+  {isClosed(project)&&<ClosedBanner project={project} isOwner={isOwner} onOpen={ui.openPublication}/>}
+  {closing&&<CloseProjectDialog project={project} onClose={()=>setClosing(false)}/>}
 
   <nav className="project-tabs" aria-label="Project sections">
    {tabs.map(t=><button key={t.key} className={tab===t.key?"active":""} aria-current={tab===t.key?"page":undefined}
@@ -122,10 +130,40 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
  </div>;
 }
 
+/** Your publications as choices for a project's output: this project's own first. */
+const outputOptions=(rows:Row[],projectId:string)=>[{value:"",label:"None"},
+ ...[...rows].sort((a,b)=>Number(b.project_id===projectId)-Number(a.project_id===projectId)||String(a.title).localeCompare(String(b.title)))
+  .map(r=>({value:String(r.id),label:String(r.title)+(r.project_id===projectId?"":" (another project)")}))];
+
+function ClosedBanner({project,isOwner,onOpen}:{project:Project;isOwner:boolean;onOpen(id:string):void}){
+ const {projects,tables}=useData();
+ const output=project.output_publication_id?tables.publications.byId.get(project.output_publication_id)??null:null;
+ return <p className="project-closed-banner" role="status">
+  <span><CircleCheck aria-hidden/> Closed{project.completed_on?` on ${formatDate(project.completed_on)}`:""}
+   {output&&<> · Output: <button className="link-button" onClick={()=>onOpen(String(output.id))}>{String(output.title)}</button></>}
+   <small> Everything in this project is kept and can still be edited.</small></span>
+  {isOwner&&<button className="secondary" onClick={()=>void projects.update(project.id,phasePatch("Active"))}>Reopen</button>}
+ </p>;
+}
+
+function CloseProjectDialog({project,onClose}:{project:Project;onClose():void}){
+ const {projects,tables}=useData();
+ const [output,setOutput]=useState(project.output_publication_id??"");
+ const close=async()=>{await projects.update(project.id,{...phasePatch("Completed"),output_publication_id:output||null});onClose()};
+ return <Modal kicker="Project" title="Close this project" onClose={onClose}
+  footer={<><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={()=>void close()}>Close project</button></>}>
+  <p style={{marginBottom:"var(--s-3)"}}>Closing marks the project as finished and lists it after your open projects. Nothing is deleted: its tasks, notes, experiments, files and links stay, and you can reopen it at any time.</p>
+  <div className="field"><label className="field-label" htmlFor="close-output">Output publication (optional)</label>
+   <SelectMenu id="close-output" value={output} label="Output publication" searchable options={outputOptions(tables.publications.rows,project.id)} onChange={setOutput}/>
+   <span className="muted-note">The paper this project produced.</span></div>
+ </Modal>;
+}
+
 function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:boolean;isOwner:boolean}){
  const {projects,projectLinks,projectFields,tables,tags}=useData();
- const {openDrawer}=useUi();
+ const {openDrawer,openPublication}=useUi();
  const {ask,confirmation}=useConfirmDialog();
+ const output=project.output_publication_id?tables.publications.byId.get(project.output_publication_id)??null:null;
  const [overviewEdit,setOverviewEdit]=useState(false);
  const [linksEdit,setLinksEdit]=useState(false);
  const [fieldsEdit,setFieldsEdit]=useState(false);
@@ -174,6 +212,10 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
     <div className="field"><label className="field-label" htmlFor="project-target">Target date</label>
      <DateInput id="project-target" className="input" type="date" value={project.target_date??""} disabled={!canEdit} onChange={e=>save({target_date:e.target.value||null})}/></div>
    </div>
+   <div className="field field-wide"><label className="field-label" htmlFor="project-output">Output publication</label>
+    <SelectMenu id="project-output" value={project.output_publication_id??""} label="Output publication" disabled={!isOwner} searchable
+     options={outputOptions(tables.publications.rows,project.id)} onChange={id=>{if(id!==(project.output_publication_id??""))save({output_publication_id:id||null})}}/>
+    <span className="muted-note">The paper this project produced.{!isOwner&&" Set by the project owner."}</span></div>
    <div className="field field-wide"><span className="field-label">Project tags</span>
     {isOwner?<TagEditor tags={tags.tags} selected={selectedTags} label="Project tags"
       onToggle={id=>void tags.setFor("project",project.id,selectedTags.includes(id)?selectedTags.filter(x=>x!==id):[...selectedTags,id])}
@@ -183,10 +225,11 @@ function ProjectOverview({project,canEdit,isOwner}:{project:Project;canEdit:bool
    </>:<div className="detail-summary">
    <div><span className="field-label">Objective</span><p>{project.objective||"No objective yet."}</p></div>
    <div><span className="field-label">Description</span><p>{project.description||"No description yet."}</p></div>
-   <div className="project-detail-grid"><div><span className="field-label">Phase</span><p>{project.phase||"Planning"}</p></div>
+   <div className="project-detail-grid"><div><span className="field-label">Phase</span><p>{phaseLabel(project.phase)}</p></div>
    <div><span className="field-label">Area</span><p>{AREAS.find(a=>a.value===(project.area||"research"))?.label}</p></div>
    <div><span className="field-label">Start date</span><p>{project.start_date?formatDate(project.start_date):"Not set"}</p></div>
    <div><span className="field-label">Target date</span><p>{project.target_date?formatDate(project.target_date):"Not set"}</p></div></div>
+   <div><span className="field-label">Output publication</span><p>{output?<button className="link-button" onClick={()=>openPublication(output.id)}>{String(output.title)}</button>:"None yet."}</p></div>
    <div><span className="field-label">Project tags</span>{selectedTags.length?<TagChips ids={selectedTags} byId={tags.byId}/>:<p>No tags yet.</p>}</div>
   </div>}
   </section>
@@ -306,6 +349,7 @@ function ProjectPublications({project,direct,related,canEdit,isOwner,onAdd,onOpe
   const tagIds=tags.idsFor("publication",paper.id);
   return <article className="project-paper" key={paper.id} onClick={e=>{if(!(e.target as HTMLElement).closest("button,a"))onOpen(paper.id)}}>
    <div className="project-paper-head"><span className="badge tone-blue">{paper.stage}</span>
+    {paper.id===project.output_publication_id&&<span className="badge tone-green">Output</span>}
     {relation==="tag"&&<span className="badge tone-violet">Related by tag</span>}</div>
    <button className="project-paper-title" onClick={()=>onOpen(paper.id)}>{paper.title}</button>
    {paper.venue&&<p className="subtitle">{paper.venue}</p>}

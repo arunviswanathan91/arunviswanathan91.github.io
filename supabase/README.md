@@ -34,6 +34,7 @@ always goes at the end of this list, and the commit that adds it says so.
 | 26 | `loan-amounts.sql` | Personal loans built up over time: each amount lent or borrowed, with its date |
 | 27 | `website.sql` | Public profile page content, edited in the dashboard (Website); the one table readable without signing in |
 | 28 | `cross-links.sql` | Links between sections (experiment ↔ thesis chapter, tasks and notes ↔ experiment, note ↔ meeting, deadline ↔ manuscript, read ↔ library paper, contact ↔ person, application ↔ resume); thesis and goal dates on the agenda; search and backup read clippings |
+| 29 | `project-close.sql` | The paper a project produced (`projects.output_publication_id`); closing a project is the Completed phase |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set

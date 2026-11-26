@@ -1404,3 +1404,10 @@ a.resource-button{color:var(--text);text-decoration:none}
  .topbar .chip-button .kbd-hint{display:none}
  main button:not(.link-button){min-height:36px}
 }
+
+/* Closed projects: kept, listed last and shown quieter. */
+.project-closed-banner{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap;margin:0;
+ padding:var(--s-2) var(--s-3);border:1px solid var(--border-strong);border-radius:var(--r-2);background:var(--surface-2);color:var(--text-2);font-size:var(--f-sm)}
+.project-closed-banner svg{width:15px;height:15px;vertical-align:-2px;color:var(--tone-green-fg)}
+.project-closed-banner small{display:block;color:var(--text-3);font-size:var(--f-xs)}
+.nav-project.is-closed .nav-text{color:var(--text-3)}

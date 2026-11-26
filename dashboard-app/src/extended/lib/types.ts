@@ -365,7 +365,7 @@ export interface SearchHit {
 // ── Labels ───────────────────────────────────────────────────────────────────
 
 export const PROJECT_STATUS: Record<ProjectStatus, string> = {
-  idea: "Idea", planned: "Planned", active: "Active", paused: "Paused", completed: "Completed", archived: "Archived",
+  idea: "Idea", planned: "Planned", active: "Active", paused: "Paused", completed: "Closed", archived: "Archived",
 };
 export const PROJECT_AREA: Record<ProjectArea, string> = {
   research: "Research", personal: "Personal", teaching: "Teaching", administration: "Administration", career: "Career", other: "Other",
