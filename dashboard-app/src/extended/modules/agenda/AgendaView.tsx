@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BriefcaseBusiness, CalendarClock, CalendarPlus, CheckSquare, Copy, CreditCard, Download, FileText, HandCoins, Repeat, Users, type LucideIcon } from "lucide-react";
+import { BriefcaseBusiness, CalendarClock, CalendarPlus, CheckSquare, Copy, CreditCard, Download, FileText, GraduationCap, HandCoins, Repeat, Target, Users, type LucideIcon } from "lucide-react";
 import { rpc, useLoad } from "../../lib/db.ts";
 import { addDays, fmtDate, fmtTime, relDay, today } from "../../lib/dates.ts";
 import { downloadBlob } from "../../lib/download.ts";
@@ -7,9 +7,9 @@ import { buildIcs } from "../../lib/ics.ts";
 import { saveSettings, useSettings } from "../../lib/settings.ts";
 import { Empty, ErrorText, PageHeader } from "../../components/ui.tsx";
 
-/** One dated item from ws_agenda (tasks, deadlines, meetings, papers, applications, EMIs, card bills, recurring). */
+/** One dated item from ws_agenda (tasks, deadlines, meetings, papers, applications, EMIs, card bills, recurring, thesis dates, goals). */
 export interface AgendaRow {
-  kind: "task" | "deadline" | "meeting" | "publication" | "opportunity" | "emi" | "card" | "recurring";
+  kind: "task" | "deadline" | "meeting" | "publication" | "opportunity" | "emi" | "card" | "recurring" | "thesis" | "goal";
   ref_id: string;
   title: string;
   day: string;
@@ -29,6 +29,8 @@ export const KIND: Record<AgendaRow["kind"], { label: string; icon: LucideIcon }
   emi: { label: "EMIs", icon: HandCoins },
   card: { label: "Card bills", icon: CreditCard },
   recurring: { label: "Recurring", icon: Repeat },
+  thesis: { label: "Thesis", icon: GraduationCap },
+  goal: { label: "Goals", icon: Target },
 };
 
 /** Things still open in the past: meetings and recurring items never count as overdue. */

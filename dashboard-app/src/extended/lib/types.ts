@@ -97,6 +97,10 @@ export interface Note {
   type: NoteType;
   project_id: string | null;
   paper_id: string | null;
+  /** The experiment this note belongs to. */
+  experiment_id: string | null;
+  /** The meeting this note prepares for or records. */
+  meeting_id: string | null;
   tags: string[];
   pinned: boolean;
   archived_at: string | null;
@@ -123,6 +127,8 @@ export interface Experiment {
   publication_id: string | null;
   /** The earlier run this one repeats. */
   repeat_of: string | null;
+  /** The thesis chapter this experiment feeds. */
+  chapter_id: string | null;
   aim: string;
   protocol: string;
   samples: ExperimentSample[];
@@ -186,6 +192,8 @@ export interface Deadline {
   status: DeadlineStatus;
   priority: Priority;
   project_id: string | null;
+  /** The manuscript (Publications pipeline) a submission deadline is for. */
+  publication_id: string | null;
   links: Link[];
   tags: string[];
   notes: string;
@@ -295,6 +303,7 @@ export interface Attachment {
   note_id: string | null;
   meeting_id: string | null;
   deadline_id: string | null;
+  experiment_id: string | null;
   created_at: string;
 }
 
