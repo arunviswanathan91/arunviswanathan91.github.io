@@ -84,6 +84,12 @@ begin
   select k.user_id into owner from public.writing_server_keys k
    where k.secret_hash = encode(sha256(convert_to(p_secret, 'UTF8')), 'hex');
   if owner is null then return false; end if;
+  if p_url = '' then
+    -- Clearing: two runs can overlap, so only the run whose token is stored may clear it.
+    update public.writing_settings set server_url = '', server_token = '', updated_at = now()
+     where user_id = owner and server_token = coalesce(p_token, '');
+    return true;
+  end if;
   insert into public.writing_settings (user_id, server_url, server_token, updated_at)
   values (owner, p_url, coalesce(p_token, ''), now())
   on conflict (user_id) do update set server_url = excluded.server_url, server_token = excluded.server_token, updated_at = now();
@@ -105,6 +111,12 @@ begin
   select k.user_id into owner from public.writing_server_keys k
    where k.secret_hash = encode(sha256(convert_to(p_secret, 'UTF8')), 'hex');
   if owner is null then return false; end if;
+  if p_status->>'stage' = 'stopped' then
+    -- A stopping run only replaces its own status, never a newer run's.
+    update public.writing_settings set server_status = p_status, server_status_at = now()
+     where user_id = owner and server_status->>'run' is not distinct from p_status->>'run';
+    return true;
+  end if;
   insert into public.writing_settings (user_id, server_status, server_status_at, updated_at)
   values (owner, p_status, now(), now())
   on conflict (user_id) do update set server_status = excluded.server_status, server_status_at = now();
