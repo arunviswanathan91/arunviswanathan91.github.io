@@ -61,3 +61,33 @@ create policy "own writing_lexicon" on public.writing_lexicon for all using (aut
 
 drop policy if exists "own writing_settings" on public.writing_settings;
 create policy "own writing_settings" on public.writing_settings for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+
+-- The notebook that runs the rewriting model reports its temporary address through this function.
+-- It holds a secret; only the secret's SHA-256 is stored here. Register one with:
+--   insert into public.writing_server_keys (user_id, secret_hash) values ('<your user id>', '<sha256 hex of the secret>');
+create table if not exists public.writing_server_keys (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  secret_hash text not null unique,
+  created_at timestamptz not null default now()
+);
+-- No policies: only the function below reads this table.
+alter table public.writing_server_keys enable row level security;
+revoke all on public.writing_server_keys from anon, authenticated;
+
+create or replace function public.set_writing_server(p_secret text, p_url text, p_token text)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare owner uuid;
+begin
+  if p_secret is null or length(p_secret) < 32 then return false; end if;
+  if p_url <> '' and p_url !~ '^https://[a-z0-9-]+\.trycloudflare\.com$' then return false; end if;
+  if length(coalesce(p_token, '')) > 200 then return false; end if;
+  select k.user_id into owner from public.writing_server_keys k
+   where k.secret_hash = encode(sha256(convert_to(p_secret, 'UTF8')), 'hex');
+  if owner is null then return false; end if;
+  insert into public.writing_settings (user_id, server_url, server_token, updated_at)
+  values (owner, p_url, coalesce(p_token, ''), now())
+  on conflict (user_id) do update set server_url = excluded.server_url, server_token = excluded.server_token, updated_at = now();
+  return true;
+end $$;
+revoke all on function public.set_writing_server(text, text, text) from public;
+grant execute on function public.set_writing_server(text, text, text) to anon;

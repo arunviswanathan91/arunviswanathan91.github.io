@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
-import {Copy,Download,History,Server,Trash2} from 'lucide-react';
+import {Copy,Download,History,RefreshCw,Server,Trash2} from 'lucide-react';
 import {supabase} from '../lib/supabase';
 import {cleanChars,codePoint,inspectChars} from '../lib/humanizer/inspect';
 import {cleanLinks,inspectLinks} from '../lib/humanizer/links';
@@ -41,6 +41,7 @@ export function WritingView(){
  const [url,setUrl]=useState(''),[token,setToken]=useState(''),[lockedText,setLockedText]=useState('');
  const [lexicon,setLexicon]=useState<LexRow[]>([]),[docs,setDocs]=useState<Doc[]>([]);
  const [kind,setKind]=useState<'dipper'|'humanizer'|''>('');
+ const [probe,setProbe]=useState(0);
  const [busy,setBusy]=useState(false),[status,setStatus]=useState(''),[scores,setScores]=useState<{before?:Score;after?:Score}>({});
  const chars=useMemo(()=>inspectChars(text).filter(f=>f.action!=='keep'),[text]);
  const links=useMemo(()=>inspectLinks(text),[text]);
@@ -60,7 +61,17 @@ export function WritingView(){
   const stop=new AbortController();
   fetch(url.trim().replace(/\/+$/,'')+'/health',{signal:stop.signal}).then(r=>r.ok?r.json():null).then((d:{kind?:string}|null)=>{if(d?.kind==='dipper'||d?.kind==='humanizer')setKind(d.kind);}).catch(()=>{});
   return()=>stop.abort();
- },[url]);
+ },[url,probe]);
+ // The notebook writes a new address and token at every start; this picks them up without a page reload.
+ const reconnect=async()=>{
+  if(supabase){
+   const {data,error}=await supabase.from('writing_settings').select('server_url,server_token').maybeSingle();
+   if(error){setStatus(error.message);return;}
+   setUrl(data?.server_url??'');setToken(data?.server_token??'');
+   if(!data?.server_url)setStatus('The server is off. Start the notebook, wait for it to say READY, then press Reconnect.');
+  }
+  setProbe(n=>n+1);
+ };
  const locked=useMemo(()=>[...lockedText.split(',').map(s=>s.trim()).filter(Boolean),...lexicon.filter(r=>r.locked).map(r=>r.phrase)],[lockedText,lexicon]);
  const personal=useMemo<LexiconEntry[]>(()=>lexicon.filter(r=>!r.locked&&r.replacements.length).map(r=>({from:r.phrase,to:r.replacements})),[lexicon]);
  const run=async()=>{
@@ -126,6 +137,8 @@ export function WritingView(){
    <input className="input" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://… address printed by the notebook" aria-label="Server address"/>
    <input className="input" type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Token" aria-label="Server token"/>
    {supabase&&<button className="secondary" onClick={()=>void saveSettings()}>Save</button>}
+   <button className="secondary" onClick={()=>void reconnect()}><RefreshCw size={14}/> Reconnect</button>
+   {!kind&&<small className="writing-hint">The notebook fills these in when it starts. Run it, wait for READY, then press Reconnect.</small>}
   </div>}
   {panel==='history'&&<div className="writing-panel writing-history">
    {docs.length?docs.map(d=><button key={d.id} className={docId===d.id?'active':''} onClick={()=>void open(d)}><span>{d.title||'Untitled'}</span><small>{new Date(d.updated_at).toLocaleDateString()}</small></button>):<small>No saved documents yet.</small>}
