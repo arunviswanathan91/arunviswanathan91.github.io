@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Archive, ArchiveRestore, ArrowLeft, ClipboardList, CopyPlus, Download, FlaskConical, Pin, Pipette, Plus, Redo2, Save, Settings2, SquareStack, Trash2, Undo2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, ClipboardList, CopyPlus, Download, FlaskConical, Pin, Pipette, Plus, Redo2, Save, Settings2, Trash2, Undo2 } from "lucide-react";
 import { ask } from "../../../../lib/dialogs.tsx";
 import { insert, list, trash, update, useLoad } from "../../../lib/db.ts";
 import { fmtDateTime } from "../../../lib/dates.ts";
@@ -12,12 +12,12 @@ import { TagInput } from "../../../components/TagInput.tsx";
 import { ErrorText, Field, PageHeader, SaveIndicator, Tabs } from "../../../components/ui.tsx";
 import { ExportDialog } from "./ExportDialog.tsx";
 import {
-  FORMATS, MAX_COLS, MAX_ROWS, allWellIds, formatLabel, formatOf, legend, lostOnResize, mapSummary, newPlate, parsePlateMap, patchWells, resizePlate, stepsDone, tableRows,
-  visitSteps, isLabelled, type Plate, type PlateMapData, type Progress, type Well,
+  FORMATS, MAX_COLS, MAX_ROWS, allWellIds, formatLabel, formatOf, legend, lostOnResize, mapSummary, newPlate, parsePlateMap, passCount, patchWells, planPass, resizePlate, tableRows,
+  type Plate, type PlateMapData, type Progress, type Well,
 } from "./logic.ts";
 import { PipetteMode } from "./PipetteMode.tsx";
 import { PlateGrid } from "./PlateGrid.tsx";
-import { WellPanel } from "./WellPanel.tsx";
+import { WellPanel, useNarrow } from "./WellPanel.tsx";
 import "./plate.css";
 
 /** A saved plate map: a row of bench_items of kind "plate". */
@@ -81,6 +81,9 @@ export function PlatePage({ item, route }: { item?: PlateRow; route: Route }) {
   const [selectedRaw, setSelected] = useState<string[]>([]);
   const [multi, setMulti] = useState(false);
   const [view, setView] = useState<"wells" | "table">("wells");
+  // On a phone the plate is always on show, with the labelled wells listed under the well card.
+  const narrow = useNarrow();
+  const showWells = narrow || view === "wells";
   const [clip, setClip] = useState<Well | null>(null);
   const [open, setOpen] = useState<"" | "pipette" | "export" | "add" | "settings" | "save">("");
   const [problem, setProblem] = useState("");
@@ -173,8 +176,7 @@ export function PlatePage({ item, route }: { item?: PlateRow; route: Route }) {
 
   const groups = legend(plate);
   const rows = tableRows(plate);
-  const passSteps = plate.progress ? visitSteps(plate.rows, plate.cols, { order: plate.progress.order, snake: plate.progress.snake, channels: plate.progress.channels, only: plate.progress.labelledOnly ? (id) => isLabelled(plate.wells[id]) : undefined }) : [];
-  const passDone = plate.progress ? stepsDone(passSteps, new Set(plate.progress.done)) : 0;
+  const pass = plate.progress ? passCount(planPass(plate).steps, new Set(plate.progress.done)) : { done: 0, total: 0 };
   const title = e ? e.title : "";
   const protocol = protocolList.find((p) => p.id === e?.library_entry_id);
   const experiment = experimentList.find((x) => x.id === e?.experiment_id);
@@ -213,11 +215,13 @@ export function PlatePage({ item, route }: { item?: PlateRow; route: Route }) {
         </div>
         <button type="button" onClick={() => setOpen("add")}><Plus size={14} aria-hidden /> Add plate</button>
         <button type="button" onClick={() => setOpen("settings")}><Settings2 size={14} aria-hidden /> {formatLabel(plate.rows, plate.cols)}</button>
+        <label className="pm-multi">
+          <input type="checkbox" role="switch" className="pm-switch" checked={multi} onChange={(ev) => setMulti(ev.target.checked)} /> <span>Multi-select</span>
+        </label>
       </div>
 
       <div className="pm-bar pm-tools">
-        <Tabs<"wells" | "table"> value={view} options={[["wells", "Wells"], ["table", "Table"]]} onChange={setView} counts={{ table: rows.length }} />
-        <button type="button" className={`pm-toggle ${multi ? "on" : ""}`} aria-pressed={multi} onClick={() => setMulti((m) => !m)}><SquareStack size={15} aria-hidden /> Multi-select</button>
+        {!narrow && <Tabs<"wells" | "table"> value={view} options={[["wells", "Wells"], ["table", "Table"]]} onChange={setView} counts={{ table: rows.length }} />}
         <span className="pm-undo">
           <button type="button" className="icon" aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" disabled={!canUndo} onClick={undo}><Undo2 size={18} /></button>
           <button type="button" className="icon" aria-label="Redo" title="Redo (Shift+Ctrl/Cmd+Z)" disabled={!canRedo} onClick={redo}><Redo2 size={18} /></button>
@@ -225,7 +229,7 @@ export function PlatePage({ item, route }: { item?: PlateRow; route: Route }) {
         <span className="pm-go">
           <button type="button" onClick={() => setOpen("export")}><Download size={15} aria-hidden /> Download</button>
           <button type="button" className="primary pm-pipette" onClick={() => setOpen("pipette")}>
-            <Pipette size={16} aria-hidden /> {passDone > 0 && passDone < passSteps.length ? `Resume pipetting (${passDone} of ${passSteps.length})` : "Pipette mode"}
+            <Pipette size={16} aria-hidden /> {pass.done > 0 && pass.done < pass.total ? `Resume pipetting (${pass.done} of ${pass.total})` : "Pipette mode"}
           </button>
         </span>
       </div>
@@ -233,7 +237,7 @@ export function PlatePage({ item, route }: { item?: PlateRow; route: Route }) {
       <div className="pm-layout">
         <div className="pm-main">
           <div className="card pm-card">
-            {view === "wells" ? (
+            {showWells ? (
               <PlateGrid plate={plate} selected={selected} multi={multi} onSelect={setSelected} />
             ) : rows.length ? (
               <div className="table-scroll">
@@ -268,6 +272,25 @@ export function PlatePage({ item, route }: { item?: PlateRow; route: Route }) {
           )}
         </div>
         <WellPanel plate={plate} selected={selected} clip={clip} onCopy={setClip} change={setPlate} />
+        {narrow && (
+          <div className="card pad pm-list">
+            <h3>Labelled wells</h3>
+            {rows.length ? (
+              <ul>
+                {rows.map((r) => (
+                  <li key={r.well}>
+                    <button type="button" aria-label={`Select well ${r.well}`} aria-pressed={selected.includes(r.well)} data-on={selected.includes(r.well) || undefined}
+                      onClick={() => { setSelected([r.well]); document.querySelector(".pm-panel")?.scrollIntoView({ block: "nearest" }); }}>
+                      <b>{r.well}</b>
+                      <i className="pm-dot" data-tone={plate.wells[r.well]?.color || undefined} aria-hidden />
+                      <span className="pm-list-text"><strong>{r.title || "No title"}</strong>{r.note ? <small>{r.note}</small> : null}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="muted small">No labelled wells yet. Tap a well and give it a title.</p>}
+          </div>
+        )}
       </div>
 
       {e ? (

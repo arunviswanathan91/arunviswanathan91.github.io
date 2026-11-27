@@ -1,0 +1,148 @@
+/* The haemocytometer: the chamber picture, its tap and typing squares, and the full-screen count. */
+.extension-workspace .hc-modes { margin-bottom: 8px; }
+.extension-workspace .hc-modes button { min-height: 40px; }
+.extension-workspace .hc-hint { margin: 0 0 12px; }
+.extension-workspace .hc-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; max-width: 420px; margin: 0 auto 10px; }
+
+/* ── The chamber ────────────────────────────────────────────────────────────── */
+.extension-workspace .hc-chamber {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 3px;
+  width: 100%; max-width: 420px; aspect-ratio: 1; margin: 0 auto; padding: 3px; border-radius: 10px;
+  background: var(--border-strong); container-type: inline-size; user-select: none; -webkit-user-select: none;
+}
+.extension-workspace .hc-cell { position: relative; min-width: 0; min-height: 0; border-radius: 5px; overflow: hidden; }
+.extension-workspace .hc-cell.off, .extension-workspace button.hc-pick.off:hover:not(:disabled) {
+  background-color: var(--surface-2);
+  background-image:
+    repeating-linear-gradient(to right, transparent 0 calc(25% - 1px), var(--border) calc(25% - 1px) 25%),
+    repeating-linear-gradient(to bottom, transparent 0 calc(25% - 1px), var(--border) calc(25% - 1px) 25%);
+}
+.extension-workspace .hc-cell.on { background: var(--surface); box-shadow: inset 0 0 0 2px var(--text); }
+.extension-workspace .hc-label {
+  position: absolute; top: 6px; left: 8px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; color: var(--text-2); pointer-events: none;
+}
+
+/* Tapping */
+.extension-workspace button.hc-tap {
+  position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: none;
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: none;
+}
+.extension-workspace button.hc-tap:hover:not(:disabled) { background: none; }
+.extension-workspace button.hc-tap:active:not(:disabled) { transform: none; background: var(--accent-soft); }
+.extension-workspace button.hc-tap:focus-visible { outline: 2px solid var(--focus); outline-offset: -4px; }
+.extension-workspace .hc-count {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; pointer-events: none; line-height: 1.1; padding-bottom: 8%;
+}
+.extension-workspace .hc-count strong {
+  font-size: clamp(1.5rem, 11cqw, 2.6rem); font-weight: 700; color: var(--text);
+  text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface), 0 0 6px var(--surface), 0 0 6px var(--surface);
+}
+.extension-workspace .hc-cell[data-empty] .hc-count strong { color: var(--text-3); font-weight: 500; }
+.extension-workspace .hc-dead { font-size: 0.74rem; color: var(--text-2); text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface), 0 0 5px var(--surface); }
+.extension-workspace .hc-dots { position: absolute; inset: 0; pointer-events: none; }
+.extension-workspace .hc-dots i {
+  position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--accent); opacity: 0.55;
+}
+.extension-workspace .hc-dots i[data-dead] { background: none; border: 1.5px solid var(--danger); opacity: 0.85; }
+.extension-workspace button.hc-minus {
+  position: absolute; right: 0; bottom: 0; width: 40px; height: 40px; padding: 0; border: 0; background: none; display: grid; place-items: center;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.extension-workspace button.hc-minus > span {
+  width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2);
+}
+.extension-workspace button.hc-minus:hover:not(:disabled) { background: none; }
+.extension-workspace button.hc-minus:hover > span { background: var(--surface-2); color: var(--text); }
+.extension-workspace button.hc-minus[aria-disabled] { cursor: default; }
+.extension-workspace button.hc-minus[aria-disabled] > span { opacity: 0.4; }
+.extension-workspace button.hc-minus[aria-disabled]:active { transform: none; }
+
+/* Typing */
+.extension-workspace .hc-typed { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 24px 6px 6px; }
+.extension-workspace .hc-row { display: flex; flex-direction: row; align-items: center; gap: 4px; min-width: 0; }
+.extension-workspace .hc-row > span { flex: 0 0 auto; width: 2.5em; font-size: 0.68rem; color: var(--text-2); }
+.extension-workspace .hc-typed input { flex: 1 1 0; width: auto; min-width: 0; padding: 2px 4px; text-align: center; font-size: 1rem; font-variant-numeric: tabular-nums; }
+/* Two boxes share a square on a phone: shorter than the touch height the app gives a lone input. */
+.extension-workspace .hc-chamber .hc-typed[data-dead] .hc-row input[inputmode] { min-height: 0; height: 30px; }
+.extension-workspace .hc-typed input::placeholder { font-size: 0.8rem; }
+
+/* Choosing the squares */
+.extension-workspace button.hc-pick { width: 100%; height: 100%; padding: 0; border: 0; display: block; transition: none; }
+.extension-workspace button.hc-pick.on { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.extension-workspace button.hc-pick.on .hc-label { position: static; display: grid; place-items: center; height: 100%; font-size: 1rem; color: var(--accent); }
+.extension-workspace button.hc-pick.off:hover:not(:disabled) { background-color: var(--surface-3); }
+.extension-workspace button.hc-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: -4px; }
+
+/* Live or dead */
+.extension-workspace .hc-kind { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--surface-2); }
+.extension-workspace .hc-kind button { min-height: 40px; min-width: 84px; justify-content: center; border: 0; background: none; color: var(--text-2); }
+.extension-workspace .hc-kind button.on { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.extension-workspace .hc-key { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.extension-workspace .hc-key[data-dead] { background: none; border: 2px solid var(--danger); }
+
+/* ── Below the chamber ──────────────────────────────────────────────────────── */
+.extension-workspace .hc .bench-actions { justify-content: center; }
+.extension-workspace .hc .bench-actions button { min-height: 40px; }
+.extension-workspace .hc-fold { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.extension-workspace .hc-fold > summary { cursor: pointer; font-size: 0.88rem; font-weight: 600; color: var(--text); min-height: 28px; }
+.extension-workspace .hc-fold > summary .muted { font-weight: 400; margin-left: 6px; }
+.extension-workspace .hc-fold > summary + * { margin-top: 8px; }
+.extension-workspace .hc-fold > p { margin: 8px 0 0; }
+.extension-workspace .hc-fold .bench-qty { margin-top: 10px; }
+.extension-workspace .hc-badge { margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--warning-soft); color: var(--warning); font-size: 0.75rem; font-weight: 600; }
+.extension-workspace .hc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.extension-workspace .hc-chips button { min-height: 40px; }
+.extension-workspace .hc-chips button.on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+.extension-workspace .hc-toggle { min-height: 40px; color: var(--text); }
+.extension-workspace .hc-dilution { margin-top: 14px; }
+.extension-workspace .hc-ratio { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; max-width: 180px; }
+.extension-workspace .hc-ratio .bench-unit-fixed { font-size: 1.05rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.extension-workspace .hc .bench-results .hc-fold + .bench-actions { justify-content: flex-start; }
+
+/* ── Focus mode: one square, the whole screen ───────────────────────────────── */
+.extension-workspace dialog.hc-focus {
+  position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0;
+  background: var(--bg); color: var(--text); overflow: hidden; box-sizing: border-box;
+}
+.extension-workspace dialog.hc-focus[open] { display: flex; flex-direction: column; }
+.extension-workspace dialog.hc-focus::backdrop { background: var(--bg); }
+.extension-workspace .hc-focus-top {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.extension-workspace .hc-map { display: grid; grid-template-columns: repeat(3, 12px); grid-template-rows: repeat(3, 12px); gap: 2px; padding: 2px; border-radius: 4px; background: var(--border-strong); }
+.extension-workspace .hc-map i { border-radius: 1.5px; background: var(--surface-2); }
+.extension-workspace .hc-map i[data-on] { background: var(--surface); }
+.extension-workspace .hc-map i[data-now] { background: var(--accent); }
+.extension-workspace .hc-focus-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.extension-workspace .hc-focus-name strong { font-size: 1.25rem; }
+.extension-workspace .hc-focus-name span { font-size: 0.8rem; color: var(--text-2); }
+.extension-workspace button.hc-step { width: 48px; height: 48px; padding: 0; justify-content: center; border-radius: 50%; }
+.extension-workspace .hc-focus-area { position: relative; flex: 1 1 0; min-height: 0; user-select: none; -webkit-user-select: none; }
+.extension-workspace button.hc-focus-tap {
+  position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; transition: none;
+}
+.extension-workspace button.hc-focus-tap:hover:not(:disabled) { background: none; }
+.extension-workspace button.hc-focus-tap:active:not(:disabled) { transform: none; background: var(--accent-soft); }
+.extension-workspace button.hc-focus-tap:focus-visible { outline: 2px solid var(--focus); outline-offset: -6px; }
+.extension-workspace .hc-focus .hc-dots i { width: 10px; height: 10px; margin: -5px 0 0 -5px; }
+.extension-workspace .hc-focus .hc-dots i[data-dead] { border-width: 2px; }
+.extension-workspace .hc-focus-read {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; pointer-events: none; text-align: center;
+}
+.extension-workspace .hc-focus-read strong { font-size: clamp(6rem, 44vmin, 15rem); line-height: 0.95; font-weight: 700; letter-spacing: -0.03em; }
+.extension-workspace .hc-focus-read span { font-size: 1rem; color: var(--text-2); }
+.extension-workspace .hc-focus-read .hc-focus-other { font-size: 0.9rem; color: var(--text-3); }
+.extension-workspace .hc-focus-foot {
+  display: grid; gap: 12px; border-top: 1px solid var(--border); background: var(--surface);
+  padding: 12px max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
+.extension-workspace .hc-focus-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.extension-workspace .hc-focus-tools > span { color: var(--text-2); font-size: 0.9rem; }
+.extension-workspace .hc-focus .hc-kind button { min-height: 48px; min-width: 96px; font-size: var(--f-sm); }
+.extension-workspace button.hc-focus-minus { width: 56px; height: 56px; padding: 0; justify-content: center; border-radius: 50%; touch-action: manipulation; }
+@media (min-width: 700px) {
+  .extension-workspace .hc-focus-top, .extension-workspace .hc-focus-foot { padding-left: max(14px, calc(50vw - 300px)); padding-right: max(14px, calc(50vw - 300px)); }
+}

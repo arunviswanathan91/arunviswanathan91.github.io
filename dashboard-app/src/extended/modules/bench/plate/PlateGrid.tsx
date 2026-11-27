@@ -1,8 +1,11 @@
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { allWellIds, isLabelled, parseWellId, rectIds, rowLabel, wellId, type Plate } from "./logic.ts";
 
-/** CSS variables every plate drawing needs: the grid's size. */
-export const gridVars = (rows: number, cols: number): CSSProperties => ({ "--rows": rows, "--cols": cols, "--n": cols + 1 } as CSSProperties);
+/** CSS variables every plate drawing needs: the grid's size, and a gap between wells that shrinks as columns are added. */
+export const gridVars = (rows: number, cols: number): CSSProperties =>
+  ({ "--rows": rows, "--cols": cols, "--gap": `${cols <= 4 ? 8 : cols <= 6 ? 6 : cols <= 8 ? 4 : cols <= 12 ? 3 : 2}px` } as CSSProperties);
+/** How much a well can show: "s" and "m" have room for the well's id, "l" for a title on a wide screen, "xl" for a dot. */
+export const plateSize = (rows: number, cols: number): "s" | "m" | "l" | "xl" => (rows * cols <= 24 ? "s" : rows * cols <= 48 ? "m" : cols <= 12 && rows * cols <= 96 ? "l" : "xl");
 
 const wellAt = (x: number, y: number): string | null => document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-well]")?.dataset.well ?? null;
 
@@ -78,9 +81,10 @@ export function PlateGrid({ plate, selected, multi, onSelect }: { plate: Plate; 
   }
 
   const everything = allWellIds(rows, cols);
+  const size = plateSize(rows, cols);
   return (
     <div className="pm-scroll">
-      <div className="pm-plate" data-dense={cols > 12 || undefined} style={{ ...gridVars(rows, cols), minWidth: cols > 12 ? `${(cols + 1) * 24}px` : undefined }}>
+      <div className="pm-plate" data-size={size} data-dense={cols > 12 || undefined} style={gridVars(rows, cols)}>
         <div ref={box} className="pm-grid" data-multi={multi || undefined} role="group" aria-label={`${plate.name}: ${rows * cols} wells`}
           onPointerMove={move} onPointerUp={up} onPointerCancel={() => { drag.current = null; }} onPointerLeave={(e) => { if (e.pointerType === "mouse" && e.buttons === 0) drag.current = null; }}>
           <button type="button" className="pm-head pm-corner" aria-label={selected.length === everything.length ? "Clear the selection" : "Select all wells"} onClick={() => line(everything, false)}>
@@ -100,7 +104,9 @@ export function PlateGrid({ plate, selected, multi, onSelect }: { plate: Plate; 
                 <button key={id} type="button" className="pm-well" data-well={id} data-tone={well?.color || undefined} data-on={on || undefined} data-labelled={isLabelled(well) || undefined}
                   aria-pressed={on} aria-label={name} title={well?.title ? `${id}: ${well.title}` : id} tabIndex={id === focusId ? 0 : -1}
                   onPointerDown={(e) => down(e, id)} onClick={(e) => click(e, id)} onKeyDown={(e) => key(e, id)}>
-                  {well?.title ? <span className="pm-well-text" aria-hidden>{well.title}</span> : isLabelled(well) ? <span className="pm-well-dot" aria-hidden /> : null}
+                  {(size === "s" || size === "m") && <span className="pm-well-id" aria-hidden>{id}</span>}
+                  {well?.title && size !== "xl" ? <span className="pm-well-text" aria-hidden>{well.title}</span> : null}
+                  {isLabelled(well) && <span className="pm-well-dot" aria-hidden />}
                 </button>
               );
             }),
