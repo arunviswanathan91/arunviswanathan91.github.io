@@ -988,7 +988,9 @@ dialog::backdrop{background:var(--scrim)}
 .project-task-actions{display:flex;align-items:center;gap:4px;padding-top:2px}
 .project-task-actions .select-trigger{flex:1;min-width:0}
 
-.project-paper-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:var(--s-2)}
+/* The card carries the whole submission trail now, so it needs room; cap the width
+   and pack left so a single paper is a readable card, not a strip across the page. */
+.project-paper-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),440px));justify-content:start;gap:var(--s-2)}
 .project-paper{
  display:grid;align-content:start;gap:7px;padding:var(--s-3);border:1px solid var(--border);
  border-radius:var(--r-3);background:var(--surface);cursor:pointer;
