@@ -79,7 +79,7 @@ export function TextField({ label, value, onChange, placeholder }: { label: stri
 }
 
 /** A computed quantity, in the best unit unless another is picked from its menu. */
-export function Result({ label, q, strong }: { label: string; q: Qty | null | undefined; strong?: boolean }) {
+export function Result({ label, q, strong, sig }: { label: string; q: Qty | null | undefined; strong?: boolean; /** Significant figures shown (4 unless given). */ sig?: number }) {
   const [unit, setUnit] = useState("");
   if (!q) return null;
   const dim = dimensionOf(q.unit);
@@ -92,7 +92,7 @@ export function Result({ label, q, strong }: { label: string; q: Qty | null | un
     <div className={`bench-result ${strong ? "strong" : ""}`}>
       <span className="bench-result-label">{label}</span>
       <span className="bench-result-value">
-        <strong className="num">{fmt(shown.value)}</strong>
+        <strong className="num">{fmt(shown.value, sig)}</strong>
         {menu.length > 1 ? (
           <select className="bench-unit" aria-label={`${label}: unit`} value={unit && picked !== null ? unit : ""} onChange={(e) => setUnit(e.target.value)}>
             <option value="">{unitLabel(best.unit)}</option>
@@ -157,13 +157,29 @@ export function CopyButton({ text, label = "Copy as text" }: { text: string; lab
  * Saved: title, pin, archive, Trash and Duplicate, "Save changes" for the inputs, and the
  * item's notes, tags and links below the tool.
  */
-export function ToolFrame({ tool, item, data, suggestedTitle, children }: { tool: ToolId; item?: BenchItem; data: object; suggestedTitle?: string; children: ReactNode }) {
+export function ToolFrame({ tool, item, data, suggestedTitle, saveLabel, children }: { tool: ToolId; item?: BenchItem; data: object; suggestedTitle?: string; saveLabel?: string; children: ReactNode }) {
   return item
     ? <SavedFrame tool={tool} item={item} data={data}>{children}</SavedFrame>
-    : <FreshFrame tool={tool} data={data} suggestedTitle={suggestedTitle}>{children}</FreshFrame>;
+    : <FreshFrame tool={tool} data={data} suggestedTitle={suggestedTitle} saveLabel={saveLabel}>{children}</FreshFrame>;
 }
 
-function FreshFrame({ tool, data, suggestedTitle, children }: { tool: ToolId; data: object; suggestedTitle?: string; children: ReactNode }) {
+/** "Round": sensible significant figures, or everything the calculation gives. */
+export const SIG = { rounded: 4, full: 12 };
+export function RoundToggle({ round, onChange }: { round: boolean; onChange: (round: boolean) => void }) {
+  return <label className="toggle bench-round"><input type="checkbox" checked={round} onChange={(e) => onChange(e.target.checked)} /> Round</label>;
+}
+
+/** The working behind a result, folded away until asked for. */
+export function Working({ lines }: { lines: string[] }) {
+  return (
+    <details className="bench-working">
+      <summary>Calculation</summary>
+      {lines.map((l, k) => <p key={k} className="num">{l}</p>)}
+    </details>
+  );
+}
+
+function FreshFrame({ tool, data, suggestedTitle, saveLabel = "Save", children }: { tool: ToolId; data: object; suggestedTitle?: string; saveLabel?: string; children: ReactNode }) {
   const T = TOOLS[tool];
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
@@ -188,7 +204,7 @@ function FreshFrame({ tool, data, suggestedTitle, children }: { tool: ToolId; da
         section="bench"
         title={T.label}
         subtitle={T.blurb}
-        actions={T.kind && <button className="primary" disabled={saving} onClick={() => void save()}><Save size={16} /> {saving ? "Saving…" : "Save"}</button>}
+        actions={T.kind && <button className="primary" disabled={saving} onClick={() => void save()}><Save size={16} /> {saving ? "Saving…" : saveLabel}</button>}
       />
       <ErrorText error={problem} />
       {children}

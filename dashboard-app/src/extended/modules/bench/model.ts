@@ -55,10 +55,27 @@ export const CONC_UNITS: Record<ConcType, string[]> = { molar: MOLAR_UNITS, perc
 /** Units a concentration type starts with: [stock, final]. */
 export const CONC_DEFAULT: Record<ConcType, [string, string]> = { molar: ["mM", "µM"], percent: ["%", "%"], fold: ["x", "x"], massvol: ["mg/mL", "µg/mL"] };
 
+export type DilutionTab = "dilution" | "serial" | "reverse" | "make";
 export interface DilutionData {
-  tab: "single" | "serial";
+  tab: DilutionTab;
+  /** Dilution: leave one blank (normally the stock volume) and it is solved. */
   c1: QText; v1: QText; c2: QText; v2: QText;
-  start: QText; factor: string; steps: string; tubeVolume: QText;
+  /** Serial dilution. `by`: a ratio and a number of steps, or a target concentration to reach. */
+  by: "steps" | "target";
+  start: QText;
+  /** The dilution per step as typed: "1:10" or "10". */
+  ratio: string;
+  /** A different dilution for every step: `ratios`, one per step. */
+  perStep: boolean; ratios: string[];
+  steps: string;
+  volume: QText; volumeIs: "transfer" | "tube";
+  target: QText;
+  /** Target mode: work out the factor for a number of steps, or the steps for a ratio. */
+  find: "factor" | "steps";
+  /** Reverse dilution. */
+  rc1: QText; rStock: QText; rSolvent: QText;
+  /** Make solution. */
+  mw: string; mConc: QText; mVolume: QText;
 }
 export function concTypeOf(unit: string): ConcType {
   const dim = dimensionOf(unit);
@@ -68,16 +85,29 @@ export function dilutionData(raw: unknown): DilutionData {
   const o = obj(raw);
   const c1 = quantity(o.c1, "mM", SOLUTION);
   const type = concTypeOf(c1.unit);
-  const c2 = quantity(o.c2, CONC_DEFAULT[type][1], [type]);
+  const [stock, final] = CONC_DEFAULT[type];
   return {
-    tab: pick(o.tab, ["single", "serial"] as const, "single"),
-    c1, c2,
-    v1: quantity(o.v1, "µL", ["volume"]),
+    tab: pick(o.tab, ["dilution", "serial", "reverse", "make"] as const, "dilution"),
+    c1,
+    c2: quantity(o.c2, final, [type]),
+    v1: quantity(o.v1, "mL", ["volume"]),
     v2: quantity(o.v2, "mL", ["volume"]),
-    start: quantity(o.start, c1.unit, [type]),
-    factor: text(o.factor, "10"),
+    by: pick(o.by, ["steps", "target"] as const, "steps"),
+    start: quantity(o.start, stock, [type]),
+    ratio: text(o.ratio, "1:10"),
+    perStep: flag(o.perStep, false),
+    ratios: arr(o.ratios).map((r) => text(r)),
     steps: text(o.steps, "6"),
-    tubeVolume: quantity(o.tubeVolume, "mL", ["volume"]),
+    volume: quantity(o.volume, "µL", ["volume"]),
+    volumeIs: pick(o.volumeIs, ["transfer", "tube"] as const, "transfer"),
+    target: quantity(o.target, final, [type]),
+    find: pick(o.find, ["factor", "steps"] as const, "factor"),
+    rc1: quantity(o.rc1, stock, [type]),
+    rStock: quantity(o.rStock, "mL", ["volume"]),
+    rSolvent: quantity(o.rSolvent, "mL", ["volume"]),
+    mw: text(o.mw),
+    mConc: quantity(o.mConc, "mM", ["molar", "massvol", "percent"]),
+    mVolume: quantity(o.mVolume, "mL", ["volume"]),
   };
 }
 

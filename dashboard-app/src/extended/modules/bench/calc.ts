@@ -132,7 +132,7 @@ export function num(text: string | number | null | undefined): number | null {
 }
 
 const SUPERSCRIPT: Record<string, string> = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
-const superscript = (n: number) => String(n).replace(/[-\d]/g, (c) => SUPERSCRIPT[c]);
+export const superscript = (n: number) => String(n).replace(/[-\d]/g, (c) => SUPERSCRIPT[c]);
 
 /**
  * A number for display, rounded to `sigfigs` significant figures, without floating-point noise
@@ -263,40 +263,146 @@ export function dilution(i: DilutionInput): Outcome<DilutionResult> {
   });
 }
 
-export interface SerialInput { start: Q; factor: number | null; steps: number | null; volume: Q }
-export interface SerialTube { tube: number; fold: number; concentration: Qty }
-export interface SerialResult {
-  /** Carried from each tube into the next (and from the start solution into tube 1). */
-  transfer: Qty;
-  /** Put in every tube before transferring. */
-  diluent: Qty;
-  tubes: SerialTube[];
-}
-
+/** Dilution left out of a result on purpose: more tubes than anyone pipettes in one series. */
 export const MAX_SERIAL_STEPS = 48;
 
 /**
- * A dilution series. `volume` is what each tube holds after mixing (transfer + diluent), so
- * transfer = volume ÷ factor. Tube n is the start concentration ÷ factorⁿ.
+ * A dilution per step as typed: a ratio "1:10" (1 part in 10 parts total; "1/10" is the same)
+ * or a plain factor "10". Gives the factor (10), or null. "2:10" is a factor of 5.
  */
-export function serialDilution(i: SerialInput): Outcome<SerialResult> {
+export function parseRatio(text: string | number | null | undefined): number | null {
+  if (typeof text === "number") return usable(text) && text > 0 ? text : null;
+  if (text == null) return null;
+  const parts = text.split(/[:/]/);
+  if (parts.length > 2) return null;
+  if (parts.length === 1) { const f = num(parts[0]); return f !== null && f > 0 ? f : null; }
+  const part = num(parts[0]), total = num(parts[1]);
+  if (part === null || total === null || !(part > 0) || !(total > 0)) return null;
+  const factor = total / part;
+  return Number.isFinite(factor) && factor > 0 ? factor : null;
+}
+
+export interface SeriesInput {
+  start: Q;
+  /** The dilution factor of each step (10 for 1:10), one per tube. */
+  factors: (number | null)[];
+  volume: Q;
+  /** What `volume` is: the volume carried into each tube, or what each tube holds after mixing. */
+  volumeIs: "transfer" | "tube";
+}
+export interface SeriesTube {
+  tube: number;
+  /** This step's factor, and the dilution from the start (the product so far). */
+  factor: number;
+  fold: number;
+  concentration: Qty;
+  /** Carried in from the tube before (from the starting solution for tube 1). */
+  transfer: Qty;
+  diluent: Qty;
+  /** Transfer + diluent: what the tube holds after mixing. */
+  mixed: Qty;
+  /** What stays once the next transfer is taken out. The last tube keeps everything. */
+  left: Qty;
+}
+export interface SeriesResult { tubes: SeriesTube[]; totalDiluent: Qty; final: Qty }
+
+/**
+ * A dilution series, one factor per step. With a transfer volume T, a step of factor f takes
+ * T × (f − 1) of diluent (100 µL at 1:10 goes into 900 µL). With a tube volume V, the transfer
+ * is V ÷ f. Tube n is the start concentration ÷ the product of the factors so far.
+ */
+export function serialSeries(i: SeriesInput): Outcome<SeriesResult> {
   const dim = dimensionOf(i.start.unit);
   if (!dim || !CONCENTRATIONS.includes(dim)) return no("Choose a concentration unit for the starting solution.");
   if (dimensionOf(i.volume.unit) !== "volume") return no("Choose a volume unit.");
-  if (i.start.value === null || i.factor === null || i.steps === null || i.volume.value === null) return need("Enter the starting concentration, the dilution factor, the number of tubes and the volume per tube.");
+  if (i.factors.length === 0) return need("Enter the number of steps.");
+  if (i.factors.length > MAX_SERIAL_STEPS) return no(`A series can have at most ${MAX_SERIAL_STEPS} steps.`);
+  if (i.start.value === null || i.volume.value === null || i.factors.some((f) => f === null)) return need("Enter the starting concentration, the dilution for every step and the volume.");
   if (!positive(i.start.value) || !positive(i.volume.value)) return no("The concentration and the volume must be greater than zero.");
-  if (!usable(i.factor) || i.factor <= 1) return no("The dilution factor must be greater than 1 (10 for a ten-fold series).");
-  if (!Number.isInteger(i.steps) || i.steps < 1) return no("The number of tubes must be a whole number, at least 1.");
-  if (i.steps > MAX_SERIAL_STEPS) return no(`A series can have at most ${MAX_SERIAL_STEPS} tubes.`);
-  const transfer = i.volume.value / i.factor;
-  const tubes: SerialTube[] = [];
-  for (let n = 1; n <= i.steps; n++) {
-    const fold = i.factor ** n;
+  if (i.factors.some((f) => !usable(f) || f <= 1)) return no("Every step must dilute: a ratio such as 1:10, or a factor greater than 1.");
+  const unit = i.volume.unit, volume = i.volume.value;
+  const q = (value: number): Qty => ({ value, unit });
+  const tubes: SeriesTube[] = [];
+  let fold = 1, totalDiluent = 0;
+  for (const [k, f] of (i.factors as number[]).entries()) {
+    fold *= f;
     const concentration = i.start.value / fold;
-    if (!Number.isFinite(fold) || !(concentration > 0)) return no("This series runs past what can be calculated. Use fewer tubes or a smaller factor.");
-    tubes.push({ tube: n, fold, concentration: { value: concentration, unit: i.start.unit } });
+    const transfer = i.volumeIs === "transfer" ? volume : volume / f;
+    const mixed = i.volumeIs === "transfer" ? volume * f : volume;
+    if (!Number.isFinite(fold) || !(concentration > 0) || !Number.isFinite(mixed) || !(transfer > 0)) return no("This series runs past what can be calculated. Use fewer steps or smaller dilutions.");
+    const diluent = mixed - transfer;
+    totalDiluent += diluent;
+    tubes.push({ tube: k + 1, factor: f, fold, concentration: { value: concentration, unit: i.start.unit }, transfer: q(transfer), diluent: q(diluent), mixed: q(mixed), left: q(mixed) });
   }
-  return ok({ transfer: { value: transfer, unit: i.volume.unit }, diluent: { value: i.volume.value - transfer, unit: i.volume.unit }, tubes });
+  if (!Number.isFinite(totalDiluent)) return no("These values are too large to calculate.");
+  for (const [k, t] of tubes.entries()) if (k + 1 < tubes.length) t.left = q(Math.max(0, t.mixed.value - tubes[k + 1].transfer.value));
+  return ok({ tubes, totalDiluent: q(totalDiluent), final: tubes[tubes.length - 1].concentration });
+}
+
+/** start ÷ target as a plain number (how many times to dilute), or why not. */
+function overallFold(start: Q, target: Q): Outcome<number> {
+  const ds = dimensionOf(start.unit), dt = dimensionOf(target.unit);
+  if (!ds || !dt || !CONCENTRATIONS.includes(ds) || !CONCENTRATIONS.includes(dt)) return no("Choose a concentration unit for the start and the target.");
+  if (ds !== dt) return no("The start and target concentrations must use the same kind of unit.");
+  if (start.value === null || target.value === null) return need("Enter the starting and the target concentration.");
+  if (!positive(start.value) || !positive(target.value)) return no("The concentrations must be greater than zero.");
+  const targetInStart = convert(target.value, target.unit, start.unit);
+  if (targetInStart === null || !(targetInStart > 0)) return no("These concentration units cannot be compared.");
+  const ratio = start.value / targetInStart;
+  if (!Number.isFinite(ratio)) return no("These values do not give a usable result.");
+  if (ratio <= 1) return no("The target concentration must be lower than the start: diluting can only lower a concentration.");
+  return ok(ratio);
+}
+
+/** The equal dilution factor per step that takes `start` to `target` in `steps` steps: (start ÷ target)^(1 ÷ steps). */
+export function stepFactor(i: { start: Q; target: Q; steps: number | null }): Outcome<number> {
+  const overall = overallFold(i.start, i.target);
+  if (overall.result === null) return overall;
+  if (i.steps === null) return need("Enter the number of steps.");
+  if (!Number.isInteger(i.steps) || i.steps < 1) return no("The number of steps must be a whole number, at least 1.");
+  if (i.steps > MAX_SERIAL_STEPS) return no(`A series can have at most ${MAX_SERIAL_STEPS} steps.`);
+  const root = overall.result ** (1 / i.steps);
+  // A root that is a whole number comes out as 9.999999999999998: take the whole number when it fits.
+  const whole = Math.round(root);
+  const factor = Math.abs(whole ** i.steps - overall.result) <= 1e-9 * overall.result ? whole : root;
+  return Number.isFinite(factor) && factor > 1 ? ok(factor) : no("These values do not give a usable result.");
+}
+
+/** With a fixed dilution per step: the fewest steps that bring `start` to `target` or below, and the concentration reached. */
+export function stepsToReach(i: { start: Q; target: Q; factor: number | null }): Outcome<{ steps: number; reached: Qty }> {
+  const overall = overallFold(i.start, i.target);
+  if (overall.result === null) return { result: null, reason: overall.reason, incomplete: overall.incomplete };
+  if (i.factor === null) return need("Enter the dilution per step.");
+  if (!usable(i.factor) || i.factor <= 1) return no("Every step must dilute: a ratio such as 1:10, or a factor greater than 1.");
+  let fold = 1;
+  for (let steps = 1; steps <= MAX_SERIAL_STEPS; steps++) {
+    fold *= i.factor;
+    if (!Number.isFinite(fold)) break;
+    // Three 1:10 steps reach exactly 1:1000 even when the product is a rounding error short.
+    if (fold >= overall.result * (1 - 1e-12)) return ok({ steps, reached: { value: (i.start.value as number) / fold, unit: i.start.unit } });
+  }
+  return no(`This target takes more than ${MAX_SERIAL_STEPS} steps at this dilution. Use a larger dilution per step.`);
+}
+
+export interface ReverseResult { c1: Qty; v1: Qty; solvent: Qty; c2: Qty; v2: Qty; fold: number }
+
+/** What a dilution already made contains: stock + solvent → final volume (in the stock volume's unit) and concentration. */
+export function reverseDilution(i: { c1: Q; stock: Q; solvent: Q }): Outcome<ReverseResult> {
+  const dim = dimensionOf(i.c1.unit);
+  if (!dim || !CONCENTRATIONS.includes(dim)) return no("Choose a concentration unit for the stock.");
+  if (dimensionOf(i.stock.unit) !== "volume" || dimensionOf(i.solvent.unit) !== "volume") return no("Choose a volume unit for both volumes.");
+  if (i.c1.value === null || i.stock.value === null || i.solvent.value === null) return need("Enter the stock concentration, the stock volume and the solvent volume.");
+  if (!positive(i.c1.value) || !positive(i.stock.value)) return no("The stock concentration and volume must be greater than zero.");
+  if (!usable(i.solvent.value) || i.solvent.value < 0) return no("The solvent volume cannot be negative.");
+  const solvent = convert(i.solvent.value, i.solvent.unit, i.stock.unit);
+  if (solvent === null) return no("These volume units cannot be compared.");
+  const v2 = i.stock.value + solvent;
+  const c2 = i.c1.value * (i.stock.value / v2);
+  if (!Number.isFinite(v2) || !(c2 > 0) || !Number.isFinite(v2 / i.stock.value)) return no("These values do not give a usable result.");
+  return ok({
+    c1: { value: i.c1.value, unit: i.c1.unit }, v1: { value: i.stock.value, unit: i.stock.unit }, solvent: { value: i.solvent.value, unit: i.solvent.unit },
+    c2: { value: c2, unit: i.c1.unit }, v2: { value: v2, unit: i.stock.unit }, fold: v2 / i.stock.value,
+  });
 }
 
 // ── Cells ────────────────────────────────────────────────────────────────────
@@ -474,6 +580,29 @@ export function concentrationFrom(i: { mass: Q; volume: Q; mw: number | null }):
   const molar = massvol / i.mw;
   if (!Number.isFinite(molar) || !(molar > 0)) return no("These values do not give a usable result.");
   return ok({ molar: { value: molar, unit: "M" }, massvol: { value: massvol, unit: "g/L" } });
+}
+
+/**
+ * Mass of a solid for a solution of a given concentration and final volume. A molar
+ * concentration needs the molecular weight; mass per volume and % (w/v) do not.
+ */
+export function makeSolution(i: { concentration: Q; volume: Q; mw: number | null }): Outcome<{ mass: Qty; moles: Qty | null }> {
+  const dim = dimensionOf(i.concentration.unit);
+  if (dim !== "molar" && dim !== "massvol" && dim !== "percent") return no("Use a molar, mass-per-volume or % (w/v) concentration.");
+  if (dimensionOf(i.volume.unit) !== "volume") return no("Choose a volume unit.");
+  if (i.concentration.value === null || i.volume.value === null) return need("Enter the target concentration and the final volume.");
+  if (dim === "molar" && i.mw === null) return need(MW_NEEDED);
+  if (dim === "molar" && !positive(i.mw)) return no(MW_INVALID);
+  if (!positive(i.concentration.value) || !positive(i.volume.value)) return no("The concentration and the volume must be greater than zero.");
+  const litres = convert(i.volume.value, i.volume.unit, "L");
+  const gramsPerLitre = dim === "molar" ? convert(i.concentration.value, i.concentration.unit, "g/L", i.mw)
+    : dim === "massvol" ? convert(i.concentration.value, i.concentration.unit, "g/L")
+    : i.concentration.value * 10; // 1 % (w/v) = 1 g per 100 mL = 10 g/L
+  if (litres === null || gramsPerLitre === null) return no("These units cannot be used here.");
+  const mass = gramsPerLitre * litres;
+  if (!Number.isFinite(mass) || !(mass > 0)) return no("These values do not give a usable result.");
+  const mw = positive(i.mw) ? i.mw : null;
+  return ok({ mass: { value: mass, unit: "g" }, moles: mw === null || !Number.isFinite(mass / mw) || !(mass / mw > 0) ? null : { value: mass / mw, unit: "mol" } });
 }
 
 // ── Recipe (medium or buffer) ────────────────────────────────────────────────

@@ -49,8 +49,7 @@ function Tool({ tool, ...props }: ToolProps & { tool: ToolId }) {
     case "recipe": return <RecipeTool {...props} />;
     case "mastermix": return <MasterMixTool {...props} />;
     case "curve": return <CurveTool {...props} />;
-    // Timers: a placeholder until the multi-timer is built (see TimersView.tsx).
-    case "timers": return <TimersView item={props.item} />;
+    case "timers": return <TimersView route={props.route} item={props.item} />;
   }
 }
 

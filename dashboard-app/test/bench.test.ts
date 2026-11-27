@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
- convert, dimensionOf, num, fmt, fmtQ, bestUnit, unitLabel, unitsOf, dilution, serialDilution, cellDilution, seeding, haemocytometer,
+ convert, dimensionOf, num, fmt, fmtQ, bestUnit, unitLabel, unitsOf, dilution, parseRatio, serialSeries, stepFactor, stepsToReach, reverseDilution, makeSolution, cellDilution, seeding, haemocytometer,
  massToWeigh, molesFromMass, concentrationFrom, recipe, masterMix, linearFit, predictX, predictY, parsePairs, niceTicks,
  type Q, type Qty,
 } from '../src/extended/modules/bench/calc.ts';
@@ -210,41 +210,148 @@ test('dilution rejects what cannot be done, with a reason',()=>{
  assert.equal(dilution({c1:q(Infinity,'mM'),v1:q(null,'mL'),c2:q(1,'mM'),v2:q(10,'mL')}).result,null);
 });
 
-test('serial dilution gives each tube and the two volumes to pipette',()=>{
- // Ten-fold, 1 mL per tube: carry 0.1 mL into 0.9 mL. 1 mM → 0.1, 0.01, 0.001 mM.
- const ten=serialDilution({start:q(1,'mM'),factor:10,steps:3,volume:q(1,'mL')});
- nearQ(ten.result?.transfer,0.1,'mL');nearQ(ten.result?.diluent,0.9,'mL');
- assert.deepEqual(ten.result?.tubes.map(t=>t.tube),[1,2,3]);
- assert.deepEqual(ten.result?.tubes.map(t=>t.fold),[10,100,1000]);
- [0.1,0.01,0.001].forEach((c,k)=>nearQ(ten.result?.tubes[k].concentration,c,'mM'));
- // Two-fold, 200 µL per well: 100 µL into 100 µL. 100 ng/mL → 50, 25, 12.5, 6.25.
- const two=serialDilution({start:q(100,'ng/mL'),factor:2,steps:4,volume:q(200,'µL')});
- nearQ(two.result?.transfer,100,'µL');nearQ(two.result?.diluent,100,'µL');
+test('a dilution per step is read as a ratio or a plain factor',()=>{
+ assert.equal(parseRatio('1:10'),10);
+ assert.equal(parseRatio('10'),10);
+ assert.equal(parseRatio('1/10'),10);
+ assert.equal(parseRatio(' 1 : 2 '),2);
+ assert.equal(parseRatio('2:10'),5);
+ assert.equal(parseRatio('1:1.5'),1.5);
+ assert.equal(parseRatio('1:2,5'),2.5);
+ assert.equal(parseRatio(3),3);
+ assert.equal(parseRatio('1:1'),1,'read, then refused by the series as not a dilution');
+ for(const bad of ['',' ','1:','::','1:2:3','a:b','1:0','0:10','-1:10','0','-5','1:-10','ten']) assert.equal(parseRatio(bad),null,bad);
+ assert.equal(parseRatio(null),null);assert.equal(parseRatio(0),null);assert.equal(parseRatio(NaN),null);
+});
+
+test('serial dilution from a transfer volume: every tube, the volumes and the diluent needed',()=>{
+ // 100 mM, 1:10, six steps, 100 µL carried over: 100 + 900 µL each time; 6 × 900 = 5400 µL of diluent.
+ const r=serialSeries({start:q(100,'mM'),factors:[10,10,10,10,10,10],volume:q(100,'µL'),volumeIs:'transfer'});
+ assert.equal(r.reason,'');assert.equal(r.result?.tubes.length,6);
+ [10,1,0.1,0.01,0.001,0.0001].forEach((c,k)=>nearQ(r.result?.tubes[k].concentration,c,'mM'));
+ assert.deepEqual(r.result?.tubes.map(t=>t.fold),[10,100,1000,1e4,1e5,1e6]);
+ for(const t of r.result!.tubes){nearQ(t.transfer,100,'µL');nearQ(t.diluent,900,'µL');nearQ(t.mixed,1000,'µL')}
+ nearQ(r.result?.totalDiluent,5400,'µL');nearQ(r.result?.final,0.0001,'mM');
+ assert.equal(fmtQ(r.result?.final),'0.1 µM');
+ // Every tube gives 100 µL to the next and keeps 900 µL; the last keeps all 1000 µL.
+ assert.deepEqual(r.result?.tubes.map(t=>t.left.value),[900,900,900,900,900,1000]);
+ // Two-fold, 100 µL: 100 + 100. 100 ng/mL → 50, 25, 12.5, 6.25.
+ const two=serialSeries({start:q(100,'ng/mL'),factors:[2,2,2,2],volume:q(100,'µL'),volumeIs:'transfer'});
  assert.deepEqual(two.result?.tubes.map(t=>t.concentration.value),[50,25,12.5,6.25]);
- // 1 in 3, 150 µL: 50 µL into 100 µL.
- const three=serialDilution({start:q(9,'x'),factor:3,steps:2,volume:q(150,'µL')});
- nearQ(three.result?.transfer,50,'µL');nearQ(three.result?.diluent,100,'µL');
+ nearQ(two.result?.tubes[0].diluent,100,'µL');nearQ(two.result?.totalDiluent,400,'µL');
+ assert.deepEqual(two.result?.tubes.map(t=>t.left.value),[100,100,100,200]);
+ // A different dilution at every step: 1:10, then 1:2, then 1:5 from 1 M with 50 µL: 0.1, 0.05, 0.01 M;
+ // diluent 450, 50 and 200 µL (700 in all); tubes hold 500, 100, 250 µL and keep 450, 50, 250.
+ const mixed=serialSeries({start:q(1,'M'),factors:[10,2,5],volume:q(50,'µL'),volumeIs:'transfer'});
+ [0.1,0.05,0.01].forEach((c,k)=>nearQ(mixed.result?.tubes[k].concentration,c,'M'));
+ assert.deepEqual(mixed.result?.tubes.map(t=>t.diluent.value),[450,50,200]);
+ assert.deepEqual(mixed.result?.tubes.map(t=>t.fold),[10,20,100]);
+ assert.deepEqual(mixed.result?.tubes.map(t=>t.left.value),[450,50,250]);
+ nearQ(mixed.result?.totalDiluent,700,'µL');
+});
+
+test('serial dilution from a volume per tube',()=>{
+ // Ten-fold, 1 mL per tube: carry 0.1 mL into 0.9 mL. 1 mM → 0.1, 0.01, 0.001 mM.
+ const ten=serialSeries({start:q(1,'mM'),factors:[10,10,10],volume:q(1,'mL'),volumeIs:'tube'});
+ for(const t of ten.result!.tubes){nearQ(t.transfer,0.1,'mL');nearQ(t.diluent,0.9,'mL');nearQ(t.mixed,1,'mL')}
+ [0.1,0.01,0.001].forEach((c,k)=>nearQ(ten.result?.tubes[k].concentration,c,'mM'));
+ nearQ(ten.result?.totalDiluent,2.7,'mL');
+ [0.9,0.9,1].forEach((v,k)=>nearQ(ten.result?.tubes[k].left,v,'mL'));
+ // 1 in 3, 150 µL per well: 50 µL into 100 µL. 9× → 3×, 1×.
+ const three=serialSeries({start:q(9,'x'),factors:[3,3],volume:q(150,'µL'),volumeIs:'tube'});
+ nearQ(three.result?.tubes[0].transfer,50,'µL');nearQ(three.result?.tubes[0].diluent,100,'µL');
  assert.deepEqual(three.result?.tubes.map(t=>t.concentration.value),[3,1]);
 });
 
 test('serial dilution rejects impossible series',()=>{
- const base={start:q(1,'mM'),factor:10 as number|null,steps:3 as number|null,volume:q(1,'mL')};
- assert.match(serialDilution({...base,factor:1}).reason,/greater than 1/);
- assert.equal(serialDilution({...base,factor:0.5}).result,null);
- assert.equal(serialDilution({...base,factor:-2}).result,null);
- assert.equal(serialDilution({...base,steps:0}).result,null);
- assert.equal(serialDilution({...base,steps:2.5}).result,null);
- assert.equal(serialDilution({...base,steps:-1}).result,null);
- assert.equal(serialDilution({...base,steps:1000}).result,null);
- assert.equal(serialDilution({...base,start:q(0,'mM')}).result,null);
- assert.equal(serialDilution({...base,start:q(-1,'mM')}).result,null);
- assert.equal(serialDilution({...base,volume:q(0,'mL')}).result,null);
- assert.equal(serialDilution({...base,volume:q(1,'g')}).result,null);
- assert.equal(serialDilution({...base,start:q(1,'mL')}).result,null);
- const blank=serialDilution({...base,factor:null});
+ const base={start:q(1,'mM'),factors:[10,10,10] as (number|null)[],volume:q(1,'mL'),volumeIs:'transfer' as const};
+ assert.match(serialSeries({...base,factors:[10,1,10]}).reason,/must dilute/);
+ assert.equal(serialSeries({...base,factors:[0.5]}).result,null);
+ assert.equal(serialSeries({...base,factors:[-2]}).result,null);
+ assert.equal(serialSeries({...base,factors:[NaN]}).result,null);
+ assert.equal(serialSeries({...base,factors:[]}).result,null);
+ assert.equal(serialSeries({...base,factors:Array(49).fill(2)}).result,null);
+ assert.equal(serialSeries({...base,start:q(0,'mM')}).result,null);
+ assert.equal(serialSeries({...base,start:q(-1,'mM')}).result,null);
+ assert.equal(serialSeries({...base,volume:q(0,'mL')}).result,null);
+ assert.equal(serialSeries({...base,volume:q(-1,'mL')}).result,null);
+ assert.equal(serialSeries({...base,volume:q(1,'g')}).result,null);
+ assert.equal(serialSeries({...base,start:q(1,'mL')}).result,null);
+ const blank=serialSeries({...base,factors:[10,null,10]});
  assert.equal(blank.result,null);assert.equal(blank.incomplete,true);
- assert.equal(serialDilution({...base,start:q(null,'mM')}).incomplete,true);
- assert.equal(serialDilution({start:q(1e-300,'mM'),factor:1e10,steps:10,volume:q(1,'mL')}).result,null,'a series that underflows is refused, not shown as 0');
+ assert.equal(serialSeries({...base,start:q(null,'mM')}).incomplete,true);
+ assert.equal(serialSeries({start:q(1e-300,'mM'),factors:Array(10).fill(1e10),volume:q(1,'mL'),volumeIs:'tube'}).result,null,'a series that underflows is refused, not shown as 0');
+});
+
+test('serial dilution to a target: the factor per step, or the steps needed',()=>{
+ // 100 mM to 0.1 µM is a million-fold: six steps of 10.
+ const f=stepFactor({start:q(100,'mM'),target:q(0.1,'µM'),steps:6});
+ assert.equal(f.result,10);
+ const series=serialSeries({start:q(100,'mM'),factors:Array(6).fill(f.result),volume:q(100,'µL'),volumeIs:'transfer'});
+ assert.equal(fmtQ(series.result?.final),'0.1 µM');nearQ(series.result?.totalDiluent,5400,'µL');
+ // 1 M to 1 mM in 2 steps: √1000 = 31.6228 per step; 8-fold in 3 steps is 2; one step is the whole dilution.
+ near(stepFactor({start:q(1,'M'),target:q(1,'mM'),steps:2}).result,Math.sqrt(1000));
+ assert.equal(stepFactor({start:q(8,'x'),target:q(1,'x'),steps:3}).result,2);
+ assert.equal(stepFactor({start:q(50,'%'),target:q(10,'%'),steps:1}).result,5);
+ assert.match(stepFactor({start:q(1,'mM'),target:q(2,'mM'),steps:3}).reason,/lower than the start/);
+ assert.match(stepFactor({start:q(1,'mM'),target:q(1,'mM'),steps:3}).reason,/lower than the start/);
+ assert.match(stepFactor({start:q(1,'mM'),target:q(1,'%'),steps:3}).reason,/same kind of unit/);
+ for(const steps of [0,-1,2.5,49]) assert.equal(stepFactor({start:q(1,'M'),target:q(1,'mM'),steps}).result,null);
+ assert.equal(stepFactor({start:q(1,'M'),target:q(1,'mM'),steps:null}).incomplete,true);
+ assert.equal(stepFactor({start:q(null,'M'),target:q(1,'mM'),steps:2}).incomplete,true);
+ assert.equal(stepFactor({start:q(0,'M'),target:q(1,'mM'),steps:2}).result,null);
+ assert.equal(stepFactor({start:q(1,'M'),target:q(0,'mM'),steps:2}).result,null);
+ assert.equal(stepFactor({start:q(-1,'M'),target:q(1,'mM'),steps:2}).result,null);
+ // A fixed 1:10 from 100 mM to 0.1 µM takes six steps and lands on it; to 0.3 µM it also takes six (five stops at 1 µM).
+ const exact=stepsToReach({start:q(100,'mM'),target:q(0.1,'µM'),factor:10});
+ assert.equal(exact.result?.steps,6);nearQ(exact.result?.reached,0.0001,'mM');
+ const below=stepsToReach({start:q(100,'mM'),target:q(0.3,'µM'),factor:10});
+ assert.equal(below.result?.steps,6);nearQ(below.result?.reached,0.0001,'mM');
+ // 1:2 from 100 to 30 ng/mL: one step gives 50 (too high), two give 25.
+ const half=stepsToReach({start:q(100,'ng/mL'),target:q(30,'ng/mL'),factor:2});
+ assert.equal(half.result?.steps,2);nearQ(half.result?.reached,25,'ng/mL');
+ assert.equal(stepsToReach({start:q(1000,'x'),target:q(1,'x'),factor:10}).result?.steps,3);
+ assert.match(stepsToReach({start:q(1,'M'),target:q(1,'fM'),factor:1.5}).reason,/more than 48 steps/);
+ assert.equal(stepsToReach({start:q(1,'M'),target:q(1,'mM'),factor:1}).result,null);
+ assert.equal(stepsToReach({start:q(1,'M'),target:q(1,'mM'),factor:0.5}).result,null);
+ assert.equal(stepsToReach({start:q(1,'M'),target:q(1,'mM'),factor:null}).incomplete,true);
+ assert.equal(stepsToReach({start:q(1,'mM'),target:q(1,'M'),factor:10}).result,null);
+});
+
+test('reverse dilution: what stock plus solvent gives',()=>{
+ // 1 mL of 10 mM with 9 mL of solvent: 10 mL at 1 mM, a 1 in 10 dilution.
+ const r=reverseDilution({c1:q(10,'mM'),stock:q(1,'mL'),solvent:q(9,'mL')});
+ nearQ(r.result?.c2,1,'mM');nearQ(r.result?.v2,10,'mL');near(r.result?.fold,10);
+ // Mixed units: 50 µL of 2 mg/mL into 0.95 mL: 1000 µL at 0.1 mg/mL.
+ const mixed=reverseDilution({c1:q(2,'mg/mL'),stock:q(50,'µL'),solvent:q(0.95,'mL')});
+ nearQ(mixed.result?.c2,0.1,'mg/mL');nearQ(mixed.result?.v2,1000,'µL');near(mixed.result?.fold,20);
+ // No solvent: the stock unchanged.
+ const neat=reverseDilution({c1:q(5,'%'),stock:q(2,'mL'),solvent:q(0,'mL')});
+ assert.equal(neat.result?.c2.value,5);assert.equal(neat.result?.v2.value,2);
+ // It undoes the forward calculation: 10 mM → 1 mM in 10 mL is 1 mL of stock + 9 mL of solvent.
+ const fwd=dilution({c1:q(10,'mM'),v1:q(null,'mL'),c2:q(1,'mM'),v2:q(10,'mL')});
+ nearQ(fwd.result?.v1,1,'mL');nearQ(fwd.result?.diluent,9,'mL');
+ assert.equal(reverseDilution({c1:q(null,'mM'),stock:q(1,'mL'),solvent:q(9,'mL')}).incomplete,true);
+ assert.equal(reverseDilution({c1:q(10,'mM'),stock:q(1,'mL'),solvent:q(null,'mL')}).incomplete,true);
+ for(const bad of [{c1:q(0,'mM'),stock:q(1,'mL'),solvent:q(9,'mL')},{c1:q(10,'mM'),stock:q(0,'mL'),solvent:q(9,'mL')},{c1:q(10,'mM'),stock:q(1,'mL'),solvent:q(-9,'mL')},{c1:q(-10,'mM'),stock:q(1,'mL'),solvent:q(9,'mL')},{c1:q(10,'mL'),stock:q(1,'mL'),solvent:q(9,'mL')},{c1:q(10,'mM'),stock:q(1,'g'),solvent:q(9,'mL')}]){
+  const o=reverseDilution(bad);assert.equal(o.result,null);assert.equal(o.incomplete,false);assert.ok(o.reason);
+ }
+});
+
+test('make a solution: the mass to dissolve',()=>{
+ // Glucose, 180.16 g/mol, 50 mM in 500 mL: 0.05 × 0.5 × 180.16 = 4.504 g (0.025 mol).
+ const g=makeSolution({mw:180.16,concentration:q(50,'mM'),volume:q(500,'mL')});
+ nearQ(g.result?.mass,4.504,'g');nearQ(g.result?.moles,0.025,'mol');assert.equal(fmtQ(g.result?.mass),'4.504 g');
+ // Mass per volume and % (w/v) need no molecular weight: 2 mg/mL in 50 mL is 0.1 g; 4 % in 250 mL is 10 g.
+ const bsa=makeSolution({mw:null,concentration:q(2,'mg/mL'),volume:q(50,'mL')});
+ nearQ(bsa.result?.mass,0.1,'g');assert.equal(bsa.result?.moles,null);
+ nearQ(makeSolution({mw:null,concentration:q(4,'%'),volume:q(250,'mL')}).result?.mass,10,'g');
+ nearQ(makeSolution({mw:66430,concentration:q(2,'mg/mL'),volume:q(50,'mL')}).result?.mass,0.1,'g','a molecular weight changes nothing here');
+ assert.equal(makeSolution({mw:null,concentration:q(50,'mM'),volume:q(500,'mL')}).incomplete,true);
+ assert.equal(makeSolution({mw:180.16,concentration:q(null,'mM'),volume:q(500,'mL')}).incomplete,true);
+ for(const bad of [{mw:0,concentration:q(50,'mM'),volume:q(500,'mL')},{mw:-1,concentration:q(50,'mM'),volume:q(500,'mL')},{mw:180.16,concentration:q(0,'mM'),volume:q(500,'mL')},{mw:180.16,concentration:q(50,'mM'),volume:q(0,'mL')},{mw:180.16,concentration:q(-50,'mM'),volume:q(500,'mL')},{mw:180.16,concentration:q(10,'x'),volume:q(500,'mL')},{mw:180.16,concentration:q(50,'mM'),volume:q(500,'mg')}]){
+  const o=makeSolution(bad);assert.equal(o.result,null);assert.equal(o.incomplete,false);assert.ok(o.reason);
+ }
 });
 
 test('cell dilution is C1V1 = C2V2 in cells per volume',()=>{
@@ -554,7 +661,11 @@ test('no result ever holds NaN or Infinity',()=>{
   for(const out of [
    dilution({c1:q(a,u),v1:q(b,'mL'),c2:q(1,u),v2:q(null,'L')}),
    dilution({c1:q(a,u),v1:q(null,'fL'),c2:q(b,u),v2:q(1e308,'L')}),
-   serialDilution({start:q(a,u),factor:b,steps:48,volume:q(1,'mL')}),
+   serialSeries({start:q(a,u),factors:Array(48).fill(b),volume:q(b,'mL'),volumeIs:'transfer'}),
+   serialSeries({start:q(a,u),factors:[b,a],volume:q(1,'L'),volumeIs:'tube'}),
+   stepFactor({start:q(a,u),target:q(b,u),steps:48}),stepsToReach({start:q(a,u),target:q(b,u),factor:a}),
+   reverseDilution({c1:q(a,u),stock:q(b,'fL'),solvent:q(a,'L')}),
+   makeSolution({mw:b,concentration:q(a,u),volume:q(1e308,'L')}),
    seeding({cellsPerWell:a,wells:3,overagePct:b,volumePerWell:q(1e308,'L'),stock:q(a,'cells/fL')}),
    haemocytometer({live:[a,b],dead:[b,a],dilution:b,volume:q(a,'L')}),
    massToWeigh({concentration:q(a,'M'),volume:q(b,'L'),mw:a}),
