@@ -4,7 +4,7 @@
 import type { BenchKind } from "../../lib/types.ts";
 import { CELL_UNITS, FOLD_UNIT, MASSVOL_UNITS, MOLAR_UNITS, PERCENT_UNIT, dimensionOf, num, type Dimension, type Q } from "./calc.ts";
 
-export type ToolId = "dilution" | "cells" | "haemocytometer" | "molarity" | "convert" | "recipe" | "mastermix" | "curve" | "timers" | "plate" | "power";
+export type ToolId = "dilution" | "cells" | "haemocytometer" | "molarity" | "convert" | "recipe" | "mastermix" | "curve" | "timers" | "plate" | "power" | "cellLines";
 
 export interface ToolInfo { id: ToolId; label: string; blurb: string; /** What a saved item of this tool is stored as; none for a tool that is not saved. */ kind?: BenchKind }
 export const TOOLS: Record<ToolId, ToolInfo> = {
@@ -19,9 +19,10 @@ export const TOOLS: Record<ToolId, ToolInfo> = {
   timers: { id: "timers", label: "Multi-timer", blurb: "Several named timers running side by side.", kind: "timer_set" },
   plate: { id: "plate", label: "Plate map", blurb: "Label the wells of a plate and pipette it well by well.", kind: "plate" },
   power: { id: "power", label: "Power & sample size", blurb: "Samples for the power you want, or power for the samples you have, per assay.", kind: "power_analysis" },
+  cellLines: { id: "cellLines", label: "Cell lines", blurb: "Look up a cell line and track your own stock: profile, growth, seeding, splitting and passages.", kind: "cell_line" },
 };
 /** The order of the tiles on the Bench page. */
-export const TOOL_ORDER: ToolId[] = ["dilution", "cells", "haemocytometer", "molarity", "convert", "recipe", "mastermix", "curve", "power", "timers", "plate"];
+export const TOOL_ORDER: ToolId[] = ["dilution", "cells", "haemocytometer", "molarity", "convert", "recipe", "mastermix", "curve", "power", "cellLines", "timers", "plate"];
 export const isTool = (id: string): id is ToolId => id in TOOLS;
 export function toolOfKind(kind: BenchKind): ToolId {
   return TOOL_ORDER.find((t) => TOOLS[t].kind === kind) ?? "dilution";
@@ -372,5 +373,85 @@ export function powerData(raw: unknown): PowerData {
     log2fc: text(o.log2fc, "1"),
     mu: text(o.mu, base?.mu ?? "20"),
     cv: text(o.cv, base?.cv ?? "0.4"),
+  };
+}
+
+// ── Cell lines ───────────────────────────────────────────────────────────────
+
+export type CellLineTab = "overview" | "profile" | "seeding" | "timer" | "passages";
+export interface PassageRecord { id: string; seedingDate: string; medium: string; antibiotic: string; incubation: string; note: string }
+
+export interface CellLineData {
+  tab: CellLineTab;
+  /** Catalogue id a line was started from, or "custom". */
+  reference: string;
+  name: string;
+  organism: string;
+  tissue: string;
+  disease: string;
+  culture: "adherent" | "suspension";
+  doublingTimeH: string;
+  densityPerCm2: string;
+  medium: string;
+  mutations: string;
+  receptor: string;
+  maxPassages: string;
+  startingPassage: string;
+  details: string;
+  /** Growth preview + splitting: seeding and target confluency (%). */
+  seedPct: string;
+  targetPct: string;
+  /** Seeding calculator. */
+  seedDensity: string;
+  stockConc: string;
+  seedVessel: string;
+  seedCount: string;
+  /** Splitting timer: compute from confluency, or pick a date. */
+  timerMode: "calc" | "date";
+  reminderAt: string;
+  passages: PassageRecord[];
+}
+
+let passageSeq = 0;
+export const newPassage = (seedingDate = ""): PassageRecord => ({ id: `p${Date.now().toString(36)}${passageSeq++}`, seedingDate, medium: "", antibiotic: "", incubation: "37°C, 5% CO₂", note: "" });
+
+export function cellLineData(raw: unknown): CellLineData {
+  const o = obj(raw);
+  const passages = arr(o.passages).map((p): PassageRecord => {
+    const r = obj(p);
+    return {
+      id: text(r.id) || `p${Date.now().toString(36)}${passageSeq++}`,
+      seedingDate: text(r.seedingDate),
+      medium: text(r.medium),
+      antibiotic: text(r.antibiotic),
+      incubation: text(r.incubation),
+      note: text(r.note),
+    };
+  });
+  return {
+    tab: pick(o.tab, ["overview", "profile", "seeding", "timer", "passages"] as const, "overview"),
+    reference: text(o.reference, "custom"),
+    name: text(o.name),
+    organism: text(o.organism, "Human"),
+    tissue: text(o.tissue),
+    disease: text(o.disease),
+    culture: pick(o.culture, ["adherent", "suspension"] as const, "adherent"),
+    doublingTimeH: text(o.doublingTimeH, "24"),
+    densityPerCm2: text(o.densityPerCm2, "130000"),
+    medium: text(o.medium, "DMEM + 10% FBS"),
+    mutations: text(o.mutations),
+    receptor: text(o.receptor),
+    maxPassages: text(o.maxPassages, "20"),
+    startingPassage: text(o.startingPassage, "0"),
+    details: text(o.details),
+    seedPct: text(o.seedPct, "20"),
+    targetPct: text(o.targetPct, "90"),
+    seedDensity: text(o.seedDensity, "15000"),
+    stockConc: text(o.stockConc, "1000000"),
+    seedVessel: text(o.seedVessel, "t75"),
+    seedCount: text(o.seedCount, "1"),
+    timerMode: pick(o.timerMode, ["calc", "date"] as const, "calc"),
+    reminderAt: text(o.reminderAt),
+    passages,
   };
 }

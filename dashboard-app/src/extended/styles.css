@@ -1221,3 +1221,26 @@
 .extension-workspace .bench-suggest table { width: 100%; }
 .extension-workspace .bench-suggest tr.on { background: var(--accent-soft); }
 .extension-workspace .bench-suggest tr.on td { font-weight: 700; }
+
+/* Cell lines tool. */
+.extension-workspace .cl-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 18px; }
+.extension-workspace .cl-fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.extension-workspace .cl-fact-label { color: var(--text-3); font-size: var(--f-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 4px; }
+.extension-workspace .cl-fact-value { font-size: var(--f-sm); font-weight: 600; overflow-wrap: anywhere; }
+.extension-workspace .cl-fact-value .cap { text-transform: capitalize; }
+.extension-workspace .cl-warn { color: var(--warning); }
+.extension-workspace .cl-details { margin: 12px 0 0; color: var(--text-2); white-space: pre-wrap; }
+.extension-workspace .cl-mutations { margin-top: 12px; }
+.extension-workspace .cl-mutations ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.extension-workspace .cl-mutations li { font-size: var(--f-sm); overflow-wrap: anywhere; }
+.extension-workspace .cl-slider { width: 100%; accent-color: var(--accent); margin: 6px 0 2px; }
+.extension-workspace .cl-plot { max-width: 420px; }
+.extension-workspace .cl-plot .cl-split { fill: var(--accent); }
+.extension-workspace .cl-plot .cl-split-label { fill: var(--accent); font-size: 10px; font-weight: 700; }
+.extension-workspace .cl-timeline { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.extension-workspace .cl-pass { border: 1px solid var(--border); border-radius: var(--r-2, 10px); background: var(--surface); overflow: hidden; }
+.extension-workspace .cl-pass-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 13px; background: var(--accent-soft); border: 0; text-align: left; cursor: pointer; }
+.extension-workspace .cl-pass-head strong { flex: none; }
+.extension-workspace .cl-pass-head .muted { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.extension-workspace .cl-pass-head .cl-flip { transform: rotate(180deg); }
+.extension-workspace .cl-pass-body { display: grid; gap: 10px; padding: 13px; }

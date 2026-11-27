@@ -1049,3 +1049,58 @@ export function detectableEffectFor(i: PowerCommon & { n: number | null; power: 
   if (!Number.isFinite(effect) || !(effect > 0)) return no("These values do not give a usable result.");
   return ok({ effect, alphaStar: base.result.alphaStar });
 }
+
+// ── Cell growth, vessels and seeding ─────────────────────────────────────────
+// Exponential growth between confluency levels: C(t) = C0 · 2^(t/Td). The time to reach a
+// target confluency is t = Td · log2(Ctarget / C0) (standard doubling-time kinetics).
+
+/** Hours for a culture to grow from one confluency to a higher one at a given doubling time. */
+export function timeToConfluence(i: { doublingTimeH: number | null; startPct: number | null; targetPct: number | null }): Outcome<Qty> {
+  if (i.doublingTimeH === null || i.startPct === null || i.targetPct === null) return need("Enter the doubling time, start and target confluency.");
+  if (!positive(i.doublingTimeH)) return no("The doubling time must be greater than zero.");
+  if (!(i.startPct > 0) || !(i.targetPct > 0)) return no("Confluency must be greater than zero.");
+  if (i.startPct >= i.targetPct) return no("The target confluency must be higher than the start.");
+  const hours = i.doublingTimeH * Math.log2(i.targetPct / i.startPct);
+  return Number.isFinite(hours) && hours >= 0 ? ok({ value: hours, unit: "h" }) : no("These values do not give a usable result.");
+}
+
+/** Confluency over time from a seeding level, capped at 100%, for the growth preview. */
+export function confluenceOverTime(doublingTimeH: number | null, startPct: number | null, points = 60): Point[] {
+  if (doublingTimeH === null || startPct === null || !positive(doublingTimeH) || !(startPct > 0)) return [];
+  // Run to a little past the point where it reaches 100%, so the curve shows the plateau.
+  const toFull = doublingTimeH * Math.log2(100 / Math.min(99.9, startPct));
+  const span = Math.max(doublingTimeH, toFull * 1.15);
+  const out: Point[] = [];
+  for (let k = 0; k <= points; k++) {
+    const t = (span * k) / points;
+    out.push({ x: t, y: Math.min(100, startPct * 2 ** (t / doublingTimeH)) });
+  }
+  return out;
+}
+
+/** Cells needed to seed an area at a target density: cells = density(cells/cm²) × area(cm²). */
+export function cellsForArea(densityPerCm2: number | null, areaCm2: number | null): Outcome<Qty> {
+  if (densityPerCm2 === null || areaCm2 === null) return need("Enter the seeding density and the growth area.");
+  if (!positive(densityPerCm2) || !positive(areaCm2)) return no("The density and area must be greater than zero.");
+  const cells = densityPerCm2 * areaCm2;
+  return Number.isFinite(cells) && cells > 0 ? ok({ value: cells, unit: "cells" }) : no("These values do not give a usable result.");
+}
+
+/** A culture vessel and its growth area (cm²) and a usual working medium volume (mL). Reference values. */
+export interface Vessel { id: string; label: string; areaCm2: number; mediumMl: number }
+export const VESSELS: Vessel[] = [
+  { id: "t25", label: "T25 flask", areaCm2: 25, mediumMl: 5 },
+  { id: "t75", label: "T75 flask", areaCm2: 75, mediumMl: 12 },
+  { id: "t175", label: "T175 flask", areaCm2: 175, mediumMl: 25 },
+  { id: "t225", label: "T225 flask", areaCm2: 225, mediumMl: 35 },
+  { id: "d35", label: "35 mm dish", areaCm2: 9.6, mediumMl: 2 },
+  { id: "d60", label: "60 mm dish", areaCm2: 21, mediumMl: 4 },
+  { id: "d100", label: "100 mm dish", areaCm2: 78.5, mediumMl: 10 },
+  { id: "d150", label: "150 mm dish", areaCm2: 152, mediumMl: 20 },
+  { id: "p6", label: "6-well plate (per well)", areaCm2: 9.6, mediumMl: 2 },
+  { id: "p12", label: "12-well plate (per well)", areaCm2: 3.8, mediumMl: 1 },
+  { id: "p24", label: "24-well plate (per well)", areaCm2: 1.9, mediumMl: 0.5 },
+  { id: "p48", label: "48-well plate (per well)", areaCm2: 1.1, mediumMl: 0.3 },
+  { id: "p96", label: "96-well plate (per well)", areaCm2: 0.32, mediumMl: 0.2 },
+];
+export const vessel = (id: string): Vessel | undefined => VESSELS.find((v) => v.id === id);
