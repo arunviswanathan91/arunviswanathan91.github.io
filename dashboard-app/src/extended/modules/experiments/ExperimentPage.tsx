@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, ArchiveRestore, ArrowLeft, ClipboardPaste, Pin, Plus, Repeat2, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, ClipboardList, ClipboardPaste, Pin, Plus, Repeat2, Trash2, X } from "lucide-react";
 import { ask } from "../../../lib/dialogs.tsx";
 import { useData } from "../../../lib/store";
 import { DateInput } from "../../../components/ui/DateInput";
@@ -8,7 +8,7 @@ import { getOne, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDateTime } from "../../lib/dates.ts";
 import { go, href } from "../../lib/route.ts";
 import { useAutosave } from "../../lib/useAutosave.ts";
-import { EXPERIMENT_OUTCOME, EXPERIMENT_STATUS, type Experiment, type ExperimentOutcome, type ExperimentSample, type ExperimentStatus, type Note, type Task, type ThesisChapter } from "../../lib/types.ts";
+import { EXPERIMENT_OUTCOME, EXPERIMENT_STATUS, type Experiment, type ExperimentOutcome, type ExperimentSample, type ExperimentStatus, type LibraryEntry, type LibraryVersion, type Note, type Task, type ThesisChapter } from "../../lib/types.ts";
 import { Attachments } from "../../components/Attachments.tsx";
 import { MarkdownEditor } from "../../components/Markdown.tsx";
 import { Modal } from "../../components/Modal.tsx";
@@ -23,6 +23,8 @@ import { TaskList } from "../tasks/TaskList.tsx";
 import { createExperiment } from "./create.ts";
 import { dateSpan } from "./ExperimentRows.tsx";
 import { parseSamples, repeatOf, samplesSummary, techniqueOptions } from "./logic.ts";
+import { newEntry } from "../library/create.ts";
+import { LIBRARY, newerVersion, protocolText } from "../library/logic.ts";
 
 export function ExperimentPage({ id }: { id: string }) {
   const { data: experiment, error, loading, fresh } = useLoad(() => getOne<Experiment>("experiments", id), [id]);
@@ -161,6 +163,7 @@ function ExperimentEditor({ initial }: { initial: Experiment }) {
         </div>
         <div className="card pad">
           <MarkdownEditor editIfEmpty label="Protocol" value={e.protocol} rows={10} placeholder="Steps, reagents and lot numbers, antibody panel and dilutions, instrument settings…" onChange={(protocol) => change({ protocol })} onBlur={blur} />
+          <ProtocolFromLibrary experiment={e} change={change} flush={() => autosave.flush()} />
         </div>
         <div className="card pad">
           <SamplesEditor samples={e.samples} onChange={(samples) => change({ samples })} onBlur={blur} />
@@ -223,6 +226,77 @@ function ExperimentLinked({ experiment, beforeLeave }: { experiment: Experiment;
         </Modal>
       )}
     </>
+  );
+}
+
+/** The library protocol this run follows: choose one, see which version was used, or keep this text as a new protocol. */
+function ProtocolFromLibrary({ experiment: e, change, flush }: { experiment: Experiment; change: (patch: Partial<Experiment>) => void; flush: () => Promise<unknown> }) {
+  const { data, error: loadError } = useLoad(async () => {
+    const [entries, versions] = await Promise.all([
+      list<LibraryEntry>("library_entries", { eq: { kind: "protocol" }, order: [["title"]] }),
+      list<LibraryVersion>("library_versions"),
+    ]);
+    return { entries, versions };
+  }, []);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const entries = data?.entries ?? [];
+  const versions = data?.versions ?? [];
+  const used = versions.find((v) => v.id === e.protocol_version_id);
+  const entry = used ? entries.find((x) => x.id === used.entry_id) : undefined;
+  const newer = entry ? newerVersion(entry, used, versions) : null;
+  // Archived protocols are not offered, except the one already in use.
+  const options = entries.filter((x) => (x.current_version_id && !x.archived_at) || x.id === entry?.id);
+
+  /** Record that this run follows `v`. Its steps fill an empty protocol; text already written is replaced only on a yes. */
+  async function follow(v: LibraryVersion, title: string) {
+    const text = protocolText(v);
+    const patch: Partial<Experiment> = { protocol_version_id: v.id };
+    if (text && text !== e.protocol.trim()) {
+      if (!e.protocol.trim() || (await ask(`Replace this experiment’s protocol text with the steps from “${title}” v${v.version}? Cancel keeps your text and only records which version you followed.`, "Replace"))) patch.protocol = text;
+    }
+    change(patch);
+  }
+  function pick(id: string) {
+    if (!id) { change({ protocol_version_id: null }); return; }
+    const chosen = entries.find((x) => x.id === id);
+    const current = versions.find((v) => v.id === chosen?.current_version_id);
+    if (chosen && current) void follow(current, chosen.title);
+  }
+  async function saveAsProtocol() {
+    setBusy(true);
+    setError("");
+    try {
+      await flush();
+      const { version } = await newEntry("protocol", { title: e.title.trim() || e.technique.trim() || LIBRARY.protocol.untitled, technique: e.technique, project_id: e.project_id }, { body: e.protocol });
+      change({ protocol_version_id: version.id });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="protocol-link">
+      <label className="field">
+        <span>Protocol from library</span>
+        <select value={entry?.id ?? ""} onChange={(ev) => pick(ev.target.value)}>
+          <option value="">None</option>
+          {options.map((x) => <option key={x.id} value={x.id}>{x.title.slice(0, 80)}{x.technique && x.technique !== x.title ? ` · ${x.technique}` : ""}</option>)}
+        </select>
+      </label>
+      {!e.protocol_version_id && e.protocol.trim() && (
+        <button type="button" disabled={busy} title="Keep this text as version 1 of a new protocol in your library" onClick={() => void saveAsProtocol()}><ClipboardList size={14} /> {busy ? "Saving…" : "Save as protocol"}</button>
+      )}
+      {entry && used && (
+        <p className="small based-on">
+          Based on: <a href={href(`protocols/${entry.id}`)}>{entry.title} v{used.version}</a>
+          {newer && <> · newer version available (v{newer.version}) <button type="button" className="link" onClick={() => void follow(newer, entry.title)}>Update to v{newer.version}</button></>}
+        </p>
+      )}
+      <ErrorText error={error || loadError} />
+    </div>
   );
 }
 

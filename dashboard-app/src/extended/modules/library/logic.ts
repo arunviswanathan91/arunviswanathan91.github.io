@@ -15,6 +15,13 @@ export const LIBRARY = {
 /** Languages offered as suggestions; anything typed is kept as is. */
 export const LANGUAGES = ["R", "Python", "Bash", "SQL", "JavaScript", "TypeScript", "MATLAB", "Julia"];
 
+/** Suggestions: languages already used here, then the common ones, no duplicates. */
+export function languageOptions(used: string[]): string[] {
+  const mine = [...new Set(used.map((l) => l.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const seen = new Set(mine.map((l) => l.toLowerCase()));
+  return [...mine, ...LANGUAGES.filter((l) => !seen.has(l.toLowerCase()))];
+}
+
 type VersionText = Pick<LibraryVersion, "body" | "materials" | "notes">;
 
 /** The number the next saved version gets: one more than the highest so far, starting at 1. */
