@@ -139,15 +139,89 @@ export function cellsData(raw: unknown): CellsData {
 
 // ── Haemocytometer ───────────────────────────────────────────────────────────
 
-export interface HaemoData { live: string[]; dead: string[]; countDead: boolean; dilution: string; volume: QText }
+export type HaemoMode = "tap" | "square" | "total";
+/**
+ * `counted` holds which of the nine large squares are counted (0 to 8, in reading order);
+ * `live` and `dead` hold one count for each of them, in the same order. The total fields
+ * belong to the "total" mode, for a count kept on a tally counter.
+ */
+export interface HaemoData {
+  mode: HaemoMode;
+  counted: number[];
+  live: string[]; dead: string[];
+  total: string; totalDead: string; totalSquares: string;
+  countDead: boolean; dilution: string; volume: QText;
+}
 export const START_SQUARES = 4;
+export const CHAMBER_SQUARES = 9;
+export const HAEMO_LAYOUTS = {
+  corners: [0, 2, 6, 8],
+  centre: [0, 2, 4, 6, 8],
+  all: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+} as const;
+export type HaemoLayout = keyof typeof HAEMO_LAYOUTS;
+
+/** The label of each counted square: C1, C2, … in reading order. */
+export const squareLabel = (k: number): string => `C${k + 1}`;
+/** Which named layout these squares make, if any. */
+export function layoutOf(counted: number[]): HaemoLayout | null {
+  const key = counted.join();
+  return (Object.keys(HAEMO_LAYOUTS) as HaemoLayout[]).find((l) => HAEMO_LAYOUTS[l].join() === key) ?? null;
+}
+/** Where n squares counted by an older version sit on the chamber. */
+function squaresFor(n: number): number[] {
+  if (n <= 4) return [...HAEMO_LAYOUTS.corners];
+  if (n === 5) return [...HAEMO_LAYOUTS.centre];
+  return HAEMO_LAYOUTS.all.slice(0, n);
+}
+/** Counts another set of squares, keeping the count of every square that stays. */
+export function recount(d: HaemoData, squares: number[]): HaemoData {
+  const counted = [...new Set(squares)].filter((s) => Number.isInteger(s) && s >= 0 && s < CHAMBER_SQUARES).sort((a, b) => a - b);
+  if (counted.length === 0) return d;
+  const at = (list: string[], square: number) => list[d.counted.indexOf(square)] ?? "";
+  return { ...d, counted, live: counted.map((s) => at(d.live, s)), dead: counted.map((s) => at(d.dead, s)) };
+}
+/** The total-mode fields that the per-square counts add up to; blank where nothing was counted. */
+export function totalsOf(live: string[], dead: string[]): { total: string; totalDead: string; totalSquares: string } {
+  const used = live.map((v, k) => ({ live: num(v), dead: num(dead[k] ?? "") })).filter((s): s is { live: number; dead: number | null } => s.live !== null);
+  if (used.length === 0) return { total: "", totalDead: "", totalSquares: "" };
+  const sum = (values: (number | null)[]) => String(Number(values.reduce((t: number, v) => t + (v ?? 0), 0).toPrecision(12)));
+  return { total: sum(used.map((s) => s.live)), totalDead: used.some((s) => s.dead !== null) ? sum(used.map((s) => s.dead)) : "", totalSquares: String(used.length) };
+}
+
+/** One cell more or fewer in a counted square, as tapped. A square tapped back to nothing is blank again, so it is left out. */
+export function tally(d: HaemoData, k: number, kind: "live" | "dead", by: 1 | -1): HaemoData {
+  if (!(k >= 0 && k < d.counted.length)) return d;
+  const whole = (v: string | undefined) => Math.max(0, Math.round(num(v ?? "") ?? 0));
+  let live = whole(d.live[k]);
+  let dead = d.countDead ? whole(d.dead[k]) : 0;
+  if (kind === "live") live = Math.max(0, live + by);
+  else dead = Math.max(0, dead + by);
+  const put = (list: string[], value: string) => d.counted.map((_, j) => (j === k ? value : list[j] ?? ""));
+  return { ...d, live: put(d.live, live > 0 || dead > 0 ? String(live) : ""), dead: d.countDead ? put(d.dead, dead > 0 ? String(dead) : "") : d.dead };
+}
+
+const HAEMO_MODES = ["tap", "square", "total"] as const;
 export function haemoData(raw: unknown): HaemoData {
   const o = obj(raw);
   const live = arr(o.live ?? o.counts).map((v) => text(v));
-  while (live.length < START_SQUARES) live.push("");
-  const stored = arr(o.dead).map((v) => text(v));
-  const dead = live.map((_, k) => stored[k] ?? "");
-  return { live, dead, countDead: flag(o.countDead, dead.some((v) => v.trim() !== "")), dilution: text(o.dilution), volume: quantity(o.volume, "mL", ["volume"]) };
+  const dead = arr(o.dead).map((v) => text(v));
+  const rest = {
+    total: text(o.total), totalDead: text(o.totalDead), totalSquares: text(o.totalSquares, String(START_SQUARES)),
+    countDead: flag(o.countDead, dead.some((v) => v.trim() !== "")), dilution: text(o.dilution), volume: quantity(o.volume, "mL", ["volume"]),
+  };
+  const on = (squares: number[], mode: HaemoMode, from: { live: string[]; dead: string[] }): HaemoData => (
+    { mode, counted: squares, live: squares.map((_, k) => from.live[k] ?? ""), dead: squares.map((_, k) => from.dead[k] ?? ""), ...rest }
+  );
+  const counted = [...new Set(arr(o.counted).filter((s): s is number => typeof s === "number" && Number.isInteger(s) && s >= 0 && s < CHAMBER_SQUARES))].sort((a, b) => a - b);
+  if (counted.length > 0) return on(counted, pick(o.mode, HAEMO_MODES, "square"), { live, dead });
+  // Saved before the chamber picture: a plain list of up to 25 squares, placed on the chamber by how many there are.
+  if (live.length > CHAMBER_SQUARES) {
+    // More squares than the chamber has: keep what they add up to, as a total.
+    const sums = totalsOf(live, dead);
+    return { ...on(squaresFor(START_SQUARES), "total", { live: [], dead: [] }), ...(sums.total === "" ? {} : sums) };
+  }
+  return on(squaresFor(Math.max(START_SQUARES, live.length)), pick(o.mode, HAEMO_MODES, live.length > 0 ? "square" : "tap"), { live, dead });
 }
 
 // ── Molarity ─────────────────────────────────────────────────────────────────

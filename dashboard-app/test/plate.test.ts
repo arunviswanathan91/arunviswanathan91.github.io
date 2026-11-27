@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   rowLabel, rowIndex, wellId, parseWellId, rectIds, sortIds, visitOrder, visitSteps, channelStride, channelChoices, nextOpenStep, upcomingSteps, markStep, undoLastStep,
   stepBox, stepLabel, fillSeries, replicates, parseLabels, dilutionSeries, formatAmount, parseNumber, csvCell, toCsv, tableRows, fileBase, geometry, wellCentre,
-  isLabelled, patchWells, resizePlate, lostOnResize, legend, parsePlateMap, componentsText, formatDuration, withComponent, newPlate, type Plate,
+  isLabelled, patchWells, resizePlate, lostOnResize, legend, parsePlateMap, componentsText, formatDuration, withComponent, newPlate, labelledOnlyOn, planPass, passCount,
+  viewSize, zoomWindow, type Plate,
 } from '../src/extended/modules/bench/plate/logic.ts';
 
 test('rows are lettered A to Z, then AA, AB', () => {
@@ -104,6 +105,101 @@ test('moving through the steps', () => {
   assert.deepEqual(undoLastStep(cols, markStep(['A1'], cols[1])), { done: ['A1'], index: 1 });
   assert.deepEqual(stepBox(cols[2]), { row: 0, col: 2, rows: 8, cols: 1 });
   assert.equal(stepLabel(cols[2]), 'A3–H3'); assert.equal(stepLabel(['C4']), 'C4');
+});
+
+test('a skipped step comes back after the ones that follow', () => {
+  const steps = visitSteps(2, 3, { order: 'row' }); // A1 A2 A3 B1 B2 B3
+  let done: string[] = [];
+  let at = 0;
+  const visited: string[] = [];
+  const pipette = () => { visited.push(steps[at][0]); done = markStep(done, steps[at]); at = nextOpenStep(steps, new Set(done), at); };
+  const skip = () => { at = nextOpenStep(steps, new Set(done), at); };
+  pipette();          // A1
+  skip();             // A2 left open
+  assert.equal(steps[at][0], 'A3'); assert.deepEqual(done, ['A1']); // skipping ticks nothing
+  pipette(); pipette();
+  skip();             // B2 left open
+  pipette();          // B3, the last in the order
+  assert.equal(steps[at][0], 'A2'); // round to the first one skipped
+  pipette();
+  assert.equal(steps[at][0], 'B2');
+  skip();
+  assert.equal(steps[at][0], 'B2'); // the only one left: skipping stays on it
+  pipette();
+  assert.equal(at, -1);
+  assert.deepEqual(visited, ['A1', 'A3', 'B1', 'B3', 'A2', 'B2']);
+  assert.deepEqual(passCount(steps, new Set(done)), { done: 6, total: 6 });
+});
+
+test('labelled wells only follows the plate until it is chosen by hand', () => {
+  assert.equal(labelledOnlyOn(undefined, 0), false);
+  assert.equal(labelledOnlyOn(undefined, 1), true);
+  assert.equal(labelledOnlyOn(undefined, 13), true);
+  assert.equal(labelledOnlyOn(false, 13), false);
+  assert.equal(labelledOnlyOn(true, 0), true);
+
+  // 13 labelled wells on a 24-well plate: the pass is those 13.
+  const plate = newPlate('P', 4, 6);
+  const ids = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'C1'];
+  for (const id of ids) plate.wells[id] = { title: id };
+  plate.wells.D6 = { color: 'red' }; // a colour alone is not a label
+  const pass = planPass(plate);
+  assert.equal(pass.labelledOnly, true);
+  assert.deepEqual(pass.steps.map((s) => s[0]), ids);
+  assert.deepEqual(passCount(pass.steps, new Set()), { done: 0, total: 13 });
+  assert.deepEqual(passCount(pass.steps, new Set(['A1', 'C1', 'D6'])), { done: 2, total: 13 }); // wells outside the pass are not counted
+  // Turned off by hand: the whole plate. A blank plate: the whole plate too.
+  assert.equal(planPass({ ...plate, progress: { order: 'row', done: [], labelledOnly: false } }).steps.length, 24);
+  assert.equal(planPass(newPlate('Blank', 4, 6)).labelledOnly, false);
+  assert.equal(planPass(newPlate('Blank', 4, 6)).steps.length, 24);
+  assert.equal(planPass({ ...newPlate('Blank', 4, 6), progress: { order: 'row', done: [], labelledOnly: true } }).steps.length, 0);
+  // The choice is stored either way, and read back.
+  assert.equal(parsePlateMap({ plates: [{ rows: 4, cols: 6, progress: { order: 'row', done: [], labelledOnly: false } }] }).plates[0].progress?.labelledOnly, false);
+  assert.equal(parsePlateMap({ plates: [{ rows: 4, cols: 6, progress: { order: 'row', done: [], labelledOnly: true } }] }).plates[0].progress?.labelledOnly, true);
+  assert.equal(parsePlateMap({ plates: [{ rows: 4, cols: 6, progress: { order: 'row', done: [], labelledOnly: 'yes' } }] }).plates[0].progress?.labelledOnly, undefined);
+});
+
+test('a pass follows the pipette: channels set the direction and are counted in wells', () => {
+  const eight = planPass({ ...newPlate('P', 8, 12), progress: { order: 'row', done: ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1'], channels: 8 } });
+  assert.equal(eight.order, 'column'); assert.equal(eight.channels, 8); assert.equal(eight.steps.length, 12);
+  assert.deepEqual(passCount(eight.steps, new Set(['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1'])), { done: 8, total: 96 });
+  assert.equal(planPass({ ...newPlate('P', 8, 12), progress: { order: 'column', done: [], channels: 12 } }).order, 'row');
+  // A pipette that does not fit the plate is ignored.
+  const small = planPass({ ...newPlate('P', 4, 6), progress: { order: 'column', done: [], channels: 8, snake: true } });
+  assert.equal(small.channels, 1); assert.equal(small.order, 'column'); assert.equal(small.snake, true);
+  assert.deepEqual(small.steps.slice(0, 6).map((s) => s[0]), ['A1', 'B1', 'C1', 'D1', 'D2', 'C2']);
+  assert.deepEqual(passCount([], new Set(['A1'])), { done: 0, total: 0 });
+});
+
+test('the window on a large plate', () => {
+  // Up to 96 wells the plate is shown whole.
+  assert.deepEqual(viewSize(8, 12), { rows: 8, cols: 12 });
+  assert.deepEqual(viewSize(4, 6), { rows: 4, cols: 6 });
+  assert.deepEqual(viewSize(16, 24), { rows: 8, cols: 12 });
+  assert.deepEqual(viewSize(16, 24, 8), { rows: 16, cols: 12 }); // an 8-channel step runs the length of a column
+  assert.deepEqual(viewSize(16, 24, 12), { rows: 8, cols: 24 });
+  assert.deepEqual(viewSize(10, 10), { rows: 8, cols: 10 });
+  // 384 wells in four windows of 8 by 12.
+  assert.deepEqual(zoomWindow(16, 24, 0, 0, 8, 12), { row: 0, col: 0 });
+  assert.deepEqual(zoomWindow(16, 24, 7, 11, 8, 12), { row: 0, col: 0 });
+  assert.deepEqual(zoomWindow(16, 24, 7, 12, 8, 12), { row: 0, col: 12 });
+  assert.deepEqual(zoomWindow(16, 24, 8, 0, 8, 12), { row: 8, col: 0 });
+  assert.deepEqual(zoomWindow(16, 24, 15, 23, 8, 12), { row: 8, col: 12 });
+  // The window always holds the well and never leaves the plate.
+  for (const [rows, cols] of [[16, 24], [10, 10], [20, 30], [32, 48], [5, 30]]) {
+    const v = viewSize(rows, cols);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const w = zoomWindow(rows, cols, r, c, v.rows, v.cols);
+      assert.ok(w.row >= 0 && w.col >= 0 && w.row + v.rows <= rows && w.col + v.cols <= cols, `${rows}x${cols} ${r},${c}`);
+      assert.ok(r >= w.row && r < w.row + v.rows && c >= w.col && c < w.col + v.cols, `${rows}x${cols} ${r},${c}`);
+    }
+  }
+  // A plate that is not a whole number of windows: the last window is pulled back.
+  assert.deepEqual(zoomWindow(20, 30, 19, 29, 8, 12), { row: 12, col: 18 });
+  assert.deepEqual(zoomWindow(20, 30, 16, 24, 8, 12), { row: 12, col: 18 });
+  // Out-of-range input is clamped, and a window larger than the plate starts at A1.
+  assert.deepEqual(zoomWindow(16, 24, -3, 99, 8, 12), { row: 0, col: 12 });
+  assert.deepEqual(zoomWindow(4, 6, 3, 5, 8, 12), { row: 0, col: 0 });
 });
 
 test('fill series counts up from the number in the pattern', () => {

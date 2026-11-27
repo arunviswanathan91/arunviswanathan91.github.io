@@ -14,6 +14,7 @@ export interface Progress {
   /** Well ids in the order they were marked, so the last one can be taken back. */
   done: string[];
   snake?: boolean;
+  /** Left out until it is chosen by hand; see `labelledOnlyOn`. */
   labelledOnly?: boolean;
   channels?: Channels;
   /** Epoch ms of the first and the last "Pipetted". */
@@ -259,6 +260,52 @@ export function stepBox(step: string[]): { row: number; col: number; rows: numbe
 /** "A1" for one well, "A1–H1" for a multichannel step. */
 export const stepLabel = (step: string[]): string => (step.length <= 1 ? step[0] ?? "" : `${step[0]}–${step[step.length - 1]}`);
 
+/**
+ * Whether a pass keeps to the labelled wells. Until it is chosen by hand it follows the plate:
+ * on when at least one well is labelled, off for a blank plate.
+ */
+export const labelledOnlyOn = (setting: boolean | undefined, labelledCount: number): boolean => setting ?? labelledCount > 0;
+
+export interface Pass { order: Order; channels: Channels; snake: boolean; labelledOnly: boolean; steps: string[][] }
+/** The pass a plate is set up for: its stored progress read with the defaults, and the steps that follow. */
+export function planPass(plate: Plate): Pass {
+  const p = plate.progress;
+  const channels: Channels = p?.channels && channelStride(plate.rows, plate.cols, p.channels) ? p.channels : 1;
+  // A multichannel pipette sets the direction: an 8-channel goes column by column, a 12-channel row by row.
+  const order: Order = channels === 8 ? "column" : channels === 12 ? "row" : p?.order ?? "row";
+  const labelled = new Set(Object.keys(plate.wells).filter((id) => isLabelled(plate.wells[id])));
+  const labelledOnly = labelledOnlyOn(p?.labelledOnly, labelled.size);
+  const snake = !!p?.snake;
+  return { order, channels, snake, labelledOnly, steps: visitSteps(plate.rows, plate.cols, { order, snake, channels, only: labelledOnly ? (id) => labelled.has(id) : undefined }) };
+}
+/** Wells of the pass that are done, and how many it has: the one progress figure. */
+export function passCount(steps: string[][], done: ReadonlySet<string>): { done: number; total: number } {
+  let n = 0, total = 0;
+  for (const step of steps) for (const id of step) { total++; if (done.has(id)) n++; }
+  return { done: n, total };
+}
+
+/** A plate with more wells than this is shown a part at a time while pipetting. */
+export const WHOLE_PLATE_WELLS = 96;
+/** The part of a large plate on show: 8 rows by 12 columns, or the full length of the line a multichannel pipette fills. */
+export function viewSize(rows: number, cols: number, channels: Channels = 1): { rows: number; cols: number } {
+  if (rows * cols <= WHOLE_PLATE_WELLS) return { rows, cols };
+  return { rows: channels === 8 ? rows : Math.min(rows, 8), cols: channels === 12 ? cols : Math.min(cols, 12) };
+}
+/**
+ * The first row and column of the window that holds a well. The plate is cut into windows of
+ * `viewRows` by `viewCols` from A1, so the view stays still while a pass crosses it and moves on
+ * only when the well leaves it; the last window is pulled back inside the plate.
+ */
+export function zoomWindow(rows: number, cols: number, row: number, col: number, viewRows: number, viewCols: number): { row: number; col: number } {
+  const first = (n: number, at: number, view: number) => {
+    const v = Math.max(1, Math.min(Math.floor(view), n));
+    const i = Math.min(n - 1, Math.max(0, Math.floor(at)));
+    return Math.max(0, Math.min(Math.floor(i / v) * v, n - v));
+  };
+  return { row: first(rows, row, viewRows), col: first(cols, col, viewCols) };
+}
+
 export function formatDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -449,7 +496,7 @@ function readProgress(raw: unknown, rows: number, cols: number): Progress | unde
   const inside = (id: unknown): id is string => { const p = typeof id === "string" ? parseWellId(id) : null; return !!p && p.row < rows && p.col < cols; };
   const out: Progress = { order: o.order === "column" ? "column" : "row", done: [...new Set((Array.isArray(o.done) ? o.done : []).filter(inside))] };
   if (o.snake === true) out.snake = true;
-  if (o.labelledOnly === true) out.labelledOnly = true;
+  if (typeof o.labelledOnly === "boolean") out.labelledOnly = o.labelledOnly;
   if ((o.channels === 8 || o.channels === 12) && channelStride(rows, cols, o.channels)) out.channels = o.channels;
   if (typeof o.startedAt === "number") out.startedAt = o.startedAt;
   if (typeof o.finishedAt === "number") out.finishedAt = o.finishedAt;

@@ -7,11 +7,21 @@
   position: absolute; inset: 0; display: grid; place-items: center; font-size: 0.9rem; color: var(--text-2);
   opacity: calc(1 - var(--at, 0) * 1.6); pointer-events: none;
 }
-.slide-exit-handle {
+/* Spelled out this heavily so the workspace's general button look does not win. */
+.slide-exit button.slide-exit-handle,
+.extension-workspace .slide-exit button.slide-exit-handle,
+.extension-workspace .slide-exit button.slide-exit-handle:hover:not(:disabled) {
   position: absolute; top: 3px; width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%; border: 0;
   display: grid; place-items: center; background: var(--accent); color: var(--accent-text); cursor: grab; touch-action: none;
   left: calc(3px + var(--at, 0) * (100% - 50px));
   transition: left 0.18s ease;
 }
-.slide-exit[data-held] .slide-exit-handle { transition: none; cursor: grabbing; }
-@media (prefers-reduced-motion: reduce) { .slide-exit-handle { transition: none; } }
+.extension-workspace .slide-exit button.slide-exit-handle:active:not(:disabled) { transform: none; }
+.slide-exit[data-held] button.slide-exit-handle,
+.extension-workspace .slide-exit[data-held] button.slide-exit-handle,
+.extension-workspace .slide-exit[data-held] button.slide-exit-handle:hover:not(:disabled) { transition: none; cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) {
+  .slide-exit button.slide-exit-handle,
+  .extension-workspace .slide-exit button.slide-exit-handle,
+  .extension-workspace .slide-exit button.slide-exit-handle:hover:not(:disabled) { transition: none; }
+}

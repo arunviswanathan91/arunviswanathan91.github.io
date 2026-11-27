@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
- convert, dimensionOf, num, fmt, fmtQ, bestUnit, unitLabel, unitsOf, dilution, parseRatio, serialSeries, stepFactor, stepsToReach, reverseDilution, makeSolution, cellDilution, seeding, haemocytometer,
+ convert, dimensionOf, num, fmt, fmtQ, bestUnit, unitLabel, unitsOf, dilution, parseRatio, serialSeries, stepFactor, stepsToReach, reverseDilution, makeSolution, cellDilution, seeding, haemocytometer, haemocytometerTotal, unevenCounts,
  massToWeigh, molesFromMass, concentrationFrom, recipe, masterMix, linearFit, predictX, predictY, parsePairs, niceTicks,
  type Q, type Qty,
 } from '../src/extended/modules/bench/calc.ts';
+import { haemoData, recount, tally, totalsOf, layoutOf } from '../src/extended/modules/bench/model.ts';
 
 /** Equal to within floating-point rounding (1 part in 10¹²). */
 const near=(actual:number|null|undefined,expected:number,msg?:string)=>{
@@ -418,6 +419,125 @@ test('haemocytometer: live cells/mL = mean count × dilution × 10⁴',()=>{
  const gaps=haemocytometer({live:[40,null,60,null],dead:[null,7,10,null],dilution:1});
  assert.equal(gaps.result?.squares,2);assert.equal(gaps.result?.meanLive,50);assert.equal(gaps.result?.livePerMl,500000);
  assert.equal(gaps.result?.meanDead,5);near(gaps.result?.viability,100*100/110);
+});
+
+test('haemocytometer from a total: mean = total ÷ squares, the same arithmetic as per square',()=>{
+ // 30 cells over 4 squares, undiluted → mean 7.5 → 7.5 × 10⁴ cells/mL.
+ const t=haemocytometerTotal({total:30,squares:4,dilution:1});
+ assert.equal(t.result?.meanLive,7.5);assert.equal(t.result?.livePerMl,75000);assert.equal(t.result?.squares,4);
+ assert.equal(t.result?.countedLive,30);assert.equal(t.result?.countedDead,null);assert.equal(t.result?.viability,null);assert.equal(t.result?.warning,'low');
+ assert.deepEqual(t.result,haemocytometer({live:[7,8,7,8],dilution:1}).result,'equal to the squares that add up to it');
+ // With dead cells and a volume: the same as 52, 48, 61, 55 live and 3, 2, 4, 3 dead.
+ const both=haemocytometerTotal({total:216,squares:4,dead:12,dilution:2,volume:q(5,'mL')});
+ assert.deepEqual(both.result,haemocytometer({live:[52,48,61,55],dead:[3,2,4,3],dilution:2,volume:q(5,'mL')}).result);
+ near(both.result?.viability,100*216/228);near(both.result?.totalLiveCells,5400000);
+ assert.equal(haemocytometerTotal({total:0,squares:4,dead:0,dilution:1}).result?.viability,null);
+ // A total says nothing about how the squares compare.
+ assert.equal(haemocytometerTotal({total:80,squares:4,dilution:1}).result?.uneven,false);
+ // Missing is a prompt, wrong is an error.
+ assert.equal(haemocytometerTotal({total:null,squares:4,dilution:1}).incomplete,true);
+ assert.equal(haemocytometerTotal({total:30,squares:null,dilution:1}).incomplete,true);
+ assert.equal(haemocytometerTotal({total:30,squares:4,dilution:null}).incomplete,true);
+ for(const squares of [0,-1,2.5,NaN,Infinity]){const o=haemocytometerTotal({total:30,squares,dilution:1});assert.equal(o.result,null,`${squares} squares`);assert.equal(o.incomplete,false)}
+ assert.match(haemocytometerTotal({total:30,squares:2.5,dilution:1}).reason,/whole number/);
+ assert.match(haemocytometerTotal({total:-1,squares:4,dilution:1}).reason,/negative/);
+ assert.match(haemocytometerTotal({total:30,squares:4,dead:-1,dilution:1}).reason,/negative/);
+ assert.equal(haemocytometerTotal({total:NaN,squares:4,dilution:1}).result,null);
+ assert.equal(haemocytometerTotal({total:30,squares:4,dilution:0.5}).result,null);
+ assert.equal(haemocytometerTotal({total:30,squares:4,dilution:1,volume:q(0,'mL')}).result,null);
+ for(const a of [null,0,-1,1,1e-320,1e308,NaN,Infinity]) for(const b of [null,0,1,3,1e308,NaN,Infinity])
+  assert.ok(finite(haemocytometerTotal({total:a,squares:b,dead:a,dilution:b,volume:q(a,'L')})),`${a} ${b}`);
+});
+
+test('haemocytometer flags squares that disagree by more than chance',()=>{
+ // Flagged: a square further from the mean than both 20 % of it and 2 × √mean.
+ assert.equal(unevenCounts([10,30,10,30]),true,'mean 20: 10 away, allowed 8.9');
+ assert.equal(haemocytometer({live:[10,30,10,30],dilution:1}).result?.uneven,true);
+ assert.equal(unevenCounts([20,22,19,21]),false);
+ assert.equal(unevenCounts([52,48,61,55]),false,'mean 54: 7 away, allowed 14.7');
+ assert.equal(unevenCounts([54,54,54,80]),true,'mean 60.5: 19.5 away, allowed 15.6');
+ assert.equal(unevenCounts([200,200,200,250]),false,'mean 212.5: 37.5 away, allowed 42.5 (20 % of a large mean)');
+ assert.equal(unevenCounts([200,200,260]),false,'mean 220: 40 away, allowed 44');
+ assert.equal(unevenCounts([200,200,290]),true,'mean 230: 60 away, allowed 46');
+ assert.equal(unevenCounts([2,14,2,14]),false,'a mean under 10 is too few cells to judge');
+ assert.equal(unevenCounts([3,17]),true,'a mean of exactly 10 is judged: 7 away, allowed 6.3');
+ assert.equal(unevenCounts([5,15]),false,'mean 10: 5 away, allowed 6.3');
+ assert.equal(unevenCounts([40]),false,'one square has nothing to disagree with');
+ assert.equal(unevenCounts([]),false);
+ // Dead cells belong to the square too; blank squares are left out.
+ assert.equal(haemocytometer({live:[10,30,10,30],dead:[20,0,20,0],dilution:1}).result?.uneven,false);
+ assert.equal(haemocytometer({live:[25,null,25,null],dilution:1}).result?.uneven,false);
+ assert.equal(haemocytometer({live:[52,48,61,55],dilution:2}).result?.uneven,false);
+});
+
+test('haemocytometer saves: old lists of squares open on the chamber with nothing lost',()=>{
+ // Never saved: tapping, the four corners.
+ for(const raw of [undefined,null,{},'x']){
+  const d=haemoData(raw);
+  assert.equal(d.mode,'tap');assert.deepEqual(d.counted,[0,2,6,8]);assert.deepEqual(d.live,['','','','']);assert.deepEqual(d.dead,['','','','']);
+  assert.equal(d.total,'');assert.equal(d.totalDead,'');assert.equal(d.totalSquares,'4');assert.equal(d.countDead,false);assert.equal(d.dilution,'');assert.deepEqual(d.volume,{value:'',unit:'mL'});
+ }
+ // An old save has no mode: it opens for typing, its counts where they were.
+ const old=haemoData({live:['20','22','19','21'],dead:['','','',''],countDead:false,dilution:'2',volume:{value:'',unit:'mL'}});
+ assert.equal(old.mode,'square');assert.deepEqual(old.counted,[0,2,6,8]);assert.deepEqual(old.live,['20','22','19','21']);assert.deepEqual(old.dead,['','','','']);
+ assert.equal(old.dilution,'2');assert.equal(old.countDead,false);
+ assert.equal(haemocytometer({live:old.live.map(num),dilution:num(old.dilution)}).result?.livePerMl,410000);
+ // Older still: the counts under `counts`, as numbers; dead counts switch dead counting on.
+ assert.deepEqual(haemoData({counts:[50,60]}).live,['50','60','','']);
+ assert.equal(haemoData({live:['50'],dead:['4']}).countDead,true);
+ assert.deepEqual(haemoData({live:['50'],dead:['4']}).dead,['4','','','']);
+ // Five squares: the corners and the centre. Six to nine: the first n in reading order.
+ const five=haemoData({live:['1','2','3','4','5'],dead:['','','','','9']});
+ assert.deepEqual(five.counted,[0,2,4,6,8]);assert.deepEqual(five.live,['1','2','3','4','5']);assert.deepEqual(five.dead,['','','','','9']);assert.equal(five.mode,'square');
+ const seven=haemoData({live:['1','2','3','4','5','6','7']});
+ assert.deepEqual(seven.counted,[0,1,2,3,4,5,6]);assert.deepEqual(seven.live,['1','2','3','4','5','6','7']);
+ assert.deepEqual(haemoData({live:Array(9).fill('3')}).counted,[0,1,2,3,4,5,6,7,8]);
+ // More than the chamber has: the sum and the number of squares that were filled in, as a total.
+ const twelve=haemoData({live:['10','20','30','','40','50','60','70','80','90','100','110'],dead:['1','2','','9','','','','','','','','3'],countDead:true,dilution:'2'});
+ assert.equal(twelve.mode,'total');assert.equal(twelve.total,'660');assert.equal(twelve.totalSquares,'11');assert.equal(twelve.totalDead,'6','a dead count beside a blank square never counted');
+ assert.deepEqual(twelve.counted,[0,2,6,8]);assert.deepEqual(twelve.live,['','','','']);
+ const before=haemocytometer({live:['10','20','30','','40','50','60','70','80','90','100','110'].map(num),dead:['1','2','','9','','','','','','','','3'].map(num),dilution:2});
+ const after=haemocytometerTotal({total:num(twelve.total),squares:num(twelve.totalSquares),dead:num(twelve.totalDead),dilution:num(twelve.dilution)});
+ near(after.result?.livePerMl,before.result!.livePerMl);near(after.result?.viability,before.result!.viability!);
+ assert.equal(haemoData({live:Array(12).fill('')}).mode,'total');assert.equal(haemoData({live:Array(12).fill('')}).totalSquares,'4');
+ // A save of this version reads back as it was written.
+ const now={mode:'tap',counted:[0,4,8],live:['7','','9'],dead:['1','',''],total:'30',totalDead:'2',totalSquares:'5',countDead:true,dilution:'2',volume:{value:'5',unit:'mL'}};
+ assert.deepEqual(haemoData(now),now);assert.deepEqual(haemoData(JSON.parse(JSON.stringify(haemoData(now)))),now);
+ assert.equal(haemoData({...now,mode:'total'}).mode,'total');assert.equal(haemoData({...now,mode:'nonsense'}).mode,'square');
+ // Damaged square lists are tidied: in range, no repeats, in reading order, counts matched in length.
+ const odd=haemoData({mode:'tap',counted:[8,2,2,11,-1,1.5,'3'],live:['5']});
+ assert.deepEqual(odd.counted,[2,8]);assert.deepEqual(odd.live,['5','']);assert.deepEqual(odd.dead,['','']);
+});
+
+test('haemocytometer squares: tapping, choosing squares and carrying counts into a total',()=>{
+ let d=haemoData(undefined);
+ for(let k=0;k<7;k++) d=tally(d,0,'live',1);
+ assert.deepEqual(d.live,['7','','','']);
+ d=tally(d,0,'live',-1);assert.equal(d.live[0],'6');
+ d=tally(d,3,'live',1);d=tally(d,3,'live',-1);assert.equal(d.live[3],'','tapped back to nothing: left out again, not a count of 0');
+ d=tally(d,3,'live',-1);assert.equal(d.live[3],'');
+ assert.equal(tally(d,9,'live',1),d);assert.equal(tally(d,-1,'live',1),d);
+ // Dead cells only count with dead counting on; a square with only dead cells has 0 live.
+ assert.deepEqual(tally(d,1,'dead',1).dead,['','','',''],'dead counting is off');
+ d={...d,countDead:true};
+ d=tally(d,1,'dead',1);d=tally(d,1,'dead',1);
+ assert.equal(d.live[1],'0');assert.equal(d.dead[1],'2');
+ assert.equal(haemocytometer({live:d.live.map(num),dead:d.dead.map(num),dilution:1}).result?.squares,2);
+ d=tally(d,1,'dead',-1);d=tally(d,1,'dead',-1);assert.equal(d.live[1],'');assert.equal(d.dead[1],'');
+ d=tally({...d,live:['6','x','2.6','']},1,'live',1);assert.equal(d.live[1],'1','text that is not a number starts from 0');
+ assert.equal(tally(d,2,'live',1).live[2],'4');
+ // Counting other squares keeps the count of each square that stays.
+ let c=haemoData({mode:'tap',counted:[0,2,6,8],live:['1','2','3','4'],dead:['','5','','']});
+ c=recount(c,[8,0,4,2,6]);
+ assert.deepEqual(c.counted,[0,2,4,6,8]);assert.deepEqual(c.live,['1','2','','3','4']);assert.deepEqual(c.dead,['','5','','','']);
+ c=recount(c,[2,4]);assert.deepEqual(c.counted,[2,4]);assert.deepEqual(c.live,['2','']);assert.deepEqual(c.dead,['5','']);
+ assert.equal(recount(c,[]),c,'at least one square is counted');assert.equal(recount(c,[12,-3]),c);
+ assert.equal(layoutOf([0,2,6,8]),'corners');assert.equal(layoutOf([0,2,4,6,8]),'centre');assert.equal(layoutOf([0,1,2,3,4,5,6,7,8]),'all');assert.equal(layoutOf([0,1]),null);
+ // What the squares add up to, for the total fields.
+ assert.deepEqual(totalsOf(['7','8','7','8'],['','','','']),{total:'30',totalDead:'',totalSquares:'4'});
+ assert.deepEqual(totalsOf(['7','','8',''],['1','9','','']),{total:'15',totalDead:'1',totalSquares:'2'});
+ assert.deepEqual(totalsOf(['','',''],['','4','']),{total:'',totalDead:'',totalSquares:''});
+ assert.deepEqual(totalsOf(['0.1','0.2'],[]),{total:'0.3',totalDead:'',totalSquares:'2'});
 });
 
 test('haemocytometer warns outside 20 to 100 cells per square and rejects bad input',()=>{

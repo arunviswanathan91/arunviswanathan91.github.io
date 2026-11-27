@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ClipboardPaste, Copy, Eraser, Plus, X } from "lucide-react";
 import {
   WELL_COLORS, clearWells, dilutionSeries, fillSeries, parseLabels, parseNumber, patchWells, replicates, sortIds, withComponent,
@@ -24,9 +24,26 @@ function Direction({ value, onChange, name }: { value: Order; onChange: (v: Orde
   );
 }
 
+/** True at phone and narrow-tablet widths, where the panel sits under the plate. */
+export function useNarrow(): boolean {
+  const query = "(max-width: 900px)";
+  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(query);
+    if (!m) return;
+    const on = () => setNarrow(m.matches);
+    on();
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
 /**
  * Edits the selected wells: every change goes to all of them. `change` receives the new
  * plate and a tag; edits with the same tag in a row (typing in one field) undo as one step.
+ * Beside the plate on a wide screen everything is on show; under it on a phone the card is
+ * short, with the less used fields folded away under "More".
  */
 export function WellPanel({ plate, selected, clip, onCopy, change }: {
   plate: Plate;
@@ -35,6 +52,7 @@ export function WellPanel({ plate, selected, clip, onCopy, change }: {
   onCopy: (well: Well) => void;
   change: (plate: Plate, tag?: string) => void;
 }) {
+  const narrow = useNarrow();
   const wells = selected.map((id) => plate.wells[id]);
   const key = selected.join(",");
   const title = common(wells, "title"), note = common(wells, "note"), group = common(wells, "group"), color = common(wells, "color");
@@ -52,26 +70,90 @@ export function WellPanel({ plate, selected, clip, onCopy, change }: {
     return (
       <aside className="card pad pm-panel" aria-label="Selected wells">
         <h3>No well selected</h3>
-        <p className="muted small">Tap a well to label it. Drag across wells or use shift-click to select several; on a phone, turn on “Multi-select”. A row letter or column number selects the whole line.</p>
+        <p className="muted small">
+          {narrow ? "Tap a well to label it. Turn on “Multi-select” to pick several; a row letter or column number selects the whole line."
+            : "Tap a well to label it. Drag across wells or use shift-click to select several; on a phone, turn on “Multi-select”. A row letter or column number selects the whole line."}
+        </p>
       </aside>
     );
   }
   const label = selected.length === 1 ? `Well ${selected[0]}` : `${selected.length} wells`;
   const sorted = sortIds(selected, "row");
+
+  const titleField = (
+    <label className="field">
+      <span>Title</span>
+      <input value={title.value} maxLength={80} placeholder={title.mixed ? "Mixed" : "e.g. Sample 1"} onChange={(e) => set({ title: e.target.value }, "title")} />
+    </label>
+  );
+  const groupField = (
+    <label className="field">
+      <span>Group</span>
+      <input value={group.value} maxLength={60} placeholder={group.mixed ? "Mixed" : "e.g. Controls"} onChange={(e) => set({ group: e.target.value }, "group")} />
+    </label>
+  );
+  const componentsField = (
+    <div className="field">
+      <span>Components</span>
+      {componentsMixed && <p className="muted small pm-mixed">The selected wells differ. Showing {selected[0]}; an edit here replaces the components of all selected wells.</p>}
+      <datalist id="pm-units">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
+      {components.map((c, i) => (
+        <div key={i} className="pm-component">
+          <input aria-label={`Component ${i + 1}: name`} placeholder="Name" value={c.name} maxLength={60} onChange={(e) => editComponent(i, { name: e.target.value }, "name")} />
+          <input aria-label={`Component ${i + 1}: amount`} placeholder="Amount" inputMode="decimal" autoComplete="off" value={c.amount ?? ""} maxLength={20} onChange={(e) => editComponent(i, { amount: e.target.value }, "amount")} />
+          <input aria-label={`Component ${i + 1}: unit`} placeholder="Unit" list="pm-units" autoCapitalize="off" value={c.unit ?? ""} maxLength={16} onChange={(e) => editComponent(i, { unit: e.target.value }, "unit")} />
+          <button type="button" className="icon" aria-label={`Remove component ${c.name || i + 1}`} onClick={() => setComponents(components.filter((_, k) => k !== i), "component-remove")}><X size={16} /></button>
+        </div>
+      ))}
+      <button type="button" className="pm-add" onClick={() => change(patchWells(plate, selected, { components: [...components, { name: "" }] }))}><Plus size={14} aria-hidden /> Add component</button>
+    </div>
+  );
+  const copyButton = <button type="button" disabled={!first} onClick={() => first && onCopy(first)}><Copy size={14} aria-hidden /> Copy{selected.length > 1 ? ` ${selected[0]}` : ""}</button>;
+  const pasteButton = <button type="button" disabled={!clip} onClick={() => clip && change(patchWells(clearWells(plate, selected), selected, clip))}><ClipboardPaste size={14} aria-hidden /> Paste</button>;
+  const clearButton = <button type="button" disabled={wells.every((w) => !w)} onClick={() => change(clearWells(plate, selected))}><Eraser size={14} aria-hidden /> Clear</button>;
+
+  if (narrow) {
+    return (
+      <aside className="card pad pm-panel pm-panel-short" aria-label="Selected wells">
+        <div className="pm-panel-head">
+          <h3>{label}{selected.length > 1 && <span className="muted small pm-range"> {sorted[0]} … {sorted[sorted.length - 1]}</span>}</h3>
+          {copyButton}
+          {pasteButton}
+        </div>
+        <label className="field pm-colour-pick">
+          <span>Colour</span>
+          <span className="pm-colour-row">
+            <i className="pm-dot" data-tone={color.value || undefined} data-mixed={color.mixed || undefined} aria-hidden />
+            <select value={color.mixed ? "mixed" : color.value} onChange={(e) => set({ color: e.target.value }, "color")}>
+              {color.mixed && <option value="mixed" disabled>Mixed</option>}
+              <option value="">No colour</option>
+              {WELL_COLORS.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+            </select>
+          </span>
+        </label>
+        {titleField}
+        <label className="field">
+          <span>Description</span>
+          <textarea rows={2} value={note.value} maxLength={500} placeholder={note.mixed ? "Mixed" : "Anything to remember at this well"} onChange={(e) => set({ note: e.target.value }, "note")} />
+        </label>
+        <details className="pm-more">
+          <summary>More</summary>
+          {groupField}
+          {componentsField}
+          <div className="pm-row">{clearButton}</div>
+          {selected.length > 1 && <FillHelpers plate={plate} selected={selected} change={change} />}
+        </details>
+      </aside>
+    );
+  }
   return (
     <aside className="card pad pm-panel" aria-label="Selected wells">
       <div className="section-head">
         <h3>{label}</h3>
         {selected.length > 1 && <span className="muted small pm-range">{sorted[0]} … {sorted[sorted.length - 1]}</span>}
       </div>
-      <label className="field">
-        <span>Title</span>
-        <input value={title.value} maxLength={80} placeholder={title.mixed ? "Mixed" : "e.g. Sample 1"} onChange={(e) => set({ title: e.target.value }, "title")} />
-      </label>
-      <label className="field">
-        <span>Group</span>
-        <input value={group.value} maxLength={60} placeholder={group.mixed ? "Mixed" : "e.g. Controls"} onChange={(e) => set({ group: e.target.value }, "group")} />
-      </label>
+      {titleField}
+      {groupField}
       <div className="field">
         <span id="pm-colour-label">Colour{color.mixed ? " (mixed)" : ""}</span>
         <div className="pm-colors" role="radiogroup" aria-labelledby="pm-colour-label">
@@ -81,28 +163,15 @@ export function WellPanel({ plate, selected, clip, onCopy, change }: {
           ))}
         </div>
       </div>
-      <div className="field">
-        <span>Components</span>
-        {componentsMixed && <p className="muted small pm-mixed">The selected wells differ. Showing {selected[0]}; an edit here replaces the components of all selected wells.</p>}
-        <datalist id="pm-units">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
-        {components.map((c, i) => (
-          <div key={i} className="pm-component">
-            <input aria-label={`Component ${i + 1}: name`} placeholder="Name" value={c.name} maxLength={60} onChange={(e) => editComponent(i, { name: e.target.value }, "name")} />
-            <input aria-label={`Component ${i + 1}: amount`} placeholder="Amount" inputMode="decimal" autoComplete="off" value={c.amount ?? ""} maxLength={20} onChange={(e) => editComponent(i, { amount: e.target.value }, "amount")} />
-            <input aria-label={`Component ${i + 1}: unit`} placeholder="Unit" list="pm-units" autoCapitalize="off" value={c.unit ?? ""} maxLength={16} onChange={(e) => editComponent(i, { unit: e.target.value }, "unit")} />
-            <button type="button" className="icon" aria-label={`Remove component ${c.name || i + 1}`} onClick={() => setComponents(components.filter((_, k) => k !== i), "component-remove")}><X size={16} /></button>
-          </div>
-        ))}
-        <button type="button" className="pm-add" onClick={() => change(patchWells(plate, selected, { components: [...components, { name: "" }] }))}><Plus size={14} aria-hidden /> Add component</button>
-      </div>
+      {componentsField}
       <label className="field">
         <span>Note</span>
         <textarea rows={2} value={note.value} maxLength={500} placeholder={note.mixed ? "Mixed" : "Anything to remember at this well"} onChange={(e) => set({ note: e.target.value }, "note")} />
       </label>
       <div className="pm-row">
-        <button type="button" disabled={!first} onClick={() => first && onCopy(first)}><Copy size={14} aria-hidden /> Copy{selected.length > 1 ? ` ${selected[0]}` : ""}</button>
-        <button type="button" disabled={!clip} onClick={() => clip && change(patchWells(clearWells(plate, selected), selected, clip))}><ClipboardPaste size={14} aria-hidden /> Paste</button>
-        <button type="button" disabled={wells.every((w) => !w)} onClick={() => change(clearWells(plate, selected))}><Eraser size={14} aria-hidden /> Clear</button>
+        {copyButton}
+        {pasteButton}
+        {clearButton}
       </div>
 
       {selected.length > 1 && <FillHelpers plate={plate} selected={selected} change={change} />}

@@ -484,6 +484,10 @@ export interface HaemocytometerInput {
 }
 export interface HaemocytometerResult {
   squares: number;
+  /** Cells counted over all the squares. */
+  countedLive: number;
+  /** Null when no dead cells were counted. */
+  countedDead: number | null;
   meanLive: number;
   /** Null when no dead cells were counted. */
   meanDead: number | null;
@@ -498,6 +502,57 @@ export interface HaemocytometerResult {
   totalCells: number | null;
   /** The mean count per square (live + dead) is outside the reliable range. */
   warning: "low" | "high" | null;
+  /** The squares disagree by more than counting chance explains (see unevenCounts). Never set from a total alone. */
+  uneven: boolean;
+}
+
+/**
+ * When squares count as disagreeing: with at least two squares and a mean of `minMean` or more,
+ * one square is further from the mean than both `fraction` of the mean and `sd` × √mean.
+ * √mean is the spread that chance alone gives cells settling at random, so squares within it are not flagged.
+ */
+export const UNEVEN = { minMean: 10, fraction: 0.2, sd: 2 };
+/** Whether the cells per square (live + dead) disagree enough to suspect a badly mixed suspension. */
+export function unevenCounts(counts: number[]): boolean {
+  if (counts.length < 2 || counts.some((c) => !usable(c))) return false;
+  const mean = counts.reduce((t, c) => t + c, 0) / counts.length;
+  if (!(mean >= UNEVEN.minMean)) return false;
+  const allowed = Math.max(UNEVEN.fraction * mean, UNEVEN.sd * Math.sqrt(mean));
+  return counts.some((c) => Math.abs(c - mean) > allowed);
+}
+
+/** From the sums over the counted squares to cells/mL: shared by the per-square and the total count. */
+function haemoResult(sumLive: number, sumDead: number | null, squares: number, dilution: number | null, volume: Q | undefined, uneven: boolean): Outcome<HaemocytometerResult> {
+  if (dilution === null) return need("Enter the dilution factor (1 if the sample was not diluted).");
+  if (!usable(dilution) || dilution < 1) return no("The dilution factor must be 1 or more (2 for one part cells to one part trypan blue).");
+  const hasDead = sumDead !== null;
+  const meanLive = sumLive / squares;
+  const meanDead = (sumDead ?? 0) / squares;
+  const livePerMl = meanLive * dilution * SQUARES_PER_ML;
+  const deadPerMl = meanDead * dilution * SQUARES_PER_ML;
+  if (!Number.isFinite(livePerMl) || !Number.isFinite(deadPerMl)) return no("These values are too large to calculate.");
+  let ml: number | null = null;
+  if (volume && volume.value !== null) {
+    ml = convert(volume.value, volume.unit, "mL");
+    if (ml === null || !(ml > 0)) return no("The suspension volume must be a volume greater than zero.");
+  }
+  const meanCount = meanLive + meanDead;
+  const all = sumLive + (sumDead ?? 0);
+  return ok({
+    squares,
+    countedLive: sumLive,
+    countedDead: sumDead,
+    meanLive,
+    meanDead: hasDead ? meanDead : null,
+    livePerMl,
+    deadPerMl: hasDead ? deadPerMl : null,
+    totalPerMl: livePerMl + deadPerMl,
+    viability: hasDead && all > 0 ? (100 * sumLive) / all : null,
+    totalLiveCells: ml === null ? null : livePerMl * ml,
+    totalCells: ml === null ? null : (livePerMl + deadPerMl) * ml,
+    warning: meanCount < COUNT_RANGE.min ? "low" : meanCount > COUNT_RANGE.max ? "high" : null,
+    uneven,
+  });
 }
 
 export function haemocytometer(i: HaemocytometerInput): Outcome<HaemocytometerResult> {
@@ -505,34 +560,31 @@ export function haemocytometer(i: HaemocytometerInput): Outcome<HaemocytometerRe
   if (used.length === 0) return need("Enter the count for at least one square.");
   if (used.some((s) => !usable(s.live) || (s.dead !== null && !usable(s.dead)))) return no("One of the counts is not a number.");
   if (used.some((s) => s.live < 0 || (s.dead ?? 0) < 0)) return no("Counts cannot be negative.");
-  if (i.dilution === null) return need("Enter the dilution factor (1 if the sample was not diluted).");
-  if (!usable(i.dilution) || i.dilution < 1) return no("The dilution factor must be 1 or more (2 for one part cells to one part trypan blue).");
   const hasDead = used.some((s) => s.dead !== null);
   const sumLive = used.reduce((t, s) => t + s.live, 0);
   const sumDead = used.reduce((t, s) => t + (s.dead ?? 0), 0);
-  const meanLive = sumLive / used.length;
-  const meanDead = sumDead / used.length;
-  const livePerMl = meanLive * i.dilution * SQUARES_PER_ML;
-  const deadPerMl = meanDead * i.dilution * SQUARES_PER_ML;
-  if (!Number.isFinite(livePerMl) || !Number.isFinite(deadPerMl)) return no("These values are too large to calculate.");
-  let ml: number | null = null;
-  if (i.volume && i.volume.value !== null) {
-    ml = convert(i.volume.value, i.volume.unit, "mL");
-    if (ml === null || !(ml > 0)) return no("The suspension volume must be a volume greater than zero.");
-  }
-  const meanCount = meanLive + (hasDead ? meanDead : 0);
-  return ok({
-    squares: used.length,
-    meanLive,
-    meanDead: hasDead ? meanDead : null,
-    livePerMl,
-    deadPerMl: hasDead ? deadPerMl : null,
-    totalPerMl: livePerMl + (hasDead ? deadPerMl : 0),
-    viability: hasDead && sumLive + sumDead > 0 ? (100 * sumLive) / (sumLive + sumDead) : null,
-    totalLiveCells: ml === null ? null : livePerMl * ml,
-    totalCells: ml === null ? null : (livePerMl + (hasDead ? deadPerMl : 0)) * ml,
-    warning: meanCount < COUNT_RANGE.min ? "low" : meanCount > COUNT_RANGE.max ? "high" : null,
-  });
+  return haemoResult(sumLive, hasDead ? sumDead : null, used.length, i.dilution, i.volume, unevenCounts(used.map((s) => s.live + (s.dead ?? 0))));
+}
+
+export interface HaemocytometerTotalInput {
+  /** Live cells counted over all the squares together, as on a tally counter. */
+  total: number | null;
+  /** How many large squares that total covers. */
+  squares: number | null;
+  /** Dead (stained) cells over the same squares; blank when they were not counted. */
+  dead?: number | null;
+  dilution: number | null;
+  volume?: Q;
+}
+/** The same arithmetic from one total: mean per square = total ÷ squares counted. */
+export function haemocytometerTotal(i: HaemocytometerTotalInput): Outcome<HaemocytometerResult> {
+  const dead = i.dead ?? null;
+  if (i.total === null) return need("Enter the total number of cells counted.");
+  if (i.squares === null) return need("Enter the number of squares counted.");
+  if (!usable(i.total) || !usable(i.squares) || (dead !== null && !usable(dead))) return no("One of the counts is not a number.");
+  if (i.total < 0 || (dead ?? 0) < 0) return no("Counts cannot be negative.");
+  if (!Number.isInteger(i.squares) || i.squares < 1) return no("The number of squares must be a whole number, 1 or more.");
+  return haemoResult(i.total, dead, i.squares, i.dilution, i.volume, false);
 }
 
 // ── Molarity ─────────────────────────────────────────────────────────────────
