@@ -1,0 +1,17 @@
+/* Shared by the full-screen bench modes (pipetting a plate, counting a chamber). */
+.slide-exit {
+  position: relative; height: 52px; border-radius: 26px; background: var(--surface-2); border: 1px solid var(--border);
+  touch-action: none; user-select: none; -webkit-user-select: none; overflow: hidden;
+}
+.slide-exit-label {
+  position: absolute; inset: 0; display: grid; place-items: center; font-size: 0.9rem; color: var(--text-2);
+  opacity: calc(1 - var(--at, 0) * 1.6); pointer-events: none;
+}
+.slide-exit-handle {
+  position: absolute; top: 3px; width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%; border: 0;
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-text); cursor: grab; touch-action: none;
+  left: calc(3px + var(--at, 0) * (100% - 50px));
+  transition: left 0.18s ease;
+}
+.slide-exit[data-held] .slide-exit-handle { transition: none; cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) { .slide-exit-handle { transition: none; } }
