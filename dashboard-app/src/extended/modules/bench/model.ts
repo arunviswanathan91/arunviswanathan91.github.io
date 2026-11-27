@@ -4,7 +4,7 @@
 import type { BenchKind } from "../../lib/types.ts";
 import { CELL_UNITS, FOLD_UNIT, MASSVOL_UNITS, MOLAR_UNITS, PERCENT_UNIT, dimensionOf, num, type Dimension, type Q } from "./calc.ts";
 
-export type ToolId = "dilution" | "cells" | "haemocytometer" | "molarity" | "convert" | "recipe" | "mastermix" | "curve" | "timers" | "plate";
+export type ToolId = "dilution" | "cells" | "haemocytometer" | "molarity" | "convert" | "recipe" | "mastermix" | "curve" | "timers" | "plate" | "power";
 
 export interface ToolInfo { id: ToolId; label: string; blurb: string; /** What a saved item of this tool is stored as; none for a tool that is not saved. */ kind?: BenchKind }
 export const TOOLS: Record<ToolId, ToolInfo> = {
@@ -18,9 +18,10 @@ export const TOOLS: Record<ToolId, ToolInfo> = {
   curve: { id: "curve", label: "Calibration curve", blurb: "Fit a line to standards and read unknowns off it.", kind: "curve" },
   timers: { id: "timers", label: "Multi-timer", blurb: "Several named timers running side by side.", kind: "timer_set" },
   plate: { id: "plate", label: "Plate map", blurb: "Label the wells of a plate and pipette it well by well.", kind: "plate" },
+  power: { id: "power", label: "Power & sample size", blurb: "Samples for the power you want, or power for the samples you have, per assay.", kind: "power_analysis" },
 };
 /** The order of the tiles on the Bench page. */
-export const TOOL_ORDER: ToolId[] = ["dilution", "cells", "haemocytometer", "molarity", "convert", "recipe", "mastermix", "curve", "timers", "plate"];
+export const TOOL_ORDER: ToolId[] = ["dilution", "cells", "haemocytometer", "molarity", "convert", "recipe", "mastermix", "curve", "power", "timers", "plate"];
 export const isTool = (id: string): id is ToolId => id in TOOLS;
 export function toolOfKind(kind: BenchKind): ToolId {
   return TOOL_ORDER.find((t) => TOOLS[t].kind === kind) ?? "dilution";
@@ -302,5 +303,74 @@ export function curveData(raw: unknown): CurveData {
     origin: flag(o.origin, false),
     standards,
     unknowns: unknowns.length ? unknowns : [{ name: "", given: "y", value: "" }],
+  };
+}
+
+// ── Power & sample size ──────────────────────────────────────────────────────
+
+export type PowerTab = "size" | "power" | "effect";
+export type PowerEngine = "ttest" | "count";
+/** How the effect is entered in the t-test engine: a fold change (with a CV) or Cohen's d directly. */
+export type EffectMode = "fold" | "d";
+
+/** A per-assay starting point. `cv` is the typical CV (t-test) or BCV (count); `features` seeds the Bonferroni count. */
+export interface PowerProfile { id: string; label: string; engine: PowerEngine; cv: string; features: string; mu: string }
+export const CUSTOM_PROFILE = "custom";
+export const POWER_PROFILES: PowerProfile[] = [
+  { id: "rtqpcr", label: "RT-qPCR (ΔΔCt)", engine: "ttest", cv: "0.3", features: "1", mu: "20" },
+  { id: "elisa", label: "ELISA / targeted assay", engine: "ttest", cv: "0.15", features: "1", mu: "20" },
+  { id: "proteomics", label: "Proteomics (global LC-MS)", engine: "ttest", cv: "0.2", features: "5000", mu: "20" },
+  { id: "phospho", label: "Phosphoproteomics", engine: "ttest", cv: "0.4", features: "15000", mu: "20" },
+  { id: "glyco", label: "Glycoproteomics", engine: "ttest", cv: "0.4", features: "5000", mu: "20" },
+  { id: "metabolomics", label: "Metabolomics", engine: "ttest", cv: "0.25", features: "1000", mu: "20" },
+  { id: "rnaseq_human", label: "Bulk RNA-seq (human)", engine: "count", cv: "0.4", features: "18000", mu: "20" },
+  { id: "rnaseq_model", label: "Bulk RNA-seq (cell line / model organism)", engine: "count", cv: "0.1", features: "18000", mu: "20" },
+  { id: "scrnaseq", label: "scRNA-seq (pseudobulk)", engine: "count", cv: "0.5", features: "15000", mu: "20" },
+  { id: "atac", label: "ATAC-seq", engine: "count", cv: "0.3", features: "80000", mu: "20" },
+];
+export const powerProfile = (id: string): PowerProfile | undefined => POWER_PROFILES.find((p) => p.id === id);
+
+export interface PowerData {
+  tab: PowerTab;
+  /** A profile id, or CUSTOM_PROFILE once a profile value has been changed by hand. */
+  profile: string;
+  engine: PowerEngine;
+  alpha: string;
+  sides: "two" | "one";
+  /** Number of features tested at once; 1 means no multiple-testing correction. */
+  features: string;
+  /** Target power (size and effect tabs). */
+  power: string;
+  /** Samples per group (power and effect tabs). */
+  n: string;
+  /** t-test effect: a fold change, or Cohen's d directly. */
+  effectMode: EffectMode;
+  fold: string;
+  d: string;
+  /** Count engine: log2 fold change and the mean count per group. */
+  log2fc: string;
+  mu: string;
+  /** Typical variability: CV for the t-test, BCV for counts. */
+  cv: string;
+}
+export function powerData(raw: unknown): PowerData {
+  const o = obj(raw);
+  const profile = typeof o.profile === "string" ? o.profile : "rnaseq_human";
+  const base = powerProfile(profile);
+  return {
+    tab: pick(o.tab, ["size", "power", "effect"] as const, "size"),
+    profile,
+    engine: pick(o.engine, ["ttest", "count"] as const, base?.engine ?? "count"),
+    alpha: text(o.alpha, "0.05"),
+    sides: pick(o.sides, ["two", "one"] as const, "two"),
+    features: text(o.features, base?.features ?? "1"),
+    power: text(o.power, "0.8"),
+    n: text(o.n, ""),
+    effectMode: pick(o.effectMode, ["fold", "d"] as const, "fold"),
+    fold: text(o.fold, "2"),
+    d: text(o.d, "0.8"),
+    log2fc: text(o.log2fc, "1"),
+    mu: text(o.mu, base?.mu ?? "20"),
+    cv: text(o.cv, base?.cv ?? "0.4"),
   };
 }

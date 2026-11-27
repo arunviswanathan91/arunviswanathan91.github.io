@@ -183,7 +183,7 @@ export interface LibraryVersion {
   created_at: string;
 }
 
-export type BenchKind = "dilution" | "cell_dilution" | "haemocytometer" | "molarity" | "recipe" | "master_mix" | "curve" | "timer_set" | "plate";
+export type BenchKind = "dilution" | "cell_dilution" | "haemocytometer" | "molarity" | "recipe" | "master_mix" | "curve" | "timer_set" | "plate" | "power_analysis";
 /** A saved bench tool: a calculator with what was typed into it. Results are never stored; they are recomputed from `data`. */
 export interface BenchItem {
   id: string;
