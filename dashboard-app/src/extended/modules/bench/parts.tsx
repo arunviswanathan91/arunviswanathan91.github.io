@@ -1,7 +1,7 @@
 // Pieces the bench tools share: the number-with-unit field, the results panel, and the frame
 // around a tool that saves it and, once saved, shows its title, notes and links.
 import { useEffect, useState, type ReactNode } from "react";
-import { Archive, ArchiveRestore, ArrowLeft, Check, Copy, CopyPlus, Pin, Save, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Check, Copy, CopyPlus, Pencil, Pin, Save, Trash2 } from "lucide-react";
 import { ask, askText } from "../../../lib/dialogs.tsx";
 import { insert, list, trash, update, useLoad } from "../../lib/db.ts";
 import { fmtDateTime } from "../../lib/dates.ts";
@@ -11,6 +11,13 @@ import type { BenchItem, Experiment, LibraryEntry } from "../../lib/types.ts";
 import { ProjectSelect, projectName, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { ErrorText, PageHeader, SaveIndicator } from "../../components/ui.tsx";
+
+/**
+ * A tool's body. Most tools pass plain JSX (always editable). A "readable" tool (the recipe)
+ * passes a function and is handed whether the page is in edit mode, so it can read first.
+ */
+type ToolBody = ReactNode | ((editing: boolean) => ReactNode);
+const render = (body: ToolBody, editing: boolean): ReactNode => (typeof body === "function" ? body(editing) : body);
 import { bestUnit, convert, dimensionOf, fmt, num, unitLabel, unitsOf, type Outcome, type Qty } from "./calc.ts";
 import { TOOLS, type QText, type ToolId } from "./model.ts";
 
@@ -157,10 +164,10 @@ export function CopyButton({ text, label = "Copy as text" }: { text: string; lab
  * Saved: title, pin, archive, Trash and Duplicate, "Save changes" for the inputs, and the
  * item's notes, tags and links below the tool.
  */
-export function ToolFrame({ tool, item, data, suggestedTitle, saveLabel, children }: { tool: ToolId; item?: BenchItem; data: object; suggestedTitle?: string; saveLabel?: string; children: ReactNode }) {
+export function ToolFrame({ tool, item, data, suggestedTitle, saveLabel, readable, route, children }: { tool: ToolId; item?: BenchItem; data: object; suggestedTitle?: string; saveLabel?: string; readable?: boolean; route?: Route; children: ToolBody }) {
   return item
-    ? <SavedFrame tool={tool} item={item} data={data}>{children}</SavedFrame>
-    : <FreshFrame tool={tool} data={data} suggestedTitle={suggestedTitle} saveLabel={saveLabel}>{children}</FreshFrame>;
+    ? <SavedFrame tool={tool} item={item} data={data} readable={readable}>{children}</SavedFrame>
+    : <FreshFrame tool={tool} data={data} suggestedTitle={suggestedTitle} saveLabel={saveLabel} route={route}>{children}</FreshFrame>;
 }
 
 /** "Round": sensible significant figures, or everything the calculation gives. */
@@ -179,10 +186,12 @@ export function Working({ lines }: { lines: string[] }) {
   );
 }
 
-function FreshFrame({ tool, data, suggestedTitle, saveLabel = "Save", children }: { tool: ToolId; data: object; suggestedTitle?: string; saveLabel?: string; children: ReactNode }) {
+function FreshFrame({ tool, data, suggestedTitle, saveLabel = "Save", route, children }: { tool: ToolId; data: object; suggestedTitle?: string; saveLabel?: string; route?: Route; children: ToolBody }) {
   const T = TOOLS[tool];
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
+  // Opened from a protocol's "New recipe for this protocol": link the saved item straight back to it.
+  const forProtocol = route?.query.get("protocol") || null;
   async function save() {
     if (!T.kind || saving) return;
     const typed = await askText(`Save this ${T.label.toLowerCase()} as`, suggestedTitle?.trim() ?? "");
@@ -190,7 +199,7 @@ function FreshFrame({ tool, data, suggestedTitle, saveLabel = "Save", children }
     setSaving(true);
     setProblem("");
     try {
-      const row = await insert<BenchItem>("bench_items", { kind: T.kind, title: typed.trim() || `Untitled ${T.label.toLowerCase()}`, data });
+      const row = await insert<BenchItem>("bench_items", { kind: T.kind, title: typed.trim() || `Untitled ${T.label.toLowerCase()}`, data, library_entry_id: forProtocol });
       go(`bench/item/${row.id}`);
     } catch (e) {
       setProblem((e as Error).message);
@@ -207,14 +216,16 @@ function FreshFrame({ tool, data, suggestedTitle, saveLabel = "Save", children }
         actions={T.kind && <button className="primary" disabled={saving} onClick={() => void save()}><Save size={16} /> {saving ? "Saving…" : saveLabel}</button>}
       />
       <ErrorText error={problem} />
-      {children}
+      {render(children, true)}
     </section>
   );
 }
 
-function SavedFrame({ tool, item, data, children }: { tool: ToolId; item: BenchItem; data: object; children: ReactNode }) {
+function SavedFrame({ tool, item, data, readable, children }: { tool: ToolId; item: BenchItem; data: object; readable?: boolean; children: ToolBody }) {
   const T = TOOLS[tool];
   const [e, setE] = useState(item);
+  // A readable tool (the recipe) opens in read mode; a plain calculator is always editable.
+  const [editing, setEditing] = useState(!readable);
   const { projects } = useProjects();
   const { data: protocols = [] } = useLoad(() => list<LibraryEntry>("library_entries", { eq: { kind: "protocol" }, order: [["title"]] }), []);
   const { data: experiments = [] } = useLoad(() => list<Experiment>("experiments", { order: [["updated_at", false]] }), []);
@@ -280,17 +291,31 @@ function SavedFrame({ tool, item, data, children }: { tool: ToolId; item: BenchI
 
   const protocol = protocols.find((p) => p.id === e.library_entry_id);
   const experiment = experiments.find((x) => x.id === e.experiment_id);
+  const links = (
+    <div className="link-row small bench-links">
+      {e.project_id && <a href={href(`projects/${e.project_id}`)}>→ {projectName(projects, e.project_id)}</a>}
+      {protocol && <a href={href(`protocols/${protocol.id}`)}>→ {protocol.title || "Protocol"}</a>}
+      {experiment && <a href={href(`experiments/${experiment.id}`)}>→ {experiment.title || "Experiment"}</a>}
+    </div>
+  );
   return (
     <section className="detail bench-tool">
       <a className="back" href={href("bench")}><ArrowLeft size={14} /> Bench</a>
       <header className="detail-head note-head">
         <div>
           <span className="kicker">{T.label}</span>
-          <input className="title-input" aria-label="Title" value={e.title} placeholder={`Untitled ${T.label.toLowerCase()}`} onChange={(ev) => change({ title: ev.target.value })} onBlur={blur} />
+          {readable && !editing
+            ? <h1 className="bench-read-title">{e.title || `Untitled ${T.label.toLowerCase()}`}</h1>
+            : <input className="title-input" aria-label="Title" value={e.title} placeholder={`Untitled ${T.label.toLowerCase()}`} onChange={(ev) => change({ title: ev.target.value })} onBlur={blur} />}
         </div>
         <div className="page-actions">
           <SaveIndicator status={dirty && autosave.status === "saved" ? "unsaved" : autosave.status} error={autosave.error} />
-          <button className="primary" disabled={!dirty || saving} onClick={() => void saveData()}><Save size={16} /> {saving ? "Saving…" : "Save changes"}</button>
+          {readable && !editing
+            ? <button className="primary" onClick={() => setEditing(true)}><Pencil size={15} /> Edit</button>
+            : <>
+                {readable && <button onClick={() => void saveData().then(() => setEditing(false))}><Check size={15} /> Done</button>}
+                <button className="primary" disabled={!dirty || saving} onClick={() => void saveData()}><Save size={16} /> {saving ? "Saving…" : "Save changes"}</button>
+              </>}
           <button onClick={() => void duplicate()}><CopyPlus size={14} /> Duplicate</button>
           <button className={`icon ${e.pinned ? "on" : ""}`} aria-pressed={e.pinned} aria-label={e.pinned ? "Unpin" : "Pin"} onClick={() => change({ pinned: !e.pinned })}><Pin size={16} /></button>
           <button className="icon" aria-label={e.archived_at ? "Unarchive" : "Archive"} onClick={() => change({ archived_at: e.archived_at ? null : new Date().toISOString() })}>
@@ -302,43 +327,49 @@ function SavedFrame({ tool, item, data, children }: { tool: ToolId; item: BenchI
       {e.archived_at && <p className="notice">This item is archived. It’s hidden from the Bench list until you unarchive it.</p>}
       <ErrorText error={problem} />
 
-      {children}
+      {render(children, editing)}
 
       <div className="card pad bench-details">
         <h3>Details</h3>
-        <div className="note-props">
-          <label className="field">
-            <span>Project</span>
-            <ProjectSelect value={e.project_id} onChange={(project_id) => change({ project_id })} />
-          </label>
-          <label className="field">
-            <span>Protocol</span>
-            <select value={e.library_entry_id ?? ""} onChange={(ev) => change({ library_entry_id: ev.target.value || null })}>
-              <option value="">No protocol</option>
-              {protocols.filter((p) => !p.archived_at || p.id === e.library_entry_id).map((p) => <option key={p.id} value={p.id}>{(p.title || "Untitled protocol").slice(0, 80)}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span>Experiment</span>
-            <select value={e.experiment_id ?? ""} onChange={(ev) => change({ experiment_id: ev.target.value || null })}>
-              <option value="">No experiment</option>
-              {experiments.filter((x) => !x.archived_at || x.id === e.experiment_id).map((x) => <option key={x.id} value={x.id}>{(x.title || "Untitled experiment").slice(0, 80)}</option>)}
-            </select>
-          </label>
-          <div className="field grow">
-            <span>Tags</span>
-            <TagInput value={e.tags ?? []} onChange={(tags) => change({ tags })} />
-          </div>
-        </div>
-        <div className="link-row small bench-links">
-          {e.project_id && <a href={href(`projects/${e.project_id}`)}>→ {projectName(projects, e.project_id)}</a>}
-          {protocol && <a href={href(`protocols/${protocol.id}`)}>→ {protocol.title || "Protocol"}</a>}
-          {experiment && <a href={href(`experiments/${experiment.id}`)}>→ {experiment.title || "Experiment"}</a>}
-        </div>
-        <label className="field">
-          <span>Notes</span>
-          <textarea rows={4} value={e.notes ?? ""} placeholder="Lot numbers, what it was for, what to change next time…" onChange={(ev) => change({ notes: ev.target.value })} onBlur={blur} />
-        </label>
+        {readable && !editing ? (
+          <>
+            {(e.project_id || protocol || experiment) ? links : <p className="muted small">Not linked to a project, protocol or experiment yet.</p>}
+            {(e.tags ?? []).length > 0 && <div className="tag-row">{(e.tags ?? []).map((t) => <span key={t} className="tag-chip">#{t}</span>)}</div>}
+            {e.notes?.trim() && <p className="bench-read-notes">{e.notes}</p>}
+          </>
+        ) : (
+          <>
+            <div className="note-props">
+              <label className="field">
+                <span>Project</span>
+                <ProjectSelect value={e.project_id} onChange={(project_id) => change({ project_id })} />
+              </label>
+              <label className="field">
+                <span>Protocol</span>
+                <select value={e.library_entry_id ?? ""} onChange={(ev) => change({ library_entry_id: ev.target.value || null })}>
+                  <option value="">No protocol</option>
+                  {protocols.filter((p) => !p.archived_at || p.id === e.library_entry_id).map((p) => <option key={p.id} value={p.id}>{(p.title || "Untitled protocol").slice(0, 80)}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span>Experiment</span>
+                <select value={e.experiment_id ?? ""} onChange={(ev) => change({ experiment_id: ev.target.value || null })}>
+                  <option value="">No experiment</option>
+                  {experiments.filter((x) => !x.archived_at || x.id === e.experiment_id).map((x) => <option key={x.id} value={x.id}>{(x.title || "Untitled experiment").slice(0, 80)}</option>)}
+                </select>
+              </label>
+              <div className="field grow">
+                <span>Tags</span>
+                <TagInput value={e.tags ?? []} onChange={(tags) => change({ tags })} />
+              </div>
+            </div>
+            {links}
+            <label className="field">
+              <span>Notes</span>
+              <textarea rows={4} value={e.notes ?? ""} placeholder="Lot numbers, what it was for, what to change next time…" onChange={(ev) => change({ notes: ev.target.value })} onBlur={blur} />
+            </label>
+          </>
+        )}
       </div>
       <p className="small muted">Last saved {fmtDateTime(e.updated_at)}</p>
     </section>

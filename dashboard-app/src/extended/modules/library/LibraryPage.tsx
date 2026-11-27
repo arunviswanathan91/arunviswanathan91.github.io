@@ -63,6 +63,8 @@ function EntryEditor({ initial }: { initial: LibraryEntry }) {
   });
 
   const [viewId, setViewId] = useState<string | null>(null);
+  // The header (title, technique, links, purpose, tags) reads first; Edit reveals the inputs.
+  const [editingProps, setEditingProps] = useState(false);
   const [draft, setDraft] = useState<(VersionContent & { change_note: string }) | null>(null);
   const [base, setBase] = useState<VersionContent>(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -164,9 +166,14 @@ function EntryEditor({ initial }: { initial: LibraryEntry }) {
     <section className="detail library-entry">
       <a className="back" href={href(L.section)}><ArrowLeft size={14} /> {L.plural}</a>
       <header className="detail-head note-head">
-        <input className="title-input" aria-label="Title" value={e.title} placeholder={L.untitled} onChange={(ev) => change({ title: ev.target.value })} onBlur={blur} />
+        {editingProps
+          ? <input className="title-input" aria-label="Title" value={e.title} placeholder={L.untitled} onChange={(ev) => change({ title: ev.target.value })} onBlur={blur} />
+          : <h1 className="detail-title">{e.title || L.untitled}</h1>}
         <div className="page-actions">
           <SaveIndicator status={autosave.status} error={autosave.error} />
+          {editingProps
+            ? <button className="primary" onClick={() => { blur(); setEditingProps(false); }}><Check size={15} /> Done</button>
+            : <button className="primary" onClick={() => setEditingProps(true)}><Pencil size={15} /> Edit details</button>}
           <button className={`icon ${e.pinned ? "on" : ""}`} aria-pressed={e.pinned} aria-label={e.pinned ? "Unpin" : "Pin"} onClick={() => change({ pinned: !e.pinned })}><Pin size={16} /></button>
           <button className="icon" aria-label={e.archived_at ? "Unarchive" : "Archive"} onClick={() => change({ archived_at: e.archived_at ? null : new Date().toISOString() })}>
             {e.archived_at ? <ArchiveRestore size={16} /> : <Archive size={16} />}
@@ -176,54 +183,63 @@ function EntryEditor({ initial }: { initial: LibraryEntry }) {
       </header>
       {e.archived_at && <p className="notice">This entry is archived. It’s hidden from lists and search until you unarchive it.</p>}
 
-      <div className="note-props">
-        <label className="field">
-          <span>{L.fieldLabel}</span>
-          <input list="library-kinds" value={e[L.field]} placeholder={kind === "protocol" ? "e.g. Western blot" : "e.g. R"} onChange={(ev) => change({ [L.field]: ev.target.value })} onBlur={blur} />
-          <datalist id="library-kinds">{suggestions.map((t) => <option key={t} value={t} />)}</datalist>
-        </label>
-        <label className="field">
-          <span>Project</span>
-          <ProjectSelect value={e.project_id} onChange={(project_id) => change({ project_id })} />
-        </label>
-        {kind === "protocol" ? (
+      {editingProps ? (
+        <div className="note-props">
           <label className="field">
-            <span>Source paper</span>
-            <select value={e.paper_id ?? ""} onChange={(ev) => change({ paper_id: ev.target.value || null })}>
-              <option value="">No paper</option>
-              {papers.map((p) => <option key={p.id} value={p.id}>{p.title.slice(0, 80)}{p.year ? ` (${p.year})` : ""}</option>)}
-            </select>
+            <span>{L.fieldLabel}</span>
+            <input list="library-kinds" value={e[L.field]} placeholder={kind === "protocol" ? "e.g. Western blot" : "e.g. R"} onChange={(ev) => change({ [L.field]: ev.target.value })} onBlur={blur} />
+            <datalist id="library-kinds">{suggestions.map((t) => <option key={t} value={t} />)}</datalist>
           </label>
-        ) : (
           <label className="field">
-            <span>Manuscript</span>
-            <select value={e.publication_id ?? ""} onChange={(ev) => change({ publication_id: ev.target.value || null })}>
-              <option value="">No manuscript</option>
-              {publications.map((p) => <option key={p.id} value={p.id}>{String(p.title ?? "Untitled").slice(0, 80)}</option>)}
-            </select>
+            <span>Project</span>
+            <ProjectSelect value={e.project_id} onChange={(project_id) => change({ project_id })} />
           </label>
-        )}
-        <div className="field grow">
-          <span>Source URL</span>
-          <span className="row">
-            <input aria-label="Source URL" type="url" inputMode="url" value={e.source_url ?? ""} placeholder={kind === "protocol" ? "https://www.protocols.io/…" : "https://github.com/…"} onChange={(ev) => change({ source_url: ev.target.value.trim() || null })} onBlur={blur} />
-            {sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer" title="Open the source in a new tab"><ExternalLink size={14} /> Open</a>}
-          </span>
+          {kind === "protocol" ? (
+            <label className="field">
+              <span>Source paper</span>
+              <select value={e.paper_id ?? ""} onChange={(ev) => change({ paper_id: ev.target.value || null })}>
+                <option value="">No paper</option>
+                {papers.map((p) => <option key={p.id} value={p.id}>{p.title.slice(0, 80)}{p.year ? ` (${p.year})` : ""}</option>)}
+              </select>
+            </label>
+          ) : (
+            <label className="field">
+              <span>Manuscript</span>
+              <select value={e.publication_id ?? ""} onChange={(ev) => change({ publication_id: ev.target.value || null })}>
+                <option value="">No manuscript</option>
+                {publications.map((p) => <option key={p.id} value={p.id}>{String(p.title ?? "Untitled").slice(0, 80)}</option>)}
+              </select>
+            </label>
+          )}
+          <div className="field grow">
+            <span>Source URL</span>
+            <span className="row">
+              <input aria-label="Source URL" type="url" inputMode="url" value={e.source_url ?? ""} placeholder={kind === "protocol" ? "https://www.protocols.io/…" : "https://github.com/…"} onChange={(ev) => change({ source_url: ev.target.value.trim() || null })} onBlur={blur} />
+              {sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer" title="Open the source in a new tab"><ExternalLink size={14} /> Open</a>}
+            </span>
+          </div>
+          <label className="field grow">
+            <span>{kind === "protocol" ? "What it is for" : "What it does"}</span>
+            <input value={e.purpose} placeholder={kind === "protocol" ? "What it is for, in one line" : "What it does, in one line"} onChange={(ev) => change({ purpose: ev.target.value })} onBlur={blur} />
+          </label>
+          <div className="field grow">
+            <span>Tags</span>
+            <TagInput value={e.tags} onChange={(tags) => change({ tags })} />
+          </div>
         </div>
-        <label className="field grow">
-          <span>Purpose</span>
-          <input value={e.purpose} placeholder={kind === "protocol" ? "What it is for, in one line" : "What it does, in one line"} onChange={(ev) => change({ purpose: ev.target.value })} onBlur={blur} />
-        </label>
-        <div className="field grow">
-          <span>Tags</span>
-          <TagInput value={e.tags} onChange={(tags) => change({ tags })} />
+      ) : (
+        <div className="library-read-head">
+          {e.purpose.trim() && <p className="detail-subtitle">{e.purpose}</p>}
+          <div className="library-facts small">
+            {e[L.field].trim() && <span className="tag-chip">{e[L.field]}</span>}
+            {e.project_id && <a href={href(`projects/${e.project_id}`)}>→ {projectName(projects, e.project_id)}</a>}
+            {paper && <a href={href(`papers/${paper.id}`)}>→ From: {paper.title}</a>}
+            {pub && <a href={`#/publication/${pub.id}`}>→ {String(pub.title ?? "Manuscript")}</a>}
+            {sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Source</a>}
+          </div>
+          {e.tags.length > 0 && <div className="tag-row">{e.tags.map((t) => <span key={t} className="tag-chip">#{t}</span>)}</div>}
         </div>
-      </div>
-      <div className="link-row small">
-        {e.project_id && <a href={href(`projects/${e.project_id}`)}>→ {projectName(projects, e.project_id)}</a>}
-        {paper && <a href={href(`papers/${paper.id}`)}>→ From: {paper.title}</a>}
-        {pub && <a href={`#/publication/${pub.id}`}>→ {String(pub.title ?? "Manuscript")}</a>}
-      </div>
+      )}
 
       <ErrorText error={error || (draft ? "" : problem)} />
       <div className="library-grid">
