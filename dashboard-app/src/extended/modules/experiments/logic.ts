@@ -40,6 +40,7 @@ export function repeatOf(e: Experiment): Partial<Experiment> {
     project_id: e.project_id,
     publication_id: e.publication_id,
     repeat_of: e.id,
+    protocol_version_id: e.protocol_version_id,
     aim: e.aim,
     protocol: e.protocol,
     samples: e.samples.map((s) => ({ ...s, notes: "" })),

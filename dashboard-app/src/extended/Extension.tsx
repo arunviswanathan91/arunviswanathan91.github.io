@@ -27,6 +27,8 @@ const loadTripsView = () => import("./modules/planning/TripsView.tsx");
 const loadTripPage = () => import("./modules/planning/TripPage.tsx");
 const loadFundingView = () => import("./modules/alerts/FundingView.tsx");
 const loadExperimentPage = () => import("./modules/experiments/ExperimentPage.tsx");
+const loadLibraryView = () => import("./modules/library/LibraryView.tsx");
+const loadLibraryPage = () => import("./modules/library/LibraryPage.tsx");
 const loadMeetingsView = () => import("./modules/meetings/MeetingsView.tsx");
 const loadNotePage = () => import("./modules/notes/NotePage.tsx");
 const loadPaperPage = () => import("./modules/papers/PaperPage.tsx");
@@ -52,18 +54,21 @@ const FundingView = lazy(() => loadFundingView().then((m) => ({ default: m.Fundi
 const TripPage = lazy(() => loadTripPage().then((m) => ({ default: m.TripPage })));
 const ExperimentsView = lazy(() => loadExperimentsView().then((m) => ({ default: m.ExperimentsView })));
 const ExperimentPage = lazy(() => loadExperimentPage().then((m) => ({ default: m.ExperimentPage })));
+const LibraryView = lazy(() => loadLibraryView().then((m) => ({ default: m.LibraryView })));
+const LibraryPage = lazy(() => loadLibraryPage().then((m) => ({ default: m.LibraryPage })));
 const MeetingPage = lazy(() => loadMeetingPage().then((m) => ({ default: m.MeetingPage })));
 const MeetingsView = lazy(() => loadMeetingsView().then((m) => ({ default: m.MeetingsView })));
 const NotePage = lazy(() => loadNotePage().then((m) => ({ default: m.NotePage })));
 const PaperPage = lazy(() => loadPaperPage().then((m) => ({ default: m.PaperPage })));
 const PapersView = lazy(() => loadPapersView().then((m) => ({ default: m.PapersView })));
 const PrintMeetings = lazy(() => loadPrintViews().then((m) => ({ default: m.PrintMeetings })));
+const PrintProtocol = lazy(() => loadPrintViews().then((m) => ({ default: m.PrintProtocol })));
 const PrintProject = lazy(() => loadPrintViews().then((m) => ({ default: m.PrintProject })));
 const ReviewView = lazy(() => loadReviewView().then((m) => ({ default: m.ReviewView })));
 const ProjectsView = lazy(() => loadProjectsView().then((m) => ({ default: m.ProjectsView })));
 const ResumeEditor = lazy(() => loadResumeEditor().then((m) => ({ default: m.ResumeEditor })));
 const ResumesView = lazy(() => loadResumesView().then((m) => ({ default: m.ResumesView })));
-const PAGE_LOADERS = [loadAgendaView, loadBudgetView, loadDeadlinePage, loadDeadlinesView, loadHomeView, loadLoansView, loadNetWorthView, loadMeetingPage, loadExperimentsView, loadThesisView, loadGoalsView, loadTripsView, loadTripPage, loadFundingView, loadExperimentPage, loadMeetingsView, loadNotePage, loadPaperPage, loadPapersView, loadPrintViews, loadReviewView, loadProjectsView, loadResumeEditor, loadResumesView, loadWebsiteView];
+const PAGE_LOADERS = [loadAgendaView, loadBudgetView, loadDeadlinePage, loadDeadlinesView, loadHomeView, loadLoansView, loadNetWorthView, loadMeetingPage, loadExperimentsView, loadThesisView, loadGoalsView, loadTripsView, loadTripPage, loadFundingView, loadExperimentPage, loadLibraryView, loadLibraryPage, loadMeetingsView, loadNotePage, loadPaperPage, loadPapersView, loadPrintViews, loadReviewView, loadProjectsView, loadResumeEditor, loadResumesView, loadWebsiteView];
 let prefetched = false;
 function prefetchPages() {
   if (prefetched) return;
@@ -90,6 +95,8 @@ function Page({ route }: { route: Route }) {
     case "funding": return <FundingView route={route} />;
     case "trips": return id ? <TripPage id={id} /> : <TripsView route={route} />;
     case "experiments": return id ? <ExperimentPage id={id} /> : <ExperimentsView route={route} />;
+    case "protocols": return id ? <LibraryPage kind="protocol" id={id} /> : <LibraryView kind="protocol" route={route} />;
+    case "code": return id ? <LibraryPage kind="code" id={id} /> : <LibraryView kind="code" route={route} />;
     case "meetings": return id ? <MeetingPage id={id} /> : <MeetingsView route={route} />;
     case "deadlines": return id ? <DeadlinePage id={id} /> : <DeadlinesView route={route} />;
     case "budget": return <BudgetView route={route} />;
@@ -111,7 +118,7 @@ export function Extension({home=false}:{home?:boolean}){
  useEffect(prefetchPages,[]);
  useEffect(()=>{document.body.classList.toggle("workspace-print",section==="print");return()=>document.body.classList.remove("workspace-print")},[section]);
  return <div className="extension-workspace" style={toneStyle(tone)}>
- <Suspense fallback={<PageLoading/>}>{section==="print" ? route.path[1]==="meetings"?<PrintMeetings ids={(route.query.get("ids")??"").split(",").filter(Boolean)}/>:<PrintProject id={route.query.get("id")??""}/>:<Page route={route}/>}</Suspense>
+ <Suspense fallback={<PageLoading/>}>{section==="print" ? route.path[1]==="meetings"?<PrintMeetings ids={(route.query.get("ids")??"").split(",").filter(Boolean)}/>:route.path[1]==="protocol"?<PrintProtocol id={route.query.get("id")??""}/>:<PrintProject id={route.query.get("id")??""}/>:<Page route={route}/>}</Suspense>
  <QuickAddHost/>
  </div>;
 }

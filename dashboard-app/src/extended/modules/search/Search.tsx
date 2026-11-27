@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, CheckSquare, FileText, FlaskConical, Folder, Highlighter, NotebookPen, Plane, Search as SearchIcon, Target, Users } from "lucide-react";
+import { CalendarClock, CheckSquare, ClipboardList, CodeXml, FileText, FlaskConical, Folder, Highlighter, NotebookPen, Plane, Search as SearchIcon, Target, Users } from "lucide-react";
 import { rpc } from "../../lib/db.ts";
 import { fmtDate } from "../../lib/dates.ts";
 import { go, href, setQuery, type Route } from "../../lib/route.ts";
@@ -18,6 +18,8 @@ export const KIND = {
   paper: { label: "Paper", icon: FileText, path: (h: SearchHit) => `papers/${h.id}` },
   note: { label: "Note", icon: NotebookPen, path: (h: SearchHit) => `notes/${h.id}` },
   experiment: { label: "Experiment", icon: FlaskConical, path: (h: SearchHit) => `experiments/${h.id}` },
+  protocol: { label: "Protocol", icon: ClipboardList, path: (h: SearchHit) => `protocols/${h.id}` },
+  code: { label: "Code", icon: CodeXml, path: (h: SearchHit) => `code/${h.id}` },
   trip: { label: "Trip", icon: Plane, path: (h: SearchHit) => `trips/${h.id}` },
   goal: { label: "Goal", icon: Target, path: () => "goals" },
   meeting: { label: "Meeting", icon: Users, path: (h: SearchHit) => `meetings/${h.id}` },
@@ -76,7 +78,7 @@ export function SearchView({ route }: { route: Route }) {
   const { hits, error } = useSearch(q);
   return (
     <section>
-      <PageHeader section="search" title="Search" subtitle="Search research, work boards, papers, notes, experiments, meetings, deadlines and clippings." />
+      <PageHeader section="search" title="Search" subtitle="Search research, work boards, papers, notes, experiments, protocols, code, meetings, deadlines and clippings." />
       <div className="filters"><SearchBox value={q} onChange={(v) => setQuery("q", v)} placeholder="Search everything" /></div>
       <ErrorText error={error} />
       <div className="card list-card">

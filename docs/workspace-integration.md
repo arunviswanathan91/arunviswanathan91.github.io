@@ -39,6 +39,10 @@ Each publication keeps the journals it was sent to, in order, with the outcome a
 
 The rest of a publication follows from the trail. Adding a publication asks for a title, a project and, optionally, the journal it is already at, which becomes the first trail entry. On the publication page the journal, stage and rejection type are set by the trail once one exists, and the DOI by the published version; reviews and decision letters are kept on each journal’s entry (earlier paper-level ones stay visible as “Earlier notes”). A project follows the paper that speaks for it, its output publication or else its only publication: submitting moves the project to the Submitted phase, a rejection or withdrawal returns it to Writing, and an acceptance offers to close it. Paused, closed and archived projects are never moved.
 
+## Library: protocols and code
+
+Two sections, Protocols and Code, keep what you reuse. An entry has a title, a technique or language, a purpose, tags and links (project, source paper or manuscript, source URL), plus attached files. Its content is held in saved versions: editing saves a new version with a note of what changed, and earlier versions stay readable and are never altered. An experiment can pick a protocol from the library, which records the version used and copies its steps in for that run; it shows when a newer version exists, and an experiment’s own protocol text can be saved as a new library protocol. Code can be copied or downloaded as a file. Both are searchable, go to Trash with their versions, and are in the backup. Run `supabase/library.sql` after `publication-submissions.sql`.
+
 ## Phone app
 
 The dashboard installs as an app: on Android or desktop Chrome use Settings → App → Install app; on iPhone open it in Safari, tap Share, then “Add to Home Screen”. `public/manifest.webmanifest` and `public/icons/` describe it (`scripts/make-icons.mjs` regenerates the icons). `public/sw.js` keeps the build's own files so the app opens offline and never handles requests to the database; pages opened before show their last content, and saving needs a connection. A notice offers a reload when a newer release is live.

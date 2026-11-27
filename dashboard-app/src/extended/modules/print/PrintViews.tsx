@@ -6,7 +6,7 @@ import { getOne, list, useLoad } from "../../lib/db.ts";
 import { fmtDate, fmtDateTime, fmtTime } from "../../lib/dates.ts";
 import {
   DEADLINE_CATEGORY, DEADLINE_STATUS, MEETING_TYPE, NOTE_TYPE, PAPER_STATUS, PROJECT_AREA, PROJECT_STATUS, TASK_STATUS,
-  type ActionItem, type ContactRow, type Deadline, type Meeting, type MeetingParticipant, type MeetingProject, type Note,
+  type ActionItem, type ContactRow, type Deadline, type LibraryEntry, type LibraryVersion, type Meeting, type MeetingParticipant, type MeetingProject, type Note,
   type Paper, type Project, type ProjectPaper, type Task,
 } from "../../lib/types.ts";
 import { MarkdownView } from "../../components/Markdown.tsx";
@@ -197,3 +197,34 @@ export function PrintProject({ id }: { id: string }) {
   );
 }
 
+/** One version of a library protocol, as a bench copy. */
+export function PrintProtocol({ id }: { id: string }) {
+  const { data } = useLoad(async () => {
+    const version = await getOne<LibraryVersion>("library_versions", id);
+    const entry = version ? await getOne<LibraryEntry>("library_entries", version.entry_id) : null;
+    return { version, entry };
+  }, [id]);
+  const v = data?.version, e = data?.entry;
+
+  return (
+    <PrintShell title={e && v ? `${e.title} — v${v.version}` : "Protocol"} ready={!!data}>
+      {e && v && (
+        <>
+          <h1>{e.title}</h1>
+          <table className="print-meta">
+            <tbody>
+              <tr><th>Version</th><td>v{v.version} · {fmtDate(v.created_at)}{v.change_note ? ` · ${v.change_note}` : ""}</td></tr>
+              {e.technique && <tr><th>Technique</th><td>{e.technique}</td></tr>}
+              {e.purpose && <tr><th>Purpose</th><td>{e.purpose}</td></tr>}
+              {e.source_url && <tr><th>Source</th><td>{e.source_url}</td></tr>}
+              <tr><th>Printed</th><td>{fmtDate(new Date().toISOString())}</td></tr>
+            </tbody>
+          </table>
+          <Section title="Reagents and materials" text={v.materials} />
+          <Section title="Steps" text={v.body} />
+          <Section title="Notes and troubleshooting" text={v.notes} />
+        </>
+      )}
+    </PrintShell>
+  );
+}

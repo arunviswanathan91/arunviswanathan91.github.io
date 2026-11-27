@@ -129,6 +129,8 @@ export interface Experiment {
   repeat_of: string | null;
   /** The thesis chapter this experiment feeds. */
   chapter_id: string | null;
+  /** The library protocol version this run followed. */
+  protocol_version_id: string | null;
   aim: string;
   protocol: string;
   samples: ExperimentSample[];
@@ -140,6 +142,45 @@ export interface Experiment {
   archived_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type LibraryKind = "protocol" | "code";
+/** A reusable protocol or piece of code. Its text lives in versions; the entry points at the current one. */
+export interface LibraryEntry {
+  id: string;
+  kind: LibraryKind;
+  title: string;
+  /** Protocols: e.g. "Western blot". */
+  technique: string;
+  /** Code: e.g. "R". */
+  language: string;
+  purpose: string;
+  tags: string[];
+  project_id: string | null;
+  /** The library paper a protocol came from. */
+  paper_id: string | null;
+  /** The manuscript (Publications pipeline) a piece of code belongs to. */
+  publication_id: string | null;
+  source_url: string | null;
+  current_version_id: string | null;
+  pinned: boolean;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+/** One saved version. Frozen once saved: versions are added or deleted, never edited (only the change note can be). */
+export interface LibraryVersion {
+  id: string;
+  entry_id: string;
+  version: number;
+  /** Protocol: the steps (Markdown). Code: the code. */
+  body: string;
+  /** Protocol: reagents and materials. Code: packages and versions needed. */
+  materials: string;
+  /** Protocol: notes and troubleshooting. Code: how to run it. */
+  notes: string;
+  change_note: string;
+  created_at: string;
 }
 
 export type MeetingType = "supervisor" | "lab" | "research_discussion" | "collaboration" | "administration" | "other";
@@ -304,6 +345,7 @@ export interface Attachment {
   meeting_id: string | null;
   deadline_id: string | null;
   experiment_id: string | null;
+  library_entry_id: string | null;
   created_at: string;
 }
 
@@ -354,7 +396,7 @@ export interface FundingCall {
 }
 
 export interface SearchHit {
-  kind: "project" | "task" | "paper" | "note" | "experiment" | "trip" | "goal" | "meeting" | "deadline" | "publication" | "document" | "job" | "read" | "reminder" | "clipping";
+  kind: "project" | "task" | "paper" | "note" | "experiment" | "protocol" | "code" | "trip" | "goal" | "meeting" | "deadline" | "publication" | "document" | "job" | "read" | "reminder" | "clipping";
   id: string;
   title: string;
   snippet: string;
