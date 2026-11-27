@@ -141,10 +141,6 @@
 }
 .extension-workspace .hc-focus-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .extension-workspace .hc-focus-tools > span { color: var(--text-2); font-size: 0.9rem; }
-/* The shared slider's own look, which the workspace's plain button style would otherwise replace. */
-.extension-workspace .hc-focus button.slide-exit-handle,
-.extension-workspace .hc-focus button.slide-exit-handle:hover:not(:disabled) { display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--accent); color: var(--accent-text); }
-.extension-workspace .hc-focus button.slide-exit-handle:active:not(:disabled) { transform: none; }
 .extension-workspace .hc-focus .hc-kind button { min-height: 48px; min-width: 96px; font-size: var(--f-sm); }
 .extension-workspace button.hc-focus-minus { width: 56px; height: 56px; padding: 0; justify-content: center; border-radius: 50%; touch-action: manipulation; }
 @media (min-width: 700px) {

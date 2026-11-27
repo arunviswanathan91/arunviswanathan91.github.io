@@ -226,7 +226,7 @@ export function PipetteMode({ plate, mapTitle, saved, onProgress, onNote, onClos
         ))}
       </div>
 
-      <div className="pp-mid">
+      <div className="pp-mid" data-tall={view.rows > 8 || undefined}>
         {zoomed && (
           <div className="pp-map">
             <button type="button" className="pp-map-plate" aria-label={`Whole plate. Showing ${wellId(win.row, win.col)} to ${wellId(win.row + view.rows - 1, win.col + view.cols - 1)}. Show another part.`} onClick={pickPart}>

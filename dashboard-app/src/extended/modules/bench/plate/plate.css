@@ -300,7 +300,15 @@ dialog.pp::backdrop { background: var(--surface); }
 .pp-many li { font-size: var(--f-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-many b { display: inline-block; min-width: 2.4em; font-variant-numeric: tabular-nums; }
 .pp-many i { color: var(--text-2); }
-/* A short screen: the circle and its text side by side. */
+/* A plate window of more than 8 rows (an 8-channel pipette on 16 rows): the circle and its text go side by side to leave it room. */
+.pp-mid[data-tall] .pp-now:not(.pp-finished) { flex-direction: row; justify-content: center; text-align: left; gap: var(--s-3); }
+.pp-mid[data-tall] .pp-now:not(.pp-finished) .pp-now-body { align-items: flex-start; }
+.pp-mid[data-tall] .pp-now-well { width: 76px; height: 76px; font-size: 1.75rem; }
+.pp-mid[data-tall] .pp-now-well[data-long="1"] { font-size: 1.2rem; }
+.pp-mid[data-tall] .pp-now-well[data-long="2"] { font-size: .9rem; }
+.pp-mid[data-tall] .pp-plate { --rest: 440px; }
+.pp-mid[data-tall] .pp-map + .pp-plate { --rest: 530px; }
+/* A short screen: the same. */
 @media (max-height: 700px) {
   .pp-now:not(.pp-finished) { flex-direction: row; justify-content: center; text-align: left; gap: var(--s-3); }
   .pp-now:not(.pp-finished) .pp-now-body { align-items: flex-start; }
