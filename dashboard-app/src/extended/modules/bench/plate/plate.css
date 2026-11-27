@@ -329,11 +329,6 @@ dialog.pp::backdrop { background: var(--surface); }
 .pp-do .pp-btn.pp-btn.pp-btn { min-height: 56px; font-size: var(--f-md); }
 .pp-do .pp-skip.pp-skip.pp-skip { flex: 0 0 28%; }
 .pp-do .pp-main.pp-main.pp-main { flex: 1 1 auto; font-size: var(--f-lg); }
-/* The shared exit slider's handle, kept round and filled against the workspace's own button rules. */
-.pp .slide-exit .slide-exit-handle.slide-exit-handle, .pp .slide-exit .slide-exit-handle.slide-exit-handle:hover:not(:disabled) {
-  padding: 0; border: 0; border-radius: 50%; background: var(--accent); color: var(--accent-text); justify-content: center;
-}
-.pp .slide-exit .slide-exit-handle.slide-exit-handle:active:not(:disabled) { transform: none; }
 .pp-note-form { display: flex; flex-direction: column; gap: var(--s-2); }
 .pp-note-form textarea { width: 100%; min-height: 64px; font-size: 1rem; box-sizing: border-box; }
 
