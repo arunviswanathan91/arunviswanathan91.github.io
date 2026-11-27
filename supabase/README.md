@@ -38,6 +38,7 @@ always goes at the end of this list, and the commit that adds it says so.
 | 30 | `publication-published.sql` | The published version of a manuscript, fetched from its final DOI (`publications.published`) |
 | 31 | `publication-submissions.sql` | Submission trail of a manuscript: each journal tried, in order, and the outcome there (`ws_publication_submissions`) |
 | 32 | `library.sql` | Library of protocols and code with saved versions (`ws_library_entries`, `ws_library_versions`); the protocol version an experiment used |
+| 33 | `bench.sql` | Bench tools: saved calculations, recipes, master mixes, standard curves and timer sets (`ws_bench_items`) |
 
 Edge Functions are in `functions/`. They are type-checked on every pull request and deployed
 from `main` only (`.github/workflows/check-functions.yml`, `deploy-supabase.yml`). Secrets are set

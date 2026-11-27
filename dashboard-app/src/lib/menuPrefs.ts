@@ -10,7 +10,7 @@ import { loadRaw, save } from "./persist";
 export interface MenuItem { key: string; label: string; icon: LucideIcon }
 export interface MenuGroup { id: string; label: string; items: MenuItem[] }
 
-export const RESEARCH_SECTIONS: SectionId[] = ["agenda", "review", "goals", "projects", "thesis", "tasks", "papers", "notes", "experiments", "protocols", "code", "meetings", "deadlines", "trips", "funding", "resumes", "website"];
+export const RESEARCH_SECTIONS: SectionId[] = ["agenda", "review", "goals", "projects", "thesis", "tasks", "papers", "notes", "experiments", "protocols", "code", "bench", "meetings", "deadlines", "trips", "funding", "resumes", "website"];
 export const PERSONAL_SECTIONS: SectionId[] = ["budget", "loans", "networth", "habits"];
 export const toolKey = (id: SectionId) => `tool:${id}`;
 export const viewKey = (id: string) => `view:${id}`;
