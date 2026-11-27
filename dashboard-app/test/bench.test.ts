@@ -121,14 +121,17 @@ test('numbers are shown without floating-point noise',()=>{
 
 test('the best unit is the largest that keeps the number at 0.1 or more',()=>{
  assert.deepEqual(bestUnit(0.0005,'mL'),{value:0.5,unit:'µL'});
- assert.deepEqual(bestUnit(0.5,'mL'),{value:0.5,unit:'mL'});
+ assert.deepEqual(bestUnit(0.5,'mL'),{value:500,unit:'µL'});
  assert.deepEqual(bestUnit(0.05,'mL'),{value:50,unit:'µL'});
  assert.deepEqual(bestUnit(1500,'µL'),{value:1.5,unit:'mL'});
  assert.deepEqual(bestUnit(9.5,'mL'),{value:9.5,unit:'mL'});
  assert.deepEqual(bestUnit(1,'mL'),{value:1,unit:'mL'});
  assert.deepEqual(bestUnit(99,'µL'),{value:99,unit:'µL'});
- assert.deepEqual(bestUnit(100,'µL'),{value:0.1,unit:'mL'});
- assert.deepEqual(bestUnit(99.96,'µL'),{value:0.09996,unit:'mL'},'what reads as 0.1 mL is shown in mL');
+ assert.deepEqual(bestUnit(100,'µL'),{value:100,unit:'µL'});
+ assert.deepEqual(bestUnit(0.475,'L'),{value:475,unit:'mL'});
+ assert.deepEqual(bestUnit(0.0000005,'L'),{value:0.5,unit:'µL'},'a pipette is set in microlitres, not 500 nL');
+ assert.deepEqual(bestUnit(0.00000005,'L'),{value:50,unit:'nL'});
+ assert.deepEqual(bestUnit(999.6,'µL'),{value:0.9996,unit:'mL'},'what reads as 1 mL is shown in mL');
  assert.deepEqual(bestUnit(0.05,'g'),{value:50,unit:'mg'});
  assert.deepEqual(bestUnit(4.383,'g'),{value:4.383,unit:'g'});
  assert.deepEqual(bestUnit(0.00002,'M'),{value:20,unit:'µM'});
@@ -138,13 +141,13 @@ test('the best unit is the largest that keeps the number at 0.1 or more',()=>{
  assert.deepEqual(bestUnit(0.05,'mg/mL'),{value:50,unit:'µg/mL'},'mass per volume keeps its volume');
  assert.deepEqual(bestUnit(1080000,'cells/mL'),{value:1.08,unit:'e6 cells/mL'});
  assert.deepEqual(bestUnit(0.025,'e6 cells/mL'),{value:25,unit:'e3 cells/mL'});
- assert.deepEqual(bestUnit(500,'cells/mL'),{value:0.5,unit:'e3 cells/mL'});
+ assert.deepEqual(bestUnit(500,'cells/mL'),{value:500,unit:'cells/mL'});
  assert.deepEqual(bestUnit(50,'cells/mL'),{value:50,unit:'cells/mL'});
  assert.deepEqual(bestUnit(0.5,'%'),{value:0.5,unit:'%'});
  assert.deepEqual(bestUnit(0,'mL'),{value:0,unit:'mL'});
  assert.deepEqual(bestUnit(-0.0005,'mL'),{value:-0.5,unit:'µL'});
  for(const [v,u] of [[3e-7,'L'],[12345,'ng'],[0.004,'mM'],[7e5,'pmol']] as const){const b=bestUnit(v,u);assert.ok(b.value>=0.1&&b.value<1000,`${v} ${u} → ${b.value} ${b.unit}`);near(convert(b.value,b.unit,u),v)}
- assert.equal(fmtQ({value:0.0005,unit:'L'}),'0.5 mL');
+ assert.equal(fmtQ({value:0.0005,unit:'L'}),'500 µL');
  assert.equal(fmtQ({value:0.00005,unit:'L'}),'50 µL');
  assert.equal(fmtQ({value:0.0005,unit:'L'},4,false),'0.0005 L');
  assert.equal(fmtQ({value:1080000,unit:'cells/mL'}),'1.08 ×10⁶ cells/mL');
@@ -232,7 +235,7 @@ test('serial dilution from a transfer volume: every tube, the volumes and the di
  assert.deepEqual(r.result?.tubes.map(t=>t.fold),[10,100,1000,1e4,1e5,1e6]);
  for(const t of r.result!.tubes){nearQ(t.transfer,100,'µL');nearQ(t.diluent,900,'µL');nearQ(t.mixed,1000,'µL')}
  nearQ(r.result?.totalDiluent,5400,'µL');nearQ(r.result?.final,0.0001,'mM');
- assert.equal(fmtQ(r.result?.final),'0.1 µM');
+ assert.equal(fmtQ(r.result?.final),'100 nM');
  // Every tube gives 100 µL to the next and keeps 900 µL; the last keeps all 1000 µL.
  assert.deepEqual(r.result?.tubes.map(t=>t.left.value),[900,900,900,900,900,1000]);
  // Two-fold, 100 µL: 100 + 100. 100 ng/mL → 50, 25, 12.5, 6.25.
@@ -288,7 +291,7 @@ test('serial dilution to a target: the factor per step, or the steps needed',()=
  const f=stepFactor({start:q(100,'mM'),target:q(0.1,'µM'),steps:6});
  assert.equal(f.result,10);
  const series=serialSeries({start:q(100,'mM'),factors:Array(6).fill(f.result),volume:q(100,'µL'),volumeIs:'transfer'});
- assert.equal(fmtQ(series.result?.final),'0.1 µM');nearQ(series.result?.totalDiluent,5400,'µL');
+ assert.equal(fmtQ(series.result?.final),'100 nM');nearQ(series.result?.totalDiluent,5400,'µL');
  // 1 M to 1 mM in 2 steps: √1000 = 31.6228 per step; 8-fold in 3 steps is 2; one step is the whole dilution.
  near(stepFactor({start:q(1,'M'),target:q(1,'mM'),steps:2}).result,Math.sqrt(1000));
  assert.equal(stepFactor({start:q(8,'x'),target:q(1,'x'),steps:3}).result,2);

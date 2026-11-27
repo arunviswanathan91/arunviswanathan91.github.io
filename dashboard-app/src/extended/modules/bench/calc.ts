@@ -177,12 +177,14 @@ function ladder(unit: string): string[] {
 }
 
 /** Below this a value moves down a unit: 0.5 mL stays, 0.05 mL becomes 50 µL. */
-const SMALLEST_SHOWN = 0.1;
+const SMALLEST_SHOWN = 1;
 
 /**
- * The same quantity in the unit of its dimension that reads most easily: the largest unit that
- * keeps the number at 0.1 or more, so it stays below 1000 and is between 1 and 1000 wherever a
- * unit allows (0.0005 mL → 0.5 µL, 1500 µL → 1.5 mL). Outside the range of units, the nearest one.
+ * The same quantity in the unit of its dimension that reads most easily at the bench: the largest
+ * unit that keeps the number at 1 or more, so it sits between 1 and 1000 wherever a unit allows
+ * (0.475 L → 475 mL, 0.2475 mL → 247.5 µL, 1500 µL → 1.5 mL). Volumes stop at the microlitre
+ * down to 0.1 µL, because that is how a pipette is set (0.5 µL, not 500 nL). Outside the range of
+ * units, the nearest one.
  */
 export function bestUnit(value: number, unit: string): Qty {
   if (!usable(value) || value === 0) return { value, unit: normalize(unit) };
@@ -193,6 +195,10 @@ export function bestUnit(value: number, unit: string): Qty {
     if (v === null) continue;
     // Compare what will be shown: 0.09996 mL reads as 0.1 mL, so it stays in mL.
     if (best === null || Number(v.toPrecision(3)) >= SMALLEST_SHOWN) best = { value: Math.sign(value) * v, unit: u };
+  }
+  if (best && ["nL", "pL", "fL"].includes(best.unit)) {
+    const micro = convert(Math.abs(value), unit, "µL");
+    if (micro !== null && Number(micro.toPrecision(3)) >= 0.1) return { value: Math.sign(value) * micro, unit: "µL" };
   }
   return best ?? { value, unit: normalize(unit) };
 }
