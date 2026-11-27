@@ -1214,3 +1214,10 @@
 .extension-workspace .bench-recipe-read .bench-rescale { max-width: 280px; margin-bottom: 8px; }
 .extension-workspace .bench-recipe-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
 .extension-workspace .bench-recipe-list li { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--r-2, 10px); background: var(--surface); }
+
+/* Power tool: the "samples you would need" suggestion table. */
+.extension-workspace .bench-suggest { margin-top: 14px; }
+.extension-workspace .bench-suggest h4 { margin: 0 0 6px; font-size: var(--f-sm); }
+.extension-workspace .bench-suggest table { width: 100%; }
+.extension-workspace .bench-suggest tr.on { background: var(--accent-soft); }
+.extension-workspace .bench-suggest tr.on td { font-weight: 700; }

@@ -9,6 +9,8 @@ import {
 import { Instruction, NumField, Panel, Reason, Stat, ToolFrame, Working, guard, type ToolProps } from "./parts.tsx";
 
 const TABS: [PowerData["tab"], string][] = [["size", "Sample size"], ["power", "Power"], ["effect", "Detectable effect"]];
+/** The power levels the Sample size tab suggests samples for. */
+const POWER_LEVELS = [0.8, 0.85, 0.9, 0.95, 0.99];
 
 const pct = (p: number) => `${fmt(p * 100, 3)}%`;
 
@@ -35,6 +37,13 @@ export function PowerTool({ item }: ToolProps) {
   const commonRaw = [d.alpha, d.features];
 
   const size = guard(sampleSizeFor({ ...common, effect, power: num(d.power) }), ...commonRaw, ...effectRaw, d.power);
+  // A suggestion table across the usual power levels, so the sample/power trade-off is visible at a glance.
+  const targetLevel = POWER_LEVELS.find((p) => Math.abs(p - (num(d.power) ?? -1)) < 1e-9) ?? null;
+  const suggestions = size.result
+    ? POWER_LEVELS.map((level) => ({ level, r: sampleSizeFor({ ...common, effect, power: level }).result }))
+        .filter((s): s is { level: number; r: NonNullable<typeof s.r> } => s.r !== null)
+        .map((s) => ({ level: s.level, nPerGroup: s.r.nPerGroup, nTotal: s.r.nTotal }))
+    : [];
   const power = guard(powerOf({ ...common, effect, n: num(d.n) }), ...commonRaw, ...effectRaw, d.n);
   const detect = guard(detectableEffectFor({ ...common, n: num(d.n), power: num(d.power) }), ...commonRaw, d.n, d.power);
 
@@ -151,6 +160,24 @@ export function PowerTool({ item }: ToolProps) {
               <Stat strong label="Samples per group" value={size.result.nPerGroup} />
               <Stat label="Total samples (two groups)" value={size.result.nTotal} />
               <Instruction>Collect {size.result.nPerGroup} per group ({size.result.nTotal} in all) for {pct(num(d.power) ?? 0)} power.</Instruction>
+              {suggestions.length > 0 && (
+                <div className="bench-suggest">
+                  <h4>Samples you would need</h4>
+                  <table className="bench-table">
+                    <thead><tr><th>Power</th><th className="num">Per group</th><th className="num">Total</th></tr></thead>
+                    <tbody>
+                      {suggestions.map((s) => (
+                        <tr key={s.level} className={targetLevel === s.level ? "on" : undefined}>
+                          <td>{pct(s.level)}</td>
+                          <td className="num"><strong>{s.nPerGroup}</strong></td>
+                          <td className="num">{s.nTotal}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="muted small">More power needs more samples. Your target is highlighted.</p>
+                </div>
+              )}
             </>}
           </>}
           {d.tab === "power" && <>
