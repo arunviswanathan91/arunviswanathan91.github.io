@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowLeft, ArrowUp, Bell, BellOff, Flag, ListOrdered, Pause, Play, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { ask, askText } from "../../../../lib/dialogs.tsx";
-import { href, setQuery, useRoute } from "../../../lib/route.ts";
+import { href, setQuery, useRoute, type Route } from "../../../lib/route.ts";
 import { Empty, PageHeader, Tabs } from "../../../components/ui.tsx";
 import { askNotifyPermission, notifyState, wakeLockSupported, type NotifyState } from "./alerts.ts";
 import {
@@ -16,8 +16,9 @@ import "./timers.css";
 type Tab = "timers" | "stopwatch";
 
 /** #/tools/bench/timers — countdown timers that keep running on every page, saved sets, and a stopwatch. */
-export function TimersView() {
-  const route = useRoute();
+export function TimersView(props: { route?: Route }) {
+  const current = useRoute();
+  const route = props.route ?? current;
   const tab: Tab = route.query.get("tab") === "stopwatch" ? "stopwatch" : "timers";
   const protocolId = route.query.get("protocol");
   const { timers, stopwatch, settings } = useTimers();

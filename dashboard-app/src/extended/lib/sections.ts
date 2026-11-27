@@ -1,11 +1,11 @@
 // Each section's name, icon and colour, used by the menu, page headers, badges, cards and search.
 // Colours are CSS variables (see styles.css: --sec-<id>, --sec-<id>-soft, --sec-<id>-ink).
 import {
-  CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, ClipboardList, CodeXml, FileText, FileUser, FlaskConical, Globe, GraduationCap, Landmark, Plane, Target, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, TrendingUp, Users, Wallet, type LucideIcon,
+  Calculator, CalendarClock, CalendarDays, CheckSquare, ClipboardCheck, ClipboardList, CodeXml, FileText, FileUser, FlaskConical, Globe, GraduationCap, Landmark, Plane, Target, Folder, HandCoins, Home, NotebookPen, Repeat, Search, Settings, TrendingUp, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 
 export type SectionId =
-  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "experiments" | "protocols" | "code" | "thesis" | "trips" | "funding" | "goals" | "meetings" | "deadlines" | "budget" | "loans" | "networth" | "habits" | "resumes" | "website" | "search" | "settings";
+  | "home" | "agenda" | "review" | "projects" | "tasks" | "papers" | "notes" | "experiments" | "protocols" | "code" | "bench" | "thesis" | "trips" | "funding" | "goals" | "meetings" | "deadlines" | "budget" | "loans" | "networth" | "habits" | "resumes" | "website" | "search" | "settings";
 
 export interface Section {
   id: SectionId;
@@ -26,6 +26,7 @@ export const SECTIONS: Record<SectionId, Section> = {
   experiments: { id: "experiments", label: "Experiments", icon: FlaskConical, tone: "lab" },
   protocols: { id: "protocols", label: "Protocols", icon: ClipboardList, tone: "lab" },
   code: { id: "code", label: "Code", icon: CodeXml, tone: "notes" },
+  bench: { id: "bench", label: "Bench", icon: Calculator, tone: "lab" },
   thesis: { id: "thesis", label: "Thesis", icon: GraduationCap, tone: "projects" },
   trips: { id: "trips", label: "Conferences & trips", icon: Plane, tone: "deadlines" },
   goals: { id: "goals", label: "Goals", icon: Target, tone: "home" },

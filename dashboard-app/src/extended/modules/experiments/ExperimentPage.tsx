@@ -20,6 +20,7 @@ import { createNote } from "../notes/NotesView.tsx";
 import { sortTasks } from "../tasks/logic.ts";
 import { TaskForm } from "../tasks/TaskForm.tsx";
 import { TaskList } from "../tasks/TaskList.tsx";
+import { ExperimentBench } from "../bench/timers/BenchLinks.tsx";
 import { createExperiment } from "./create.ts";
 import { dateSpan } from "./ExperimentRows.tsx";
 import { parseSamples, repeatOf, samplesSummary, techniqueOptions } from "./logic.ts";
@@ -180,6 +181,7 @@ function ExperimentEditor({ initial }: { initial: Experiment }) {
         <div className="card pad">
           <Attachments owner={{ experiment_id: e.id }} title="Data & images" />
         </div>
+        <ExperimentBench experimentId={e.id} />
         <ExperimentLinked experiment={e} beforeLeave={() => autosave.flush()} />
       </div>
       <p className="small muted">Last saved {fmtDateTime(e.updated_at)}</p>

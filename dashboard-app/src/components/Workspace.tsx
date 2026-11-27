@@ -13,6 +13,7 @@ const WORK=new Set(["work"]);
 import { TasksHeader } from "../extended/modules/tasks/TasksView";
 import { SECTIONS, toneStyle } from "../extended/lib/sections";
 import { useRoute } from "../extended/lib/route";
+import { TimerHost } from "../extended/modules/bench/timers/TimerHost";
 import { Sidebar } from "./Sidebar";
 import { HomeView } from "./HomeView";
 import { SettingsView } from "./SettingsView";
@@ -153,5 +154,5 @@ function Shell(){
 export function Workspace({userId}:{userId:string}){
  // Restore this account's saved pages before any page renders, so they draw at once.
  useMemo(()=>hydrateLoadCache(userId),[userId]);
- return <StoreProvider userId={userId}><Shell/></StoreProvider>;
+ return <StoreProvider userId={userId}><Shell/><TimerHost userId={userId}/></StoreProvider>;
 }

@@ -183,6 +183,26 @@ export interface LibraryVersion {
   created_at: string;
 }
 
+export type BenchKind = "dilution" | "cell_dilution" | "haemocytometer" | "molarity" | "recipe" | "master_mix" | "curve" | "timer_set";
+/** A saved bench tool: a calculator with what was typed into it. Results are never stored; they are recomputed from `data`. */
+export interface BenchItem {
+  id: string;
+  kind: BenchKind;
+  title: string;
+  /** The tool's inputs, in the shape that tool reads (see modules/bench/model.ts). */
+  data: Record<string, unknown>;
+  notes: string;
+  tags: string[];
+  project_id: string | null;
+  /** The library protocol this belongs to. */
+  library_entry_id: string | null;
+  experiment_id: string | null;
+  pinned: boolean;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type MeetingType = "supervisor" | "lab" | "research_discussion" | "collaboration" | "administration" | "other";
 export interface Meeting {
   id: string;
@@ -396,7 +416,7 @@ export interface FundingCall {
 }
 
 export interface SearchHit {
-  kind: "project" | "task" | "paper" | "note" | "experiment" | "protocol" | "code" | "trip" | "goal" | "meeting" | "deadline" | "publication" | "document" | "job" | "read" | "reminder" | "clipping";
+  kind: "project" | "task" | "paper" | "note" | "experiment" | "protocol" | "code" | "bench" | "trip" | "goal" | "meeting" | "deadline" | "publication" | "document" | "job" | "read" | "reminder" | "clipping";
   id: string;
   title: string;
   snippet: string;

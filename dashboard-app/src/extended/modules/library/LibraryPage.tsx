@@ -13,6 +13,7 @@ import { MarkdownEditor, MarkdownView } from "../../components/Markdown.tsx";
 import { ProjectSelect, projectName, useProjects } from "../../components/pickers.tsx";
 import { TagInput } from "../../components/TagInput.tsx";
 import { Badge, Empty, ErrorText, Loading, SaveIndicator } from "../../components/ui.tsx";
+import { ProtocolBench } from "../bench/timers/BenchLinks.tsx";
 import { dateSpan } from "../experiments/ExperimentRows.tsx";
 import { techniqueOptions } from "../experiments/logic.ts";
 import { saveVersion, type VersionContent } from "./create.ts";
@@ -326,6 +327,7 @@ function EntryEditor({ initial }: { initial: LibraryEntry }) {
             </ul>
           )}
         </div>
+        {e.kind === "protocol" && <ProtocolBench protocolId={e.id} />}
         <div className="card pad">
           <Attachments owner={{ library_entry_id: e.id }} />
         </div>

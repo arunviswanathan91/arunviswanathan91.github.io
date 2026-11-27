@@ -86,3 +86,17 @@ self.addEventListener("message", (event) => {
     }
   })());
 });
+
+// A tapped timer notification: bring the app to the front on its Timers page, opening it if
+// it is closed. An open app is told to show the page itself, so it is not reloaded.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "#/tools/bench/timers";
+  event.waitUntil((async () => {
+    const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const client = open.find((c) => new URL(c.url).pathname.startsWith(SCOPE));
+    if (!client) { await self.clients.openWindow(SCOPE + target); return; }
+    client.postMessage({ type: "open-timers" });
+    try { await client.focus(); } catch { /* the browser may refuse; the page has been told */ }
+  })());
+});
