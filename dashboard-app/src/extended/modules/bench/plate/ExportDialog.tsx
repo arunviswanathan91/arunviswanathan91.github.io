@@ -28,13 +28,15 @@ function Sheet({ title, notes, plates, opts }: { title: string; notes: string; p
       )}
       {plates.map((plate, i) => {
         const real = opts.real && geometry(plate.rows, plate.cols).real;
-        const drawing = opts.map ? plateSvg(plate, { size: (w, h) => { const width = real ? w : fitWidth(w / h); return { width: `${width}mm`, height: `${(width * h) / w}mm` }; } }) : null;
+        const drawing = opts.map ? plateSvg(plate) : null;
+        // Real size: one unit of the drawing is one millimetre on paper.
+        const mapWidth = drawing ? (real ? drawing.width : fitWidth(drawing.width / drawing.height)) : 0;
         const groups = legend(plate);
         const rows = opts.table ? tableRows(plate) : [];
         return (
           <section key={i} className="pm-sheet-plate">
             {(opts.info || plates.length > 1) && <h2>{plate.name} <span>{formatLabel(plate.rows, plate.cols)}{real ? " · real size" : ""}</span></h2>}
-            {drawing && <div className="pm-sheet-map" dangerouslySetInnerHTML={{ __html: drawing.svg }} />}
+            {drawing && <div className="pm-sheet-map" style={{ width: `${mapWidth}mm` }} dangerouslySetInnerHTML={{ __html: drawing.svg }} />}
             {drawing && groups.length > 0 && (
               <ul className="pm-sheet-legend">
                 {groups.map((g) => {

@@ -205,8 +205,8 @@ export function PipetteMode({ plate, mapTitle, saved, onProgress, onNote, onClos
         </div>
 
         <div className="pm-scroll pp-scroll">
-          <div className="pm-plate pp-plate" data-dense={cols > 12 || undefined} style={{ ...gridVars(rows, cols), minWidth: cols > 12 ? `${(cols + 1) * 24}px` : undefined }}>
-            <div className="pm-grid" role="group" aria-label={`${plate.name}: ${rows * cols} wells`}>
+          <div className="pm-plate pp-plate" data-dense={cols > 12 || undefined} data-roomy={cols <= 6 || undefined} style={{ ...gridVars(rows, cols), minWidth: cols > 12 ? `${(cols + 1) * 24}px` : undefined }}>
+            <div className="pm-grid" data-step={current.length > 1 ? "many" : undefined} role="group" aria-label={`${plate.name}: ${rows * cols} wells`}>
               <span className="pm-head" aria-hidden />
               {Array.from({ length: cols }, (_, c) => <span key={c} className="pm-head" aria-hidden>{c + 1}</span>)}
               {Array.from({ length: rows }, (_, r) => [

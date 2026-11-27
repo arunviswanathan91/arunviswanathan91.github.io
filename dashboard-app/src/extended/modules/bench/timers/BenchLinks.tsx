@@ -8,7 +8,7 @@ import "./timers.css";
 
 const KIND_LABEL: Record<string, string> = {
   dilution: "Dilution", cell_dilution: "Cell dilution", haemocytometer: "Cell count", molarity: "Molarity",
-  recipe: "Recipe", master_mix: "Master mix", curve: "Standard curve", timer_set: "Timer set",
+  recipe: "Recipe", master_mix: "Master mix", curve: "Standard curve", timer_set: "Timer set", plate: "Plate map",
 };
 
 function BenchRows({ items }: { items: BenchItemRow[] }) {

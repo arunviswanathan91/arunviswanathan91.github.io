@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Beaker, ChartLine, Droplets, FlaskConical, Grid3x3, Pin, Scale, TestTubes, Timer, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Beaker, ChartLine, Droplets, FlaskConical, Grid3x3, Grip, Pin, Scale, TestTubes, Timer, type LucideIcon } from "lucide-react";
 import { getOne, list, useLoad } from "../../lib/db.ts";
 import { fmtDate } from "../../lib/dates.ts";
 import { href, setQuery, type Route } from "../../lib/route.ts";
@@ -16,12 +16,13 @@ import { DilutionTool } from "./DilutionTool.tsx";
 import { HaemocytometerTool } from "./HaemocytometerTool.tsx";
 import { MasterMixTool } from "./MasterMixTool.tsx";
 import { MolarityTool } from "./MolarityTool.tsx";
+import { PlateView } from "./PlateView.tsx";
 import { RecipeTool } from "./RecipeTool.tsx";
 import { TimersView } from "./TimersView.tsx";
 
 const ICONS: Record<ToolId, LucideIcon> = {
   dilution: Droplets, cells: FlaskConical, haemocytometer: Grid3x3, molarity: Scale, convert: ArrowLeftRight,
-  recipe: Beaker, mastermix: TestTubes, curve: ChartLine, timers: Timer,
+  recipe: Beaker, mastermix: TestTubes, curve: ChartLine, timers: Timer, plate: Grip,
 };
 
 /**
@@ -50,6 +51,7 @@ function Tool({ tool, ...props }: ToolProps & { tool: ToolId }) {
     case "mastermix": return <MasterMixTool {...props} />;
     case "curve": return <CurveTool {...props} />;
     case "timers": return <TimersView route={props.route} item={props.item} />;
+    case "plate": return <PlateView route={props.route} id={props.item?.id} />;
   }
 }
 

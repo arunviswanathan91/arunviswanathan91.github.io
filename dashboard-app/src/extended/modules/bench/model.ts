@@ -4,7 +4,7 @@
 import type { BenchKind } from "../../lib/types.ts";
 import { CELL_UNITS, FOLD_UNIT, MASSVOL_UNITS, MOLAR_UNITS, PERCENT_UNIT, dimensionOf, num, type Dimension, type Q } from "./calc.ts";
 
-export type ToolId = "dilution" | "cells" | "haemocytometer" | "molarity" | "convert" | "recipe" | "mastermix" | "curve" | "timers";
+export type ToolId = "dilution" | "cells" | "haemocytometer" | "molarity" | "convert" | "recipe" | "mastermix" | "curve" | "timers" | "plate";
 
 export interface ToolInfo { id: ToolId; label: string; blurb: string; /** What a saved item of this tool is stored as; none for a tool that is not saved. */ kind?: BenchKind }
 export const TOOLS: Record<ToolId, ToolInfo> = {
@@ -17,9 +17,10 @@ export const TOOLS: Record<ToolId, ToolInfo> = {
   mastermix: { id: "mastermix", label: "Master mix", blurb: "Reagent volumes for a number of reactions, with overage.", kind: "master_mix" },
   curve: { id: "curve", label: "Calibration curve", blurb: "Fit a line to standards and read unknowns off it.", kind: "curve" },
   timers: { id: "timers", label: "Multi-timer", blurb: "Several named timers running side by side.", kind: "timer_set" },
+  plate: { id: "plate", label: "Plate map", blurb: "Label the wells of a plate and pipette it well by well.", kind: "plate" },
 };
 /** The order of the tiles on the Bench page. */
-export const TOOL_ORDER: ToolId[] = ["dilution", "cells", "haemocytometer", "molarity", "convert", "recipe", "mastermix", "curve", "timers"];
+export const TOOL_ORDER: ToolId[] = ["dilution", "cells", "haemocytometer", "molarity", "convert", "recipe", "mastermix", "curve", "timers", "plate"];
 export const isTool = (id: string): id is ToolId => id in TOOLS;
 export function toolOfKind(kind: BenchKind): ToolId {
   return TOOL_ORDER.find((t) => TOOLS[t].kind === kind) ?? "dilution";
