@@ -53,7 +53,8 @@ export type ConcType = "molar" | "percent" | "fold" | "massvol";
 export const CONC_TYPES: [ConcType, string][] = [["molar", "Molar"], ["percent", "Percent"], ["fold", "Fold (×)"], ["massvol", "Mass / volume"]];
 export const CONC_UNITS: Record<ConcType, string[]> = { molar: MOLAR_UNITS, percent: [PERCENT_UNIT], fold: [FOLD_UNIT], massvol: MASSVOL_UNITS };
 /** Units a concentration type starts with: [stock, final]. */
-export const CONC_DEFAULT: Record<ConcType, [string, string]> = { molar: ["mM", "µM"], percent: ["%", "%"], fold: ["x", "x"], massvol: ["mg/mL", "µg/mL"] };
+// Stock and target start in the same unit, so typing 10 and 1 means a tenfold dilution and never a hidden thousandfold one.
+export const CONC_DEFAULT: Record<ConcType, [string, string]> = { molar: ["mM", "mM"], percent: ["%", "%"], fold: ["x", "x"], massvol: ["mg/mL", "mg/mL"] };
 
 export type DilutionTab = "dilution" | "serial" | "reverse" | "make";
 export interface DilutionData {
