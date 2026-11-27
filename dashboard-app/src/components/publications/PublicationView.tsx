@@ -13,7 +13,9 @@ import { useEntityCtx } from "../entity/ctx";
 import { PublicationLifecycle } from "./PublicationLifecycle";
 import { PublicationLinked } from "./PublicationLinked";
 import { PublishedVersion } from "./PublishedVersion";
-import { SubmissionTrail } from "./SubmissionTrail";
+import { SubmissionTrail, useSubmissions } from "./SubmissionTrail";
+import { inOrder } from "../../lib/submissions";
+import { publishedOf } from "../../lib/published";
 import { PublicationWorkflow } from "./PublicationWorkflow";
 import { ReviewTasks } from "./ReviewTasks";
 import { useConfirmDialog } from "../ui/ConfirmDialog";
@@ -33,6 +35,7 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
  const [gmailFieldKey,setGmailFieldKey]=useState<string|null>(null);
  const {ask,confirmation}=useConfirmDialog();
  const publication=tables.publications.byId.get(publicationId)??null;
+ const submissions=useSubmissions().data;
 
  const goBack=()=>{
   if(returnProjectId&&projects.byId.has(returnProjectId)){ui.openProject(returnProjectId);return}
@@ -48,7 +51,15 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
  const isOwner=publication.user_id===userId;
  const canEdit=isOwner||accessRole==="editor";
  const editing=editingId===publicationId&&canEdit;
- const editable=def.fields.filter(f=>f.drawer!==false&&isEditable(f)&&f.key!=="stage"&&f.key!=="project_id"&&(isOwner||f.kind!=="tags"));
+ // Journal and rejection type follow the submission trail once there is one, and the DOI the published
+ // version; reviews and decision letters are kept per journal. Those fields leave this panel then.
+ const trail=inOrder((submissions??[]).filter(s=>s.publication_id===publication.id));
+ const latest=trail.at(-1)??null;
+ const derived=new Set([...(trail.length?["venue","rejection_type"]:[]),...(publishedOf(publication)?["doi"]:[]),"decision_email_url","review_comments"]);
+ const editable=def.fields.filter(f=>f.drawer!==false&&isEditable(f)&&f.key!=="stage"&&f.key!=="project_id"&&(isOwner||f.kind!=="tags")&&!derived.has(f.key));
+ const earlier={comments:String(publication.review_comments??"").trim(),email:String(publication.decision_email_url??"").trim()};
+ // Reviewer comments become tasks from the current journal's reviews, else from the paper's earlier notes.
+ const reviewText=(latest?.review_comments||"").trim()||earlier.comments;
  const stamps=def.fields.filter(f=>f.kind==="stamp"&&f.drawer!==false);
  const valueOf=(f:FieldDef)=>f.kind==="tags"&&def.tagEntity?tags.idsFor(def.tagEntity,publication.id):publication[f.key];
  const safeUrl=(f:FieldDef)=>{
@@ -78,13 +89,13 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
   <div className="publication-page-grid">
    <main className="publication-page-main">
     {isOwner&&<SubmissionTrail key={`st-${publication.id}`} publication={publication} canEdit={isOwner}/>}
-    <PublicationLifecycle publication={publication} canEdit={canEdit} canReassign={isOwner}/>
+    <PublicationLifecycle publication={publication} canEdit={canEdit} canReassign={isOwner} stageFollowsTrail={trail.length>0}/>
     <PublishedVersion key={`pv-${publication.id}`} publication={publication} canEdit={canEdit}/>
     <section className="panel publication-workflow-panel">
      <PublicationWorkflow publicationId={publication.id} canEdit={canEdit} canDelete={isOwner}/>
     </section>
     <PublicationLinked publicationId={publication.id}/>
-    {canEdit&&String(publication.review_comments??"").trim()&&<ReviewTasks key={`rt-${publication.id}`} publication={publication}/>}
+    {canEdit&&reviewText&&<ReviewTasks key={`rt-${publication.id}-${latest?.id??""}`} publication={{...publication,review_comments:reviewText}}/>}
     <PublicationNotes key={publication.id} publicationId={publication.id} canEdit={canEdit} canDelete={isOwner}/>
    </main>
 
@@ -102,6 +113,11 @@ export function PublicationView({publicationId,returnProjectId,accessRole}:{
       </div>
      </div>)}
     </div>
+    {(trail.length>0||publishedOf(publication))&&<p className="muted-note">{trail.length>0&&<>Journal: <strong>{latest!.journal}</strong>{publication.rejection_type?` · ${publication.rejection_type}`:""} (from Submissions). </>}{publishedOf(publication)&&<>DOI: {publishedOf(publication)!.doi??"none"} (from the published version).</>}</p>}
+    {(earlier.comments||earlier.email)&&<div className="publication-earlier"><span className="field-label">Earlier notes</span>
+     {/^https?:\/\//i.test(earlier.email)&&<p><a href={earlier.email} target="_blank" rel="noopener noreferrer">Decision email</a></p>}
+     {earlier.comments&&<p>{earlier.comments}</p>}
+     <span className="muted-note">Recorded before reviews were kept per journal. New ones go on the journal's entry under Submissions.</span></div>}
     <footer className="publication-details-foot">
      <div className="stamp-row">{stamps.map(f=>publication[f.key]?<span key={f.key}>{f.label} {formatDate(publication[f.key],true)}</span>:null)}</div>
      {isOwner&&<button className="danger-button" onClick={remove}><Trash2/>Move to Trash</button>}

@@ -1,4 +1,5 @@
 import { GripVertical } from "lucide-react";
+import { SubmissionTrail } from "../publications/SubmissionTrail";
 import { FieldValue } from "./FieldValue";
 import { QuickActions } from "./QuickActions";
 import type { ValueCtx } from "./FieldValue";
@@ -34,6 +35,7 @@ export function BoardCard({def,row,ctx,selected,selecting,onToggle,onOpen,onQuic
   {slot("subtitle").length>0&&<p className="card-sub clamp-2">{slot("subtitle").map(cell)}</p>}
   {slot("meta").length>0&&<div className="card-meta">{slot("meta").map(cell)}</div>}
   <QuickActions actions={def.quickActions} row={row} onRun={onQuickAction}/>
+  {def.key==="publications"&&<SubmissionTrail publication={row} canEdit compact/>}
   <footer className="card-foot">
    <div className="card-foot-left">{slot("footer").map(cell)}</div>
    <div className="card-foot-right">{slot("badge").map(cell)}</div>

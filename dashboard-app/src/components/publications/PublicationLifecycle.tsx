@@ -24,7 +24,9 @@ const possibleOutcomes=(stage:string)=>stage==="Under Review"?"Revision requeste
 
 /** Canonical editorial lifecycle and durable stage history. It intentionally
  * stays separate from PublicationWorkflow's freely editable paper work nodes. */
-export function PublicationLifecycle({publication,canEdit=true,canReassign=true}:{publication:Row;canEdit?:boolean;canReassign?:boolean}){
+export function PublicationLifecycle({publication,canEdit=true,canReassign=true,stageFollowsTrail=false}:{publication:Row;canEdit?:boolean;canReassign?:boolean;
+ /** The stage is set by the submission trail; only Published is chosen by hand (when the paper is out). */
+ stageFollowsTrail?:boolean}){
  const {projects,tables,publicationStageEvents,tags}=useData();
  const ui=useUi();
  const [editingId,setEditingId]=useState<string|null>(null);
@@ -72,8 +74,9 @@ export function PublicationLifecycle({publication,canEdit=true,canReassign=true}
    <div>{canEdit&&<EditToggle editing={editing} onChange={value=>setEditingId(value?publication.id:null)} label="publication stage and project"/>}
    {editing&&<label className="paper-stage-control"><span>Update stage</span>
     <SelectMenu className="paper-stage-select" value={stage} label="Update publication stage" disabled={!canEdit}
-     options={PUBLICATION_STAGE.map(value=>({value,label:value}))}
+     options={PUBLICATION_STAGE.filter(value=>!stageFollowsTrail||value===stage||value==="Published").map(value=>({value,label:value}))}
      onChange={value=>void tables.publications.update(publication.id,{stage:value})}/>
+    {stageFollowsTrail&&<small className="muted-note">The stage follows Submissions.</small>}
    </label>}</div>
   </header>
 

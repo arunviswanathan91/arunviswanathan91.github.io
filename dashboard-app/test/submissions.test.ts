@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nextSteps, publicationPatch, stepPatch, summarise, isDecided, daysAt, type Submission } from '../src/lib/submissions.ts';
+import { nextSteps, publicationPatch, stepPatch, summarise, isDecided, daysAt, daysInStep, submittedOnPatch, decidedOnPatch, paperOfProject, projectPhaseFor, type Submission } from '../src/lib/submissions.ts';
 
 const sub=(over:Partial<Submission>):Submission=>({id:'s',publication_id:'p',journal:'J',position:0,status:'submitted',submitted_on:'2026-01-10',decided_on:null,
- history:[{status:'submitted',on:'2026-01-10'}],manuscript_ref:'',notes:'',created_at:'2026-01-10T00:00:00Z',updated_at:'2026-01-10T00:00:00Z',...over});
+ history:[{status:'submitted',on:'2026-01-10'}],manuscript_ref:'',notes:'',review_comments:'',decision_email_url:'',created_at:'2026-01-10T00:00:00Z',updated_at:'2026-01-10T00:00:00Z',...over});
 
 test('a submission offers only the steps that can follow its state',()=>{
  assert.deepEqual(nextSteps('submitted').map(s=>s.status),['under_review','desk_rejected','withdrawn']);
@@ -43,9 +43,44 @@ test('the summary counts rejections by kind and says where the paper is now',()=
  assert.equal(t.current?.journal,'Cancer Research');
  assert.deepEqual(t.deskRejections.map(r=>r.journal),['Nature Cancer']);
  assert.deepEqual(t.reviewRejections.map(r=>r.journal),['Gut']);
- assert.equal(t.headline,'Under review at Cancer Research · 10 days in this step.');
+ assert.equal(t.headline,'Under review at Cancer Research · 10 days in this step, 15 days at this journal.');
  assert.equal(daysAt(rows[1],'2026-03-16'),4);
  assert.equal(summarise([],'2026-03-16').headline,'Not submitted anywhere yet.');
  assert.equal(summarise([rows[1]],'2026-03-16').headline,'Desk rejected at Nature Cancer. Not at a journal now.');
  assert.equal(summarise([sub({status:'accepted',decided_on:'2026-02-01'})],'2026-03-16').headline,'Accepted at J.');
+});
+
+test('a back-dated or re-dated submission counts the same days on the card and in the detail',()=>{
+ // Entered today as submitted four days ago.
+ const fresh=sub({submitted_on:'2026-11-23',history:[{status:'submitted',on:'2026-11-23'}]});
+ assert.equal(summarise([fresh],'2026-11-27').headline,'Submitted to J · 4 days.');
+ // Recorded with today's date, then the submitted date corrected: the first step moves with it.
+ const wrong=sub({submitted_on:'2026-11-27',history:[{status:'submitted',on:'2026-11-27'}]});
+ const fixed={...wrong,...submittedOnPatch(wrong,'2026-11-23')};
+ assert.deepEqual(fixed.history,[{status:'submitted',on:'2026-11-23'}]);
+ assert.equal(daysInStep(fixed,'2026-11-27'),4);assert.equal(daysAt(fixed,'2026-11-27'),4);
+ // Moving the submitted date later never leaves an earlier step behind it.
+ const later=submittedOnPatch(sub({history:[{status:'submitted',on:'2026-01-10'},{status:'under_review',on:'2026-01-12'}]}),'2026-01-15');
+ assert.deepEqual(later.history.map(h=>h.on),['2026-01-15','2026-01-15']);
+ const decided=decidedOnPatch(sub({history:[{status:'submitted',on:'2026-01-10'},{status:'desk_rejected',on:'2026-01-14'}]}),'2026-01-12');
+ assert.equal(decided.decided_on,'2026-01-12');assert.equal(decided.history.at(-1)!.on,'2026-01-12');
+});
+
+test('a project follows the paper that speaks for it',()=>{
+ for(const phase of ['Planning','Active','Analysis','Writing',null]){
+  for(const s of ['submitted','under_review','revision_requested','resubmitted','accepted'] as const)assert.equal(projectPhaseFor(phase,s),'Submitted');
+ }
+ assert.equal(projectPhaseFor('Submitted','under_review'),null,'already there');
+ for(const s of ['desk_rejected','rejected','withdrawn'] as const){
+  assert.equal(projectPhaseFor('Submitted',s),'Writing');
+  assert.equal(projectPhaseFor('Analysis',s),null,'a project that was not Submitted is left alone');
+ }
+ for(const phase of ['Paused','Completed','Archived'])for(const s of ['submitted','rejected','accepted'] as const)assert.equal(projectPhaseFor(phase,s),null);
+ assert.equal(projectPhaseFor('Writing',null),null);
+ // Which paper speaks: the output publication, else the only publication, else none.
+ const papers=[{id:'a',project_id:'p'},{id:'b',project_id:'p'},{id:'c',project_id:'q'}];
+ assert.equal(paperOfProject({id:'p',output_publication_id:'b'},papers),'b');
+ assert.equal(paperOfProject({id:'p'},papers),null);
+ assert.equal(paperOfProject({id:'q'},papers),'c');
+ assert.equal(paperOfProject({id:'z'},papers),null);
 });

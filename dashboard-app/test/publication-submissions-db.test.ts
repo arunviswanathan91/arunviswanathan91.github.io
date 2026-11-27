@@ -39,6 +39,8 @@ test('submission trail: yours only, ordered per paper, checked, and carried by b
  await db.query(`insert into ws_publication_submissions(publication_id,journal,position,status,submitted_on,decided_on,history) values($1,'Nature Cancer',0,'desk_rejected','2026-01-10','2026-01-14','[{"status":"submitted","on":"2026-01-10"},{"status":"desk_rejected","on":"2026-01-14"}]')`,[paper]);
  await db.query(`insert into ws_publication_submissions(publication_id,journal,position,status,submitted_on) values($1,'Cancer Research',1,'under_review','2026-01-20')`,[paper]);
  assert.equal(await count('ws_publication_submissions'),2,'the other account’s trail is invisible');
+ // Each journal keeps its own reviews and decision letter.
+ await db.query(`update ws_publication_submissions set review_comments='Reviewer 1: add a validation cohort',decision_email_url='https://mail.example.org/1' where journal='Cancer Research'`);
 
  // Backup and restore carry the trail.
  const backup=(await one(`select ws_backup_data() as b`)).b;
@@ -47,5 +49,6 @@ test('submission trail: yours only, ordered per paper, checked, and carried by b
  const restored=(await one(`select ws_restore_data($1,$2) as r`,[uid,JSON.stringify(backup)])).r;
  assert.equal(restored.ws_publication_submissions,2);
  assert.deepEqual((await db.query<any>(`select journal from ws_publication_submissions order by position`)).rows.map((r)=>r.journal),['Nature Cancer','Cancer Research']);
+ assert.equal((await one(`select review_comments as c from ws_publication_submissions where journal='Cancer Research'`)).c,'Reviewer 1: add a validation cohort');
  }finally{await db.close()}
 });

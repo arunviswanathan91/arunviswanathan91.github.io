@@ -61,20 +61,6 @@ export const tasks:EntityDef={
  ],
 };
 
-// One click from "Under Review"/"Revision Requested" both changes the stage and
-// records *why*, so triage never leaves a Rejected card with a blank reason.
-const publicationQuickActions:QuickAction[]=[
- {key:"desk-reject",label:"Desk reject",icon:MailX,tone:"red",
-  show:r=>r.stage==="Under Review",
-  patch:()=>({stage:"Rejected",rejection_type:"Desk rejection"})},
- {key:"reviewed-reject",label:"Rejected after review",icon:PenLine,tone:"red",
-  show:r=>r.stage==="Under Review"||r.stage==="Revision Requested",
-  patch:()=>({stage:"Rejected",rejection_type:"After review"})},
- {key:"accept",label:"Accepted",icon:PartyPopper,tone:"green",
-  show:r=>r.stage==="Under Review"||r.stage==="Revision Requested",
-  patch:()=>({stage:"Accepted"})},
-];
-
 export const publications:EntityDef={
  key:"publications",table:"publications",tagEntity:"publication",
  select:"id,user_id,title,venue,stage,rejection_type,review_comments,decision_email_url,"+
@@ -86,7 +72,6 @@ export const publications:EntityDef={
  // it stays "open" like everything else short of Published.
  openWhen:r=>r.stage!=="Published",
  newDefaults:({userId,projectId})=>({user_id:userId,stage:"Idea",project_id:projectId}),
- quickActions:publicationQuickActions,
  fields:[
   {key:"title",kind:"text",label:"Title",required:true,create:true,card:"title",table:4,sort:true},
   {key:"venue",kind:"text",label:"Journal / venue",create:true,card:"subtitle",table:2,sort:true,placeholder:"Journal or conference"},
