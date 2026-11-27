@@ -65,7 +65,7 @@ export function PipetteMode({ plate, mapTitle, saved, onProgress, onNote, onClos
   const doneCount = stepsDone(steps, done);
   const finished = steps.length > 0 && doneCount === steps.length;
 
-  // The step in hand is remembered by its first well, so it stays put when the order changes.
+  // The step in hand is remembered by its first well; with none remembered it is the first one still to do.
   const [currentId, setCurrentId] = useState<string | null>(null);
   const found = currentId ? steps.findIndex((s) => s.includes(currentId)) : -1;
   const firstOpen = steps.length ? nextOpenStep(steps, done, steps.length - 1) : -1;
@@ -100,8 +100,10 @@ export function PipetteMode({ plate, mapTitle, saved, onProgress, onNote, onClos
   }, [confirmReset]);
 
   const save = (patch: Partial<Progress>) => onProgress({ ...p, order, ...patch });
+  // Changing the order (or snake, labelled-only, channels) continues at the first well still to do
+  // in the new order, so switching from rows to columns after A1–A3 goes to B1, not past it.
   function setup(patch: Partial<Progress>) {
-    setCurrentId(current[0] ?? null);
+    setCurrentId(null);
     save(patch);
   }
   function pipetted() {
