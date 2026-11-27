@@ -18,24 +18,20 @@ import type { EntityKey, Row } from "../../entities/types";
 import type { Person, Project, ProjectStage } from "../../lib/store";
 import { ProjectSection, type ProjectSectionTab } from "../../extended/modules/projects/ProjectSections";
 import { DateInput } from "../ui/DateInput";
-import { SubmissionTrail } from "../publications/SubmissionTrail";
+import { PROJECT_PHASES, phaseLabel, phasePatch, rememberProjectTab, takeProjectTab } from "../../lib/projectPhase";
+import { paperOfProject, summarise } from "../../lib/submissions";
+import { today } from "../../extended/lib/dates";
+import { SubmissionTrail, useSubmissions } from "../publications/SubmissionTrail";
 import { publishedLink, publishedOf, publishedSource } from "../../lib/published";
 
 type ProjectTab="overview"|"work"|"publications"|ProjectSectionTab|"reads"|"people";
 const PROJECT_TABS:ProjectTab[]=["overview","work","publications","papers","notes","experiments","meetings","deadlines","trips","goals","reads","files","people"];
 // Old workspace links say ?tab=tasks for the work board.
 const tabFromHash=():ProjectTab=>{const t=new URLSearchParams(location.hash.split("?")[1]??"").get("tab");return t==="tasks"?"work":PROJECT_TABS.includes(t as ProjectTab)?t as ProjectTab:"overview"};
-// Phase is the one project stage the user edits; the workspace lists read the coarser ws_status.
-const WS_STATUS:Record<string,string>={Planning:"planned",Active:"active",Analysis:"active",Writing:"active",Paused:"paused",Completed:"completed",Archived:"archived"};
-const phasePatch=(phase:string)=>({phase,ws_status:WS_STATUS[phase]??"active",status:phase==="Archived"?"Archived":"Active",
- completed_on:phase==="Completed"?new Date().toISOString().slice(0,10):null});
 const AREAS=[["research","Research"],["personal","Personal"],["teaching","Teaching"],["administration","Administration"],["career","Career"],["other","Other"]].map(([value,label])=>({value,label}));
 type ProjectEntityKey="tasks"|"publications"|"reads";
 type ComposerState={key:ProjectEntityKey;seed:Record<string,unknown>}|null;
 const TASK_MIME="application/x-science-project-task";
-const PROJECT_PHASES=["Planning","Active","Paused","Analysis","Writing","Completed","Archived"] as const;
-// A finished project is "Closed" to the reader; the stored phase stays "Completed".
-export const phaseLabel=(phase:string|null|undefined)=>phase==="Completed"?"Closed":phase||"Planning";
 const options=(values:readonly string[])=>values.map(value=>({value,label:phaseLabel(value)}));
 const isClosed=(p:Project)=>p.phase==="Completed";
 
@@ -45,7 +41,8 @@ const safeHttp=(value:string)=>{try{const u=new URL(value);return u.protocol==="
 export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?:"editor"|"viewer"}){
  const data=useData(),ui=useUi();
  const project=data.projects.byId.get(projectId)??null;
- const [tab,setTab]=useState<ProjectTab>(tabFromHash);
+ // Coming back from a publication reopens the tab it was opened from.
+ const [tab,setTab]=useState<ProjectTab>(()=>{const back=takeProjectTab(projectId);return back&&PROJECT_TABS.includes(back as ProjectTab)&&tabFromHash()==="overview"?back as ProjectTab:tabFromHash()});
  const [composer,setComposer]=useState<ComposerState>(null);
  const [manageStages,setManageStages]=useState(false);
  const [closing,setClosing]=useState(false);
@@ -62,6 +59,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
  const projectReads=useMemo(()=>data.tables.reads.rows.filter(r=>r.project_id===projectId),[data.tables.reads.rows,projectId]);
  const projectPersonIds=useMemo(()=>new Set(data.projectPeople.rows.filter(row=>row.project_id===projectId).map(row=>row.person_id)),[data.projectPeople.rows,projectId]);
  const projectPeople=useMemo(()=>data.people.rows.filter(person=>projectPersonIds.has(person.id)),[data.people.rows,projectPersonIds]);
+ const submissions=useSubmissions().data;
 
  if(!project)return <div className="empty-state"><FolderKanban/><p>This project is unavailable or was deleted.</p>
   <button className="primary" onClick={()=>ui.setView("home")}>Return home</button></div>;
@@ -79,6 +77,10 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
   if(tagIds.length&&def.tagEntity)await data.tags.setFor(def.tagEntity,row.id,tagIds);
   return true;
  };
+ // The paper that speaks for the project (its output publication, else its only one) and where it stands.
+ const paperId=isOwner?paperOfProject(project,data.tables.publications.rows):null;
+ const paperTrail=paperId&&submissions?summarise(submissions.filter(s=>s.publication_id===paperId),today()):null;
+ const openPaper=(id:string)=>{rememberProjectTab(projectId,tab);ui.openPublication(id)};
  const drawer=ui.drawer;
  const drawerRow=drawer?data.tables[drawer.entity].byId.get(drawer.id)??null:null;
 
@@ -104,7 +106,9 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
    </div>
   </header>
 
-  {isClosed(project)&&<ClosedBanner project={project} isOwner={isOwner} onOpen={ui.openPublication}/>}
+  {paperId&&paperTrail?.current&&!isClosed(project)&&<p className="project-paper-line"><span>Paper: <button className="link-button" onClick={()=>openPaper(paperId)}>{paperTrail.headline}</button></span>
+   {paperTrail.current.status==="accepted"&&project.phase!=="Archived"&&<button className="secondary" onClick={()=>setClosing(true)}><CircleCheck/>Paper accepted: close this project?</button>}</p>}
+  {isClosed(project)&&<ClosedBanner project={project} isOwner={isOwner} onOpen={openPaper}/>}
   {closing&&<CloseProjectDialog project={project} onClose={()=>setClosing(false)}/>}
 
   <nav className="project-tabs" aria-label="Project sections">
@@ -116,7 +120,7 @@ export function ProjectView({projectId,accessRole}:{projectId:string;accessRole?
   {tab==="work"&&<ProjectBoard project={project} stages={stages} tasks={projectTasks}
    canEdit={canEdit} onAdd={stageId=>newEntity("tasks",{stage_id:stageId})} onOpen={id=>ui.openDrawer("tasks",id)} onManage={()=>setManageStages(true)}/>}
   {tab==="publications"&&<ProjectPublications project={project} direct={directPapers} related={relatedPapers}
-   canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("publications")} onOpen={ui.openPublication}/>}
+   canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("publications")} onOpen={openPaper}/>}
   {(tab==="papers"||tab==="notes"||tab==="experiments"||tab==="meetings"||tab==="deadlines"||tab==="trips"||tab==="goals"||tab==="files")&&<ProjectSection key={tab} id={projectId} tab={tab}/>}
   {tab==="reads"&&<ProjectReads project={project} rows={projectReads}
    canEdit={canEdit} isOwner={isOwner} onAdd={()=>newEntity("reads")} onOpen={id=>ui.openDrawer("reads",id)}/>}
@@ -159,7 +163,7 @@ function ClosedBanner({project,isOwner,onOpen}:{project:Project;isOwner:boolean;
 
 function CloseProjectDialog({project,onClose}:{project:Project;onClose():void}){
  const {projects,tables}=useData();
- const [output,setOutput]=useState(project.output_publication_id??"");
+ const [output,setOutput]=useState(project.output_publication_id??paperOfProject(project,tables.publications.rows)??"");
  const close=async()=>{await projects.update(project.id,{...phasePatch("Completed"),output_publication_id:output||null});onClose()};
  return <Modal kicker="Project" title="Close this project" onClose={onClose}
   footer={<><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={()=>void close()}>Close project</button></>}>

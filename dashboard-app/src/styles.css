@@ -1449,3 +1449,8 @@ a.resource-button{color:var(--text);text-decoration:none}
 .submission-trail.is-compact{display:grid;gap:6px;margin:var(--s-2) 0;padding-top:var(--s-2);border-top:1px solid var(--border)}
 .submission-trail.is-compact .submission-actions{margin-top:2px}
 .submission-chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px}
+
+/* Publications: one model around the submission trail. */
+.project-paper-line{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap;margin:0;font-size:var(--f-sm);color:var(--text-2)}
+.publication-earlier{display:grid;gap:4px;margin-top:var(--s-3);padding-top:var(--s-3);border-top:1px solid var(--border);font-size:var(--f-sm)}
+.publication-earlier p{margin:0;white-space:pre-wrap}

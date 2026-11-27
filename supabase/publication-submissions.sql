@@ -23,6 +23,9 @@ create table if not exists public.ws_publication_submissions (
   updated_at     timestamptz not null default now(),
   check (decided_on is null or decided_on >= submitted_on)
 );
+-- Each journal has its own reviews and decision letter.
+alter table public.ws_publication_submissions add column if not exists review_comments text not null default '';
+alter table public.ws_publication_submissions add column if not exists decision_email_url text not null default '';
 create index if not exists publication_submissions_paper_idx on public.ws_publication_submissions (publication_id, position, submitted_on);
 select ws_private.secure_table('public.ws_publication_submissions');
 drop trigger if exists publication_submissions_touch on public.ws_publication_submissions;
