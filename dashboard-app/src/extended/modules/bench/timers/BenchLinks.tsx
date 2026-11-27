@@ -40,7 +40,10 @@ export function ProtocolBench({ protocolId }: { protocolId: string }) {
     <div className="card pad">
       <div className="section-head">
         <h3>Bench</h3>
-        <a className="small" href={href("bench/timers", { protocol: protocolId })}><Plus size={13} aria-hidden /> New timer set for this protocol</a>
+        <span className="row wrap">
+          <a className="small" href={href("bench/recipe", { protocol: protocolId })}><Plus size={13} aria-hidden /> New recipe for this protocol</a>
+          <a className="small" href={href("bench/timers", { protocol: protocolId })}><Plus size={13} aria-hidden /> New timer set for this protocol</a>
+        </span>
       </div>
       {items.length > 0 && <BenchRows items={items} />}
     </div>

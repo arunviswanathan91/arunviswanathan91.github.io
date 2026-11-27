@@ -19,7 +19,7 @@ function needsMw(c: RecipeRow): boolean {
   return c.mode === "powder" ? dimensionOf(c.desired.unit) === "molar" : mixable(c.desired.unit, c.stock.unit);
 }
 
-export function RecipeTool({ item }: ToolProps) {
+export function RecipeTool({ item, route }: ToolProps) {
   const [d, setD] = useState(() => recipeData(item?.data));
   const [ticked, setTicked] = useState<Set<number>>(new Set()); // while pipetting; not saved
   const set = (patch: Partial<RecipeData>) => setD((x) => ({ ...x, ...patch }));
@@ -60,42 +60,62 @@ export function RecipeTool({ item }: ToolProps) {
   ].join("\n");
 
   return (
-    <ToolFrame tool="recipe" item={item} data={d} suggestedTitle={d.name}>
-      <Panel title="Recipe">
-        <div className="bench-fields">
-          <TextField label="Name" value={d.name} placeholder="e.g. RIPA lysis buffer" onChange={(name) => set({ name })} />
-          <Quantity label="Final volume" units={VOLUME_UNITS} value={d.volume} placeholder="50" onChange={(volume) => set({ volume })} />
-          <TextField label="Solvent" value={d.solvent} placeholder="Water" onChange={(solvent) => set({ solvent })} />
-        </div>
-        <p className="muted small">Change the final volume to rescale the whole recipe.</p>
-      </Panel>
+    <ToolFrame tool="recipe" item={item} route={route} data={d} suggestedTitle={d.name} readable>
+      {(editing) => <>
+      {editing ? (
+        <>
+          <Panel title="Recipe">
+            <div className="bench-fields">
+              <TextField label="Name" value={d.name} placeholder="e.g. RIPA lysis buffer" onChange={(name) => set({ name })} />
+              <Quantity label="Final volume" units={VOLUME_UNITS} value={d.volume} placeholder="50" onChange={(volume) => set({ volume })} />
+              <TextField label="Solvent" value={d.solvent} placeholder="Water" onChange={(solvent) => set({ solvent })} />
+            </div>
+            <p className="muted small">Change the final volume to rescale the whole recipe.</p>
+          </Panel>
 
-      <Panel title="Components">
-        <ul className="bench-rows">
-          {d.components.map((c, k) => (
-            <li key={k}>
-              <div className="bench-fields">
-                <TextField label={`Component ${k + 1}`} value={c.name} placeholder="e.g. NaCl" onChange={(name) => setRow(k, { name })} />
-                <label className="field">
-                  <span>Added as</span>
-                  <select value={c.mode} onChange={(e) => setMode(k, e.target.value as RecipeRow["mode"])}>
-                    <option value="stock">From stock solution</option>
-                    <option value="powder">From powder</option>
-                  </select>
-                </label>
-                <Quantity label="Wanted concentration" units={c.mode === "stock" ? STOCK_UNITS : POWDER_UNITS} names={c.mode === "powder" ? POWDER_NAMES : undefined} value={c.desired} onChange={(v) => setDesired(k, v)} />
-                {c.mode === "stock" && <Quantity label="Stock concentration" units={STOCK_UNITS} value={c.stock} onChange={(stock) => setRow(k, { stock })} />}
-                {needsMw(c) && <NumField label="Molecular weight" value={c.mw} suffix="g/mol" onChange={(mw) => setRow(k, { mw })} />}
-              </div>
-              <div className="bench-row-foot">
-                <span className={lines[k].reason ? "neg" : ""}>{lines[k].amount ? <>→ <strong className="num">{fmtQ(lines[k].amount)}</strong></> : lines[k].reason || <span className="muted">→ …</span>}</span>
-                <button type="button" className="icon danger" aria-label={`Remove ${c.name.trim() || `component ${k + 1}`}`} onClick={() => rows(d.components.filter((_, j) => j !== k))}><Trash2 size={15} /></button>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <button type="button" onClick={() => rows([...d.components, newRecipeRow()])}><Plus size={14} /> Add component</button>
-      </Panel>
+          <Panel title="Components">
+            <ul className="bench-rows">
+              {d.components.map((c, k) => (
+                <li key={k}>
+                  <div className="bench-fields">
+                    <TextField label={`Component ${k + 1}`} value={c.name} placeholder="e.g. NaCl" onChange={(name) => setRow(k, { name })} />
+                    <label className="field">
+                      <span>Added as</span>
+                      <select value={c.mode} onChange={(e) => setMode(k, e.target.value as RecipeRow["mode"])}>
+                        <option value="stock">From stock solution</option>
+                        <option value="powder">From powder</option>
+                      </select>
+                    </label>
+                    <Quantity label="Wanted concentration" units={c.mode === "stock" ? STOCK_UNITS : POWDER_UNITS} names={c.mode === "powder" ? POWDER_NAMES : undefined} value={c.desired} onChange={(v) => setDesired(k, v)} />
+                    {c.mode === "stock" && <Quantity label="Stock concentration" units={STOCK_UNITS} value={c.stock} onChange={(stock) => setRow(k, { stock })} />}
+                    {needsMw(c) && <NumField label="Molecular weight" value={c.mw} suffix="g/mol" onChange={(mw) => setRow(k, { mw })} />}
+                  </div>
+                  <div className="bench-row-foot">
+                    <span className={lines[k].reason ? "neg" : ""}>{lines[k].amount ? <>→ <strong className="num">{fmtQ(lines[k].amount)}</strong></> : lines[k].reason || <span className="muted">→ …</span>}</span>
+                    <button type="button" className="icon danger" aria-label={`Remove ${c.name.trim() || `component ${k + 1}`}`} onClick={() => rows(d.components.filter((_, j) => j !== k))}><Trash2 size={15} /></button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => rows([...d.components, newRecipeRow()])}><Plus size={14} /> Add component</button>
+          </Panel>
+        </>
+      ) : (
+        <Panel title="Recipe" className="bench-recipe-read">
+          <div className="bench-fields bench-rescale">
+            <Quantity label="Final volume" units={VOLUME_UNITS} value={d.volume} placeholder="50" onChange={(volume) => set({ volume })} />
+          </div>
+          <p className="muted small">Change the final volume to rescale the amounts below. Press Edit to change the components.</p>
+          <ul className="bench-recipe-list">
+            {d.components.map((c, k) => (
+              <li key={k}>
+                <span className="bench-line-name">{c.name.trim() || `Component ${k + 1}`}</span>
+                <span className="muted small bench-line-how">{how(c)}</span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       <Panel title={`To make${total ? ` ${total}` : ""}`} className="bench-results">
         {reason && <p className="error" role="alert">{reason}</p>}
@@ -128,6 +148,7 @@ export function RecipeTool({ item }: ToolProps) {
           {ticked.size > 0 && <button type="button" onClick={() => setTicked(new Set())}>Untick all</button>}
         </div>
       </Panel>
+      </>}
     </ToolFrame>
   );
 }

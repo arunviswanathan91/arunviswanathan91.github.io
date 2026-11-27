@@ -1202,3 +1202,15 @@
 .extension-workspace .bench-tubes .value { fill: var(--text); font-size: 10px; }
 .extension-workspace .bench-tubes .note { fill: var(--muted); font-size: 10px; }
 .extension-workspace .bench-series th, .extension-workspace .bench-series td, .extension-workspace .bench-series td.num { white-space: nowrap; }
+
+/* Read-first protocol and recipe pages: the heading, the one-line purpose, and the facts. */
+.extension-workspace .detail-title, .extension-workspace .bench-read-title { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; line-height: 1.2; }
+.extension-workspace .detail-subtitle { color: var(--text-2); font-size: var(--f-md); margin: 0 0 10px; max-width: 70ch; }
+.extension-workspace .library-read-head { margin-bottom: 14px; }
+.extension-workspace .library-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.extension-workspace .library-facts a { display: inline-flex; align-items: center; gap: 4px; }
+.extension-workspace .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.extension-workspace .bench-read-notes { white-space: pre-wrap; color: var(--text-2); margin: 10px 0 0; }
+.extension-workspace .bench-recipe-read .bench-rescale { max-width: 280px; margin-bottom: 8px; }
+.extension-workspace .bench-recipe-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.extension-workspace .bench-recipe-list li { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--r-2, 10px); background: var(--surface); }
