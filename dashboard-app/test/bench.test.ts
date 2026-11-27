@@ -3,9 +3,16 @@ import assert from 'node:assert/strict';
 import {
  convert, dimensionOf, num, fmt, fmtQ, bestUnit, unitLabel, unitsOf, dilution, parseRatio, serialSeries, stepFactor, stepsToReach, reverseDilution, makeSolution, cellDilution, seeding, haemocytometer, haemocytometerTotal, unevenCounts,
  massToWeigh, molesFromMass, concentrationFrom, recipe, masterMix, linearFit, predictX, predictY, parsePairs, niceTicks,
+ normalCdf, normalInv, effectFromFoldCv, foldFromEffectCv, effectFromCount, log2FcFromCountEffect, powerOf, sampleSizeFor, detectableEffectFor,
  type Q, type Qty,
 } from '../src/extended/modules/bench/calc.ts';
-import { haemoData, recount, tally, totalsOf, layoutOf } from '../src/extended/modules/bench/model.ts';
+import { haemoData, recount, tally, totalsOf, layoutOf, powerData } from '../src/extended/modules/bench/model.ts';
+
+/** Close enough for approximation-based stats (relative tolerance). */
+const close=(actual:number|null|undefined,expected:number,tol:number,msg?:string)=>{
+ assert.ok(typeof actual==='number'&&Number.isFinite(actual),`${msg??''} expected ${expected}, got ${actual}`);
+ assert.ok(Math.abs(actual-expected)<=tol*Math.max(1,Math.abs(expected)),`${msg??''} expected ${expected}, got ${actual}`);
+};
 
 /** Equal to within floating-point rounding (1 part in 10¹²). */
 const near=(actual:number|null|undefined,expected:number,msg?:string)=>{
@@ -801,4 +808,80 @@ test('no result ever holds NaN or Infinity',()=>{
  }
  const wild=[{x:1e308,y:1e308},{x:-1e308,y:1e308},{x:1e-320,y:3}];
  for(const o of [false,true]){const f=linearFit(wild,o);assert.ok(finite(f),JSON.stringify(f));assert.ok(finite(predictX(f,1e308)));assert.ok(finite(predictY(f,1e308)))}
+});
+
+// ── Power & sample size ──────────────────────────────────────────────────────
+
+test('normal distribution helpers hit known anchors',()=>{
+ close(normalCdf(0),0.5,1e-7);
+ close(normalCdf(1.959964),0.975,1e-6);
+ close(normalCdf(-1.959964),0.025,1e-6);
+ close(normalInv(0.975),1.959964,1e-6);
+ close(normalInv(0.8),0.8416212,1e-6);
+ close(normalInv(0.5),0,1e-7);
+ // round trip
+ for(const z of [-2.3,-0.5,0.7,3.1]) close(normalInv(normalCdf(z)),z,1e-5);
+});
+
+test('two-sample t-test sample size matches textbook values',()=>{
+ const c={alpha:0.05,sides:2 as const,features:1};
+ // Cohen: d=0.5, 80% power -> ~64/group (normal approx 63); d=0.8 -> ~26 (approx 25)
+ assert.equal(sampleSizeFor({...c,effect:0.5,power:0.8}).result?.nPerGroup,63);
+ assert.equal(sampleSizeFor({...c,effect:0.8,power:0.8}).result?.nPerGroup,25);
+ assert.equal(sampleSizeFor({...c,effect:0.5,power:0.8}).result?.nTotal,126);
+ // 90% power needs more than 80%
+ assert.ok((sampleSizeFor({...c,effect:0.5,power:0.9}).result?.nPerGroup??0) > 63);
+});
+
+test('power and sample size invert each other',()=>{
+ const c={alpha:0.05,sides:2 as const,features:1};
+ const n=sampleSizeFor({...c,effect:0.5,power:0.8}).result!.nPerGroup;
+ // at exactly that n, achieved power is at least the target
+ assert.ok((powerOf({...c,effect:0.5,n}).result?.power??0) >= 0.8);
+ // one fewer would fall short
+ assert.ok((powerOf({...c,effect:0.5,n:n-1}).result?.power??0) < 0.8);
+});
+
+test('RNA-seq count engine (Hart) and fold/CV conversions',()=>{
+ // ln(2)/sqrt(1/20 + 0.4^2): 2-fold, depth 20, BCV 0.4
+ const E=effectFromCount(1,20,0.4);
+ close(E,Math.LN2/Math.sqrt(1/20+0.16),1e-9);
+ const n=sampleSizeFor({alpha:0.05,sides:2,features:1,effect:E,power:0.8}).result?.nPerGroup;
+ assert.equal(n,7); // RNASeqPower gives ~7 per group
+ // Bonferroni across 18000 genes needs many more
+ const nB=sampleSizeFor({alpha:0.05,sides:2,features:18000,effect:E,power:0.8}).result?.nPerGroup;
+ assert.ok((nB??0) > n!*3);
+ // round-trip effect <-> log2FC
+ close(log2FcFromCountEffect(E!,20,0.4),1,1e-9);
+ // Cohen's d from fold change + CV, and back
+ const d=effectFromFoldCv(2,0.3)!;
+ close(d,Math.log(2)/Math.sqrt(Math.log(1+0.09)),1e-9);
+ close(foldFromEffectCv(d,0.3),2,1e-9);
+});
+
+test('detectable effect is the inverse of the size calculation',()=>{
+ const c={alpha:0.05,sides:2 as const,features:1};
+ const E=detectableEffectFor({...c,n:63,power:0.8}).result?.effect;
+ // 63/group at 80% power detects about d=0.5
+ close(E,0.5,0.02);
+});
+
+test('power calculator rejects bad inputs, prompts on blanks',()=>{
+ const c={alpha:0.05,sides:2 as const,features:1};
+ assert.equal(sampleSizeFor({...c,effect:null,power:0.8}).incomplete,true);
+ assert.equal(powerOf({...c,effect:0.5,n:null}).incomplete,true);
+ for(const bad of [{...c,alpha:0,effect:0.5,power:0.8},{...c,alpha:1,effect:0.5,power:0.8},{...c,effect:0,power:0.8},{...c,effect:0.5,power:1.2}]){
+  const o=sampleSizeFor(bad as any); assert.equal(o.result,null); assert.equal(o.incomplete,false); assert.ok(o.reason);
+ }
+ assert.equal(powerOf({...c,effect:0.5,n:1}).result,null); // n<2
+ // a fold change of 1 (no effect) cannot be formed
+ assert.equal(effectFromFoldCv(1,0.3),null);
+ assert.equal(effectFromCount(0,20,0.4),null);
+});
+
+test('powerData reads defaults and old saves',()=>{
+ const fresh=powerData(undefined);
+ assert.equal(fresh.profile,'rnaseq_human'); assert.equal(fresh.engine,'count'); assert.equal(fresh.cv,'0.4'); assert.equal(fresh.features,'18000');
+ const saved=powerData({tab:'power',profile:'rtqpcr',engine:'ttest',alpha:'0.01',sides:'one',features:'1',n:'8',fold:'3',cv:'0.25',effectMode:'fold'});
+ assert.equal(saved.tab,'power'); assert.equal(saved.engine,'ttest'); assert.equal(saved.alpha,'0.01'); assert.equal(saved.n,'8'); assert.equal(saved.cv,'0.25');
 });

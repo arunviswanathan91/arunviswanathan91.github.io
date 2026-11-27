@@ -28,6 +28,10 @@ create index if not exists bench_items_experiment_idx on public.ws_bench_items (
 alter table public.ws_bench_items drop constraint if exists ws_bench_items_kind_check;
 alter table public.ws_bench_items add constraint ws_bench_items_kind_check
   check (kind in ('dilution','cell_dilution','haemocytometer','molarity','recipe','master_mix','curve','timer_set','plate'));
+-- The power / sample-size tool is added here, keeping the file rerunnable.
+alter table public.ws_bench_items drop constraint if exists ws_bench_items_kind_check;
+alter table public.ws_bench_items add constraint ws_bench_items_kind_check
+  check (kind in ('dilution','cell_dilution','haemocytometer','molarity','recipe','master_mix','curve','timer_set','plate','power_analysis'));
 select ws_private.secure_table('public.ws_bench_items');
 drop trigger if exists bench_items_touch on public.ws_bench_items;
 create trigger bench_items_touch before update on public.ws_bench_items

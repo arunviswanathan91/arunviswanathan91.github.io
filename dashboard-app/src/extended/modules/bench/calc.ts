@@ -936,3 +936,116 @@ export function niceTicks(min: number, max: number, target = 5): number[] {
   for (let k = first; k <= last && ticks.length < 50; k++) ticks.push(Number((k * step).toPrecision(12)));
   return ticks;
 }
+
+// ── Power and sample size ────────────────────────────────────────────────────
+// Two-group comparison by the normal approximation. The statistic is E·√(n/2), where n is the
+// samples per group and E the standardised effect: Cohen's d for a t-test (Cohen 1988), or
+// ln(FC)/√(1/µ + CV²) for negative-binomial counts (Hart et al., J Comput Biol 2013; RNASeqPower).
+// Multiple testing is a Bonferroni split of α across m features.
+
+/** Standard normal CDF Φ(z) (Zelen & Severo 26.2.17; |error| < 7.5×10⁻⁸). */
+export function normalCdf(z: number): number {
+  if (!Number.isFinite(z)) return z > 0 ? 1 : 0;
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989422804014327 * Math.exp((-z * z) / 2);
+  const upper = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return z >= 0 ? 1 - upper : upper;
+}
+
+/** Inverse standard normal (probit) by Acklam's rational approximation; |relative error| < 1.2×10⁻⁹. */
+export function normalInv(p: number): number {
+  if (!(p > 0)) return -Infinity;
+  if (!(p < 1)) return Infinity;
+  const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2, -3.066479806614716e1, 2.506628277459239];
+  const b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
+  const c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+  const d = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416];
+  const plow = 0.02425, phigh = 1 - plow;
+  let q: number, r: number;
+  if (p < plow) {
+    q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  if (p <= phigh) {
+    q = p - 0.5; r = q * q;
+    return ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  }
+  q = Math.sqrt(-2 * Math.log(1 - p));
+  return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+}
+
+/** Cohen's d for a fold change measured with a log-normal CV: d = ln(FC)/√(ln(1+CV²)). Null if it cannot be formed. */
+export function effectFromFoldCv(fc: number | null, cv: number | null): number | null {
+  if (fc === null || cv === null || !(fc > 0) || fc === 1 || !(cv > 0)) return null;
+  const sd = Math.sqrt(Math.log(1 + cv * cv));
+  return sd > 0 ? Math.log(fc) / sd : null;
+}
+/** The fold change a given Cohen's d corresponds to at a CV: FC = exp(d·√(ln(1+CV²))). */
+export function foldFromEffectCv(effect: number, cv: number): number | null {
+  if (!(cv > 0)) return null;
+  return Math.exp(Math.abs(effect) * Math.sqrt(Math.log(1 + cv * cv)));
+}
+/** Count-engine standardised effect: ln(FC)/√(1/µ + CV²), with ln(FC) = ln(2)·log2FC. Null if it cannot be formed. */
+export function effectFromCount(log2fc: number | null, mu: number | null, cv: number | null): number | null {
+  if (log2fc === null || mu === null || cv === null || log2fc === 0 || !(mu > 0) || cv < 0) return null;
+  const v = 1 / mu + cv * cv;
+  return v > 0 ? (Math.LN2 * log2fc) / Math.sqrt(v) : null;
+}
+/** The log2 fold change a given count-engine effect corresponds to. */
+export function log2FcFromCountEffect(effect: number, mu: number, cv: number): number | null {
+  if (!(mu > 0) || cv < 0) return null;
+  const v = 1 / mu + cv * cv;
+  return v > 0 ? (Math.abs(effect) * Math.sqrt(v)) / Math.LN2 : null;
+}
+
+export interface PowerCommon { alpha: number | null; sides: 1 | 2; features: number | null }
+function alphaStarOf(c: PowerCommon): Outcome<{ alphaStar: number; za: number }> {
+  if (c.alpha === null || c.features === null) return need("Enter the significance level and the number of features.");
+  if (!(c.alpha > 0 && c.alpha < 1)) return no("The significance level α must be between 0 and 1.");
+  if (!(c.features >= 1)) return no("The number of features must be 1 or more.");
+  const alphaStar = c.alpha / c.features;
+  const za = normalInv(1 - alphaStar / c.sides);
+  return Number.isFinite(za) ? ok({ alphaStar, za }) : no("That significance level is too small to use.");
+}
+
+export interface PowerResult { power: number; alphaStar: number }
+/** Power for n samples per group at a standardised effect. */
+export function powerOf(i: PowerCommon & { effect: number | null; n: number | null }): Outcome<PowerResult> {
+  const base = alphaStarOf(i);
+  if (!base.result) return { result: null, reason: base.reason, incomplete: base.incomplete };
+  if (i.effect === null || i.n === null) return need("Enter the effect size and the samples per group.");
+  if (!(Math.abs(i.effect) > 0)) return no("The effect cannot be zero: choose a fold change other than 1.");
+  if (!(i.n >= 2)) return no("There must be at least 2 samples per group.");
+  const power = normalCdf(Math.abs(i.effect) * Math.sqrt(i.n / 2) - base.result.za);
+  if (!Number.isFinite(power)) return no("These values do not give a usable result.");
+  return ok({ power, alphaStar: base.result.alphaStar });
+}
+
+export interface SizeResult { nPerGroup: number; nTotal: number; alphaStar: number }
+/** Samples per group to reach a target power at a standardised effect. */
+export function sampleSizeFor(i: PowerCommon & { effect: number | null; power: number | null }): Outcome<SizeResult> {
+  const base = alphaStarOf(i);
+  if (!base.result) return { result: null, reason: base.reason, incomplete: base.incomplete };
+  if (i.effect === null || i.power === null) return need("Enter the effect size and the power you want.");
+  if (!(Math.abs(i.effect) > 0)) return no("The effect cannot be zero: choose a fold change other than 1.");
+  if (!(i.power > 0 && i.power < 1)) return no("Power must be between 0 and 1 (for example 0.8).");
+  const zb = normalInv(i.power);
+  const raw = (2 * (base.result.za + zb) ** 2) / i.effect ** 2;
+  if (!Number.isFinite(raw) || raw <= 0) return no("These values do not give a usable result.");
+  const nPerGroup = Math.max(2, Math.ceil(raw));
+  return ok({ nPerGroup, nTotal: nPerGroup * 2, alphaStar: base.result.alphaStar });
+}
+
+export interface EffectResult { effect: number; alphaStar: number }
+/** The smallest standardised effect detectable with n per group at a target power. */
+export function detectableEffectFor(i: PowerCommon & { n: number | null; power: number | null }): Outcome<EffectResult> {
+  const base = alphaStarOf(i);
+  if (!base.result) return { result: null, reason: base.reason, incomplete: base.incomplete };
+  if (i.n === null || i.power === null) return need("Enter the samples per group and the power you want.");
+  if (!(i.n >= 2)) return no("There must be at least 2 samples per group.");
+  if (!(i.power > 0 && i.power < 1)) return no("Power must be between 0 and 1 (for example 0.8).");
+  const zb = normalInv(i.power);
+  const effect = (base.result.za + zb) * Math.sqrt(2 / i.n);
+  if (!Number.isFinite(effect) || !(effect > 0)) return no("These values do not give a usable result.");
+  return ok({ effect, alphaStar: base.result.alphaStar });
+}
