@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Tabs } from "../../components/ui.tsx";
 import { MASS_UNITS, MOLAR_UNITS, VOLUME_UNITS, concentrationFrom, fmt, fmtQ, massToWeigh, molesFromMass, num } from "./calc.ts";
 import { molarityData, toQ, type MolarityData } from "./model.ts";
-import { Instruction, NumField, Panel, Quantity, Reason, Result, ToolFrame, type ToolProps } from "./parts.tsx";
+import { Instruction, NumField, Panel, Quantity, Reason, Result, ToolFrame, guard, type ToolProps } from "./parts.tsx";
 
 const TABS: [MolarityData["tab"], string][] = [["mass", "Mass to weigh"], ["moles", "Moles"], ["conc", "Concentration"]];
 
@@ -10,9 +10,9 @@ export function MolarityTool({ item }: ToolProps) {
   const [d, setD] = useState(() => molarityData(item?.data));
   const set = (patch: Partial<MolarityData>) => setD((x) => ({ ...x, ...patch }));
   const mw = num(d.mw);
-  const weigh = massToWeigh({ concentration: toQ(d.conc), volume: toQ(d.volume), mw });
-  const moles = molesFromMass({ mass: toQ(d.mass), mw });
-  const conc = concentrationFrom({ mass: toQ(d.mass), volume: toQ(d.volume), mw });
+  const weigh = guard(massToWeigh({ concentration: toQ(d.conc), volume: toQ(d.volume), mw }), d.mw, d.conc.value, d.volume.value);
+  const moles = guard(molesFromMass({ mass: toQ(d.mass), mw }), d.mw, d.mass.value);
+  const conc = guard(concentrationFrom({ mass: toQ(d.mass), volume: toQ(d.volume), mw }), d.mw, d.mass.value, d.volume.value);
   const mwField = <NumField label="Molecular weight" value={d.mw} placeholder="58.44" suffix="g/mol" onChange={(v) => set({ mw: v })} />;
   const volume = toQ(d.volume), concentration = toQ(d.conc);
 

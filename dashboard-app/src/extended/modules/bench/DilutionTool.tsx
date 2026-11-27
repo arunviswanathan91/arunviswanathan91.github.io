@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Tabs } from "../../components/ui.tsx";
 import { VOLUME_UNITS, dilution, fmt, fmtQ, num, serialDilution, type DilutionField, type DilutionResult, type Outcome } from "./calc.ts";
 import { CONC_DEFAULT, CONC_TYPES, CONC_UNITS, concTypeOf, dilutionData, toQ, type ConcType, type DilutionData, type QText } from "./model.ts";
-import { Instruction, NumField, Panel, Quantity, Reason, Result, Stat, ToolFrame, type ToolProps } from "./parts.tsx";
+import { Instruction, NumField, Panel, Quantity, Reason, Result, Stat, ToolFrame, guard, type ToolProps } from "./parts.tsx";
 
 const TABS: [DilutionData["tab"], string][] = [["single", "Dilution"], ["serial", "Serial dilution"]];
 
@@ -17,7 +17,7 @@ export function DilutionTool({ item }: ToolProps) {
     const [stock, final] = CONC_DEFAULT[next];
     set({ c1: { ...d.c1, unit: stock }, c2: { ...d.c2, unit: final }, start: { ...d.start, unit: stock } });
   }
-  const out = dilution({ c1: toQ(d.c1), v1: toQ(d.v1), c2: toQ(d.c2), v2: toQ(d.v2) });
+  const out = guard(dilution({ c1: toQ(d.c1), v1: toQ(d.v1), c2: toQ(d.c2), v2: toQ(d.v2) }), d.c1.value, d.v1.value, d.c2.value, d.v2.value);
 
   return (
     <ToolFrame tool="dilution" item={item} data={d}>
@@ -81,7 +81,7 @@ export function FourResult({ labels, out, stock, diluent }: { labels: FourLabels
 }
 
 function Serial({ d, set, units }: { d: DilutionData; set: (patch: Partial<DilutionData>) => void; units: string[] }) {
-  const out = serialDilution({ start: toQ(d.start), factor: num(d.factor), steps: num(d.steps), volume: toQ(d.tubeVolume) });
+  const out = guard(serialDilution({ start: toQ(d.start), factor: num(d.factor), steps: num(d.steps), volume: toQ(d.tubeVolume) }), d.start.value, d.factor, d.steps, d.tubeVolume.value);
   const r = out.result;
   return (
     <div className="bench-grid">

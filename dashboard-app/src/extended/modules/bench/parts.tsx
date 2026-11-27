@@ -20,6 +20,14 @@ export interface ToolProps { item?: BenchItem; route: Route }
 /** Typed text that is not blank and not a number: the field is marked, and nothing is calculated from it. */
 const invalid = (text: string) => text.trim() !== "" && num(text) === null;
 
+/**
+ * Text that cannot be read as a number must stop the calculation: treated as blank it would be
+ * skipped, or worse, solved for. Pass every typed value the result depends on.
+ */
+export function guard<T>(outcome: Outcome<T>, ...texts: string[]): Outcome<T> {
+  return texts.some(invalid) ? { result: null, reason: "One of the values is not a number.", incomplete: false } : outcome;
+}
+
 /** A number paired with its unit. */
 export function Quantity({ label, value, onChange, units, placeholder, names }: {
   label: string;

@@ -1,4 +1,4 @@
--- Bench tools: saved calculations, recipes, master mixes, standard curves and timer sets.
+-- Bench tools: saved calculations, recipes, master mixes, standard curves, timer sets and plate maps.
 -- The inputs of each are kept as JSON and worked out again in the app, so a saved item can be
 -- reopened, changed and rescaled. Rerunnable. Run after library.sql.
 
@@ -24,6 +24,10 @@ create table if not exists public.ws_bench_items (
 create index if not exists bench_items_recent_idx on public.ws_bench_items (user_id, kind, updated_at desc);
 create index if not exists bench_items_protocol_idx on public.ws_bench_items (library_entry_id) where library_entry_id is not null;
 create index if not exists bench_items_experiment_idx on public.ws_bench_items (experiment_id) where experiment_id is not null;
+-- The kinds grow with the tools: plate maps joined later, so the check is named and replaced here.
+alter table public.ws_bench_items drop constraint if exists ws_bench_items_kind_check;
+alter table public.ws_bench_items add constraint ws_bench_items_kind_check
+  check (kind in ('dilution','cell_dilution','haemocytometer','molarity','recipe','master_mix','curve','timer_set','plate'));
 select ws_private.secure_table('public.ws_bench_items');
 drop trigger if exists bench_items_touch on public.ws_bench_items;
 create trigger bench_items_touch before update on public.ws_bench_items

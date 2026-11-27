@@ -3,7 +3,7 @@ import { ArrowRight, Plus, X } from "lucide-react";
 import { go } from "../../lib/route.ts";
 import { COUNT_RANGE, VOLUME_UNITS, bestUnit, fmt, haemocytometer, num } from "./calc.ts";
 import { haemoData, toQ, type HaemoData } from "./model.ts";
-import { NumField, Panel, Quantity, Reason, Result, Stat, ToolFrame, type ToolProps } from "./parts.tsx";
+import { NumField, Panel, Quantity, Reason, Result, Stat, ToolFrame, guard, type ToolProps } from "./parts.tsx";
 
 const MAX_SQUARES = 25;
 
@@ -11,15 +11,12 @@ export function HaemocytometerTool({ item }: ToolProps) {
   const [d, setD] = useState(() => haemoData(item?.data));
   const set = (patch: Partial<HaemoData>) => setD((x) => ({ ...x, ...patch }));
   const setCount = (key: "live" | "dead", k: number, value: string) => set({ [key]: d[key].map((v, j) => (j === k ? value : v)) });
-  const out = haemocytometer({
-    live: d.live.map(num),
-    dead: d.countDead ? d.dead.map(num) : undefined,
-    dilution: num(d.dilution),
-    volume: toQ(d.volume),
-  });
-  const r = out.result;
   // A count that is typed but not a number is not silently left out of the mean.
-  const unread = [...d.live, ...(d.countDead ? d.dead : [])].some((v) => v.trim() !== "" && num(v) === null);
+  const out = guard(
+    haemocytometer({ live: d.live.map(num), dead: d.countDead ? d.dead.map(num) : undefined, dilution: num(d.dilution), volume: toQ(d.volume) }),
+    ...d.live, ...(d.countDead ? d.dead : []), d.dilution, d.volume.value,
+  );
+  const r = out.result;
   function useInDilution() {
     if (!r || !(r.livePerMl > 0)) return;
     const best = bestUnit(r.livePerMl, "cells/mL");
@@ -59,8 +56,8 @@ export function HaemocytometerTool({ item }: ToolProps) {
           </div>
         </Panel>
         <Panel title="Result" className="bench-results">
-          {unread ? <p className="error" role="alert">One of the counts is not a number.</p> : <Reason outcome={out} />}
-          {r && !unread && (
+          <Reason outcome={out} />
+          {r && (
             <>
               <Result strong label="Live cells" q={{ value: r.livePerMl, unit: "cells/mL" }} />
               {r.deadPerMl !== null && <Result label="All cells (live + dead)" q={{ value: r.totalPerMl, unit: "cells/mL" }} />}

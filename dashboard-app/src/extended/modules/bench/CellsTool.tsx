@@ -3,7 +3,7 @@ import { Tabs } from "../../components/ui.tsx";
 import { CELL_UNITS, VOLUME_UNITS, cellDilution, dimensionOf, fmt, fmtQ, num, seeding } from "./calc.ts";
 import { cellsData, toQ, type CellsData } from "./model.ts";
 import { FourFields, FourResult, type FourLabels } from "./DilutionTool.tsx";
-import { Instruction, NumField, Panel, Quantity, Reason, Result, Stat, ToolFrame, type ToolProps } from "./parts.tsx";
+import { Instruction, NumField, Panel, Quantity, Reason, Result, Stat, ToolFrame, guard, type ToolProps } from "./parts.tsx";
 
 const TABS: [CellsData["tab"], string][] = [["dilute", "Dilute cells"], ["seed", "Seed a plate"]];
 const LABELS: FourLabels = { c1: "Cell suspension (C1)", v1: "Volume of suspension (V1)", c2: "Wanted concentration (C2)", v2: "Final volume (V2)" };
@@ -21,8 +21,11 @@ function initial(item: ToolProps["item"], route: ToolProps["route"]): CellsData 
 export function CellsTool({ item, route }: ToolProps) {
   const [d, setD] = useState(() => initial(item, route));
   const set = (patch: Partial<CellsData>) => setD((x) => ({ ...x, ...patch }));
-  const diluted = cellDilution({ c1: toQ(d.c1), v1: toQ(d.v1), c2: toQ(d.c2), v2: toQ(d.v2) });
-  const seeded = seeding({ cellsPerWell: num(d.cellsPerWell), wells: num(d.wells), overagePct: num(d.overage), volumePerWell: toQ(d.perWell), stock: toQ(d.stock) });
+  const diluted = guard(cellDilution({ c1: toQ(d.c1), v1: toQ(d.v1), c2: toQ(d.c2), v2: toQ(d.v2) }), d.c1.value, d.v1.value, d.c2.value, d.v2.value);
+  const seeded = guard(
+    seeding({ cellsPerWell: num(d.cellsPerWell), wells: num(d.wells), overagePct: num(d.overage), volumePerWell: toQ(d.perWell), stock: toQ(d.stock) }),
+    d.cellsPerWell, d.wells, d.overage, d.perWell.value, d.stock.value,
+  );
   const s = seeded.result;
 
   return (

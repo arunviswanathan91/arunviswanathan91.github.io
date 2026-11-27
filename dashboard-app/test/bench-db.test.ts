@@ -41,6 +41,8 @@ test('bench items: saved tools are yours, link to protocols and experiments, and
  await db.query(`insert into ws_bench_items(kind,title,data,experiment_id) values('haemocytometer','KPC count','{"counts":[52,48,61,55],"dilution":2}',$1)`,[ex]);
  await db.query(`insert into ws_bench_items(kind,title,data,library_entry_id) values('timer_set','Blot washes','{"timers":[{"name":"Wash 1","seconds":600}]}',$1)`,[protocol]);
  await assert.rejects(db.query(`insert into ws_bench_items(kind,title,library_entry_id) values('recipe','x',$1)`,[theirProtocol]),/belong to this account/);
+ await db.exec(`insert into ws_bench_items(kind,title,data) values('plate','Plate map 1','{"rows":4,"cols":6,"wells":{}}')`);
+ await db.exec(`delete from ws_bench_items where kind='plate'`);
  assert.equal(await count('ws_bench_items'),3,'the other account’s items are invisible');
 
  assert.ok((await db.query<any>(`select kind,title from ws_search_workspace('RIPA')`)).rows.some((r)=>r.kind==='bench'&&r.title==='RIPA buffer'));
