@@ -1,6 +1,10 @@
 import { useState, type ReactNode } from "react";
-import { Bell, ChevronDown, Dna, FlaskConical, Play, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Bell, ChevronDown, Clock, Dna, FlaskConical, Play, Plus, Trash2 } from "lucide-react";
 import { Tabs } from "../../components/ui.tsx";
+import { Loading } from "../../components/ui.tsx";
+import { insert, list, useLoad } from "../../lib/db.ts";
+import { go, href } from "../../lib/route.ts";
+import type { BenchItem } from "../../lib/types.ts";
 import { VESSELS, cellsForArea, confluenceOverTime, fmt, fmtQ, niceTicks, num, timeToConfluence, vessel, type Point } from "./calc.ts";
 import { cellLineData, newPassage, type CellLineData, type PassageRecord } from "./model.ts";
 import { CELL_LINES, PANELS, cellLineRef, type CellLineRef } from "./cellLines/catalog.ts";
@@ -24,6 +28,12 @@ function fromRef(r: CellLineRef): Partial<CellLineData> {
 const cells = (n: number) => fmtQ({ value: n, unit: "cells" }, 4, false);
 
 export function CellLinesTool({ item }: ToolProps) {
+  // With no item we show the culture overview: the cell lines you are maintaining, and a way to add one.
+  if (!item) return <CellLinesHome />;
+  return <CellLineItem item={item} />;
+}
+
+function CellLineItem({ item }: { item: BenchItem }) {
   const [d, setD] = useState(() => cellLineData(item?.data));
   const set = (patch: Partial<CellLineData>) => setD((x) => ({ ...x, ...patch }));
   // Editing a profile value by hand means it is no longer that catalogue line.
@@ -48,6 +58,91 @@ export function CellLinesTool({ item }: ToolProps) {
         {d.tab === "passages" && <Passages d={d} set={set} setPassage={setPassage} startingPassage={num(d.startingPassage) ?? 0} />}
       </>}
     </ToolFrame>
+  );
+}
+
+// ── Culture overview (the cell lines you are maintaining) ────────────────────
+
+function CellLinesHome() {
+  const { data: items, error, fresh } = useLoad(() => list<BenchItem>("bench_items", { eq: { kind: "cell_line" }, order: [["updated_at", false]] }), []);
+  const [choice, setChoice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const live = (items ?? []).filter((it) => !it.archived_at);
+
+  async function add() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const ref = cellLineRef(choice);
+      const base = cellLineData(undefined);
+      const data = ref ? { ...base, ...fromRef(ref) } : { ...base, reference: "custom" };
+      const row = await insert<BenchItem>("bench_items", { kind: "cell_line", title: ref ? ref.name : "New cell line", data });
+      go(`bench/item/${row.id}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function quickTimer(name: string, td: number | null) {
+    const out = timeToConfluence({ doublingTimeH: td, startPct: 20, targetPct: 90 });
+    if (out.result) addTimer(name ? `Split ${name}` : "Split cells", Math.round(out.result.value * 3600), "violet", true);
+  }
+
+  return (
+    <section className="detail bench-tool">
+      <a className="back" href={href("bench")}><ArrowLeft size={14} /> Bench</a>
+      <header className="detail-head note-head">
+        <div><span className="kicker">Bench</span><h1 className="bench-read-title">Cell lines</h1></div>
+      </header>
+      <Panel title="Add a cell line to your cultures">
+        <p className="muted small">Pick a line from the reference catalogue (ATCC / Cellosaurus) or start a custom one. You can edit everything after.</p>
+        <div className="row wrap bench-actions">
+          <select aria-label="Cell line to add" value={choice} onChange={(e) => setChoice(e.target.value)}>
+            <option value="">Choose a cell line…</option>
+            <option value="custom">Custom (blank)</option>
+            {PANELS.map(([p, label]) => (
+              <optgroup key={p} label={label}>
+                {CELL_LINES.filter((c) => c.panel === p).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <button type="button" className="primary" disabled={!choice || busy} onClick={() => void add()}><Plus size={15} /> {busy ? "Adding…" : "Add cell line"}</button>
+        </div>
+      </Panel>
+
+      {!fresh && !items ? <Loading rows={3} /> : error ? <p className="error">{String(error)}</p> : live.length === 0 ? (
+        <div className="empty-state"><FlaskConical /><p>No cell lines yet. Add the cells you are maintaining above.</p></div>
+      ) : (
+        <div className="cl-grid">
+          {live.map((it) => {
+            const d = cellLineData(it.data);
+            const start = num(d.startingPassage) ?? 0;
+            const passage = start + Math.max(0, d.passages.length - 1);
+            const maxP = num(d.maxPassages);
+            const over = maxP !== null && d.passages.length > 0 && passage >= maxP;
+            const td = num(d.doublingTimeH);
+            const lastSeeding = d.passages.map((p) => p.seedingDate).filter(Boolean).sort().at(-1) || "";
+            const ref = cellLineRef(d.reference);
+            return (
+              <article key={it.id} className="cl-card">
+                <a className="cl-card-title" href={href(`bench/item/${it.id}`)}><FlaskConical size={15} /> {it.title || d.name || "Cell line"}</a>
+                {(d.tissue || d.disease) && <p className="muted small cl-card-sub">{[d.tissue, d.disease].filter(Boolean).join(" · ")}</p>}
+                <div className="cl-card-facts">
+                  <span className="cap">{d.culture}</span>
+                  <span className={over ? "cl-warn" : undefined}>P{passage}{over ? " · limit" : ""}</span>
+                  {td !== null && <span>{d.doublingTimeH} h doubling</span>}
+                  {lastSeeding && <span>seeded {lastSeeding}</span>}
+                </div>
+                {d.mutations.trim() && <p className="muted small cl-card-mut">{d.mutations.split("\n").filter(Boolean).slice(0, 2).join(" · ")}{d.mutations.split("\n").filter(Boolean).length > 2 ? " …" : ""}</p>}
+                <div className="cl-card-actions">
+                  <a className="small" href={href(`bench/item/${it.id}`)}>Open</a>
+                  {td !== null && <button type="button" className="small" onClick={() => quickTimer(it.title || d.name, td)}><Clock size={13} /> Split timer</button>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
