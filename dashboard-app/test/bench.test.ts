@@ -4,9 +4,10 @@ import {
  convert, dimensionOf, num, fmt, fmtQ, bestUnit, unitLabel, unitsOf, dilution, parseRatio, serialSeries, stepFactor, stepsToReach, reverseDilution, makeSolution, cellDilution, seeding, haemocytometer, haemocytometerTotal, unevenCounts,
  massToWeigh, molesFromMass, concentrationFrom, recipe, masterMix, linearFit, predictX, predictY, parsePairs, niceTicks,
  normalCdf, normalInv, effectFromFoldCv, foldFromEffectCv, effectFromCount, log2FcFromCountEffect, powerOf, sampleSizeFor, detectableEffectFor,
+ timeToConfluence, confluenceOverTime, cellsForArea, vessel,
  type Q, type Qty,
 } from '../src/extended/modules/bench/calc.ts';
-import { haemoData, recount, tally, totalsOf, layoutOf, powerData } from '../src/extended/modules/bench/model.ts';
+import { haemoData, recount, tally, totalsOf, layoutOf, powerData, cellLineData } from '../src/extended/modules/bench/model.ts';
 
 /** Close enough for approximation-based stats (relative tolerance). */
 const close=(actual:number|null|undefined,expected:number,tol:number,msg?:string)=>{
@@ -884,4 +885,42 @@ test('powerData reads defaults and old saves',()=>{
  assert.equal(fresh.profile,'rnaseq_human'); assert.equal(fresh.engine,'count'); assert.equal(fresh.cv,'0.4'); assert.equal(fresh.features,'18000');
  const saved=powerData({tab:'power',profile:'rtqpcr',engine:'ttest',alpha:'0.01',sides:'one',features:'1',n:'8',fold:'3',cv:'0.25',effectMode:'fold'});
  assert.equal(saved.tab,'power'); assert.equal(saved.engine,'ttest'); assert.equal(saved.alpha,'0.01'); assert.equal(saved.n,'8'); assert.equal(saved.cv,'0.25');
+});
+
+// ── Cell lines: growth, vessels, seeding ─────────────────────────────────────
+
+test('time to reach a target confluency follows the doubling-time formula',()=>{
+ // 20% -> 90% at Td=24h: 24*log2(90/20) = 24*2.1699 = 52.08 h
+ close(timeToConfluence({doublingTimeH:24,startPct:20,targetPct:90}).result?.value,52.08,0.01);
+ close(timeToConfluence({doublingTimeH:24,startPct:20,targetPct:40}).result?.value,24,1e-9); // one doubling
+ // invalid / incomplete
+ assert.equal(timeToConfluence({doublingTimeH:24,startPct:90,targetPct:80}).result,null); // target not higher
+ assert.equal(timeToConfluence({doublingTimeH:null,startPct:20,targetPct:90}).incomplete,true);
+ assert.equal(timeToConfluence({doublingTimeH:0,startPct:20,targetPct:90}).result,null);
+});
+
+test('confluency over time starts at seed, rises, and caps at 100',()=>{
+ const pts=confluenceOverTime(24,20);
+ assert.ok(pts.length>2);
+ close(pts[0].y,20,1e-9);
+ assert.ok(pts.every((p,i)=>i===0||p.y>=pts[i-1].y-1e-9)); // monotonic up
+ assert.ok(pts.every(p=>p.y<=100+1e-9));
+ close(pts[pts.length-1].y,100,0.5); // reaches the cap
+ assert.equal(confluenceOverTime(null,20).length,0);
+});
+
+test('cells for an area and the vessel table',()=>{
+ assert.equal(vessel('t75')?.areaCm2,75);
+ close(cellsForArea(15000,75).result?.value,1.125e6,1e-6); // 15000 * 75
+ assert.equal(cellsForArea(null,75).incomplete,true);
+ assert.equal(cellsForArea(-1,75).result,null);
+});
+
+test('cellLineData reads defaults and old saves without loss',()=>{
+ const fresh=cellLineData(undefined);
+ assert.equal(fresh.tab,'overview'); assert.equal(fresh.reference,'custom'); assert.equal(fresh.culture,'adherent');
+ assert.equal(fresh.doublingTimeH,'24'); assert.equal(fresh.passages.length,0);
+ const saved=cellLineData({reference:'panc1',name:'PANC-1',doublingTimeH:'52',culture:'adherent',passages:[{id:'a',seedingDate:'2026-11-28',medium:'DMEM',antibiotic:'Pen/Strep',incubation:'37C',note:'n'}]});
+ assert.equal(saved.name,'PANC-1'); assert.equal(saved.doublingTimeH,'52'); assert.equal(saved.passages.length,1);
+ assert.equal(saved.passages[0].medium,'DMEM'); assert.equal(saved.passages[0].id,'a');
 });
